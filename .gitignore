@@ -1,0 +1,24 @@
+# 環境変数(秘密情報)
+.env
+.env.local
+.env.*.local
+
+# 依存・ビルド成果物
+node_modules/
+dist/
+.turbo/
+*.tsbuildinfo
+
+# テスト出力
+coverage/
+playwright-report/
+test-results/
+blob-report/
+
+# ツールのキャッシュ・一時ファイル
+.supabase/
+supabase/.temp/
+.wrangler/
+.vite/
+*.log
+.DS_Store
