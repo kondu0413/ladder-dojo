@@ -13,6 +13,7 @@
 - [x] 外部サービスのセットアップ手順(`docs/SETUP.md`)— 人間の作業を Cloudflare・Google Cloud・GitHub Secrets の 3 つに縮小
 - [x] `.env.example` / `.gitignore` — Supabase / Brevo の項目を削除、Better Auth / Google の項目に置換
 - [x] SPEC.md §2.4 に「API 層の権限判定はテスト必須」を追記(人間の指示)
+- [x] D-017 に「一覧取得は JOIN またはバッチ、ループ内クエリ禁止」の方針 7 を追加し、COST.md に D1 Free の「1 リクエストあたりクエリ 50 回」制限を追記(人間の指示、マージ後)
 
 ### 人間にお願いしたいこと(今の時点)
 - `docs/DECISIONS.md` の改訂内容(特に D-014 の「E2E 専用ログイン」= E2E 環境でのみ Better Auth のメール/パスワードを有効化する方式、D-012 の「本番マイグレーションに手動承認を置かない」)に異論がないか確認。異論があれば差し戻す
