@@ -26,6 +26,17 @@ const protectedRoutes: Array<{ method: string; path: string; body?: unknown }> =
   { method: "GET", path: "/api/sandbox/some-id" },
   { method: "PUT", path: "/api/sandbox/some-id", body: { title: "t", circuit } },
   { method: "DELETE", path: "/api/sandbox/some-id" },
+  {
+    method: "POST",
+    path: "/api/problems",
+    body: { title: "t", spec: "s", circuit, testCases: [], difficulty: 1 },
+  },
+  { method: "DELETE", path: "/api/problems/some-id" },
+  { method: "POST", path: "/api/problems/some-id/attempts", body: { passed: true } },
+  { method: "POST", path: "/api/problems/some-id/like" },
+  { method: "DELETE", path: "/api/problems/some-id/like" },
+  { method: "PUT", path: "/api/problems/some-id/difficulty", body: { difficulty: 3 } },
+  { method: "POST", path: "/api/problems/some-id/report", body: { reason: "x" } },
   { method: "GET", path: "/api/submissions" },
   {
     method: "POST",
@@ -42,6 +53,14 @@ describe("未ログインのアクセス", () => {
     const res = await app.request(path, init, env);
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ error: "unauthorized" });
+  });
+
+  it("投稿問題の一覧と取得は、未ログインでも見える(§3.5)", async () => {
+    const list = await app.request("/api/problems", {}, env);
+    expect(list.status).toBe(200);
+    // 存在しない ID は 404(401 ではない)
+    const one = await app.request("/api/problems/no-such-id", {}, env);
+    expect(one.status).toBe(404);
   });
 
   it("壊れた Cookie を送っても 401(500 にしない)", async () => {
