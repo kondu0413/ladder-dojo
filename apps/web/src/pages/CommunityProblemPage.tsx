@@ -11,12 +11,14 @@ import {
 } from "@ladder-dojo/core";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
+import { CommonMistakes } from "../components/CommonMistakes.js";
 import { DevicePanel } from "../components/DevicePanel.js";
 import { DiagnosisPanel } from "../components/DiagnosisPanel.js";
 import { JudgeResultView } from "../components/JudgeResultView.js";
 import { LadderEditor } from "../components/LadderEditor.js";
 import { LadderView } from "../components/LadderView.js";
 import { SimulatorControls } from "../components/SimulatorControls.js";
+import { useDiagnosis } from "../hooks/useDiagnosis.js";
 import { useSimulator } from "../hooks/useSimulator.js";
 import { api, type PostedProblemDetail } from "../lib/api.js";
 import { circuitMetricsRows } from "../lib/metrics-view.js";
@@ -31,7 +33,11 @@ export function CommunityProblemPage() {
   const [testCases, setTestCases] = useState<TestCase[]>([]);
   const [circuit, setCircuit] = useState<Circuit>(() => emptyCircuit(6, 4));
   const [tab, setTab] = useState<"edit" | "run">("edit");
-  const [result, setResult] = useState<JudgeResult | undefined>(undefined);
+  /** 答え合わせしたときの回路と結果を 1 組で持つ(あとから編集されてもずれないように) */
+  const [checked, setChecked] = useState<{ circuit: Circuit; result: JudgeResult } | undefined>(
+    undefined,
+  );
+  const [sent, setSent] = useState<JudgeResult | undefined>(undefined);
   // この画面で「答え合わせ」に失敗した回数。つまずき診断を出すかどうかに使う(S-009)
   const [failures, setFailures] = useState(0);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -52,6 +58,21 @@ export function CommunityProblemPage() {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  const diagnosis = useDiagnosis(checked?.circuit, testCases, checked?.result);
+
+  /** 提出は診断がついてから送る。つまずきの種類を一緒に送って人数を数える(SPEC.md §3.5) */
+  useEffect(() => {
+    if (!checked || !problem || diagnosis.state !== "done") return;
+    if (sent === checked.result) return;
+    setSent(checked.result);
+    recordSubmission(
+      problem.id,
+      checked.circuit,
+      checked.result.passed,
+      diagnosis.diagnoses[0]?.id,
+    );
+  }, [checked, problem, diagnosis, sent, recordSubmission]);
 
   if (error) {
     return (
@@ -83,10 +104,8 @@ export function CommunityProblemPage() {
       return;
     }
     const judged = judge(circuit, testCases);
-    setResult(judged);
+    setChecked({ circuit, result: judged });
     if (!judged.passed) setFailures((n) => n + 1);
-    // 提出した回路そのものも履歴に残す(SPEC.md §3.5)。挑戦の記録とは切り離す
-    recordSubmission(problem.id, circuit, judged.passed);
     if (user) {
       api
         .recordPostedAttempt(problem.id, judged.passed)
@@ -222,20 +241,17 @@ export function CommunityProblemPage() {
         答え合わせ
       </button>
 
-      {result && (
+      <CommonMistakes problemId={problem.id} />
+
+      {checked && (
         <JudgeResultView
-          result={result}
-          problem={asProblem(problem, circuit, testCases)}
-          circuit={circuit}
+          result={checked.result}
+          problem={asProblem(problem, checked.circuit, testCases)}
+          circuit={checked.circuit}
         />
       )}
-      {result && (
-        <DiagnosisPanel
-          circuit={circuit}
-          testCases={testCases}
-          result={result}
-          failures={failures}
-        />
+      {checked && (
+        <DiagnosisPanel circuit={checked.circuit} diagnosis={diagnosis} failures={failures} />
       )}
 
       {solution?.success && (

@@ -19,9 +19,58 @@ import { splitRungs } from "./sim/simulator.js";
  * 答えそのものは言わない。「どこを」「どの方向に」見直すかまでを出し、直すのは本人に任せる。
  */
 
+/**
+ * 診断の種類。画面・API・集計で共有する語彙なので、ここが唯一の定義。
+ *
+ * 値は DB に入り、「みんながつまずくところ」の集計キーになる。
+ * 一度出したものは**消さない・意味を変えない**(過去の集計が読めなくなる)。
+ * 新しい診断を足すときは末尾に追加する。
+ */
+export const DIAGNOSIS_IDS = [
+  "no-coil",
+  "missing-output",
+  "double-coil",
+  "no-self-hold",
+  "unstable",
+  "timer-preset",
+  "counter-preset",
+  "contact-kind",
+  "device-mixup",
+  "missing-condition",
+  "extra-condition",
+  "vline-missing",
+  "vline-extra",
+] as const;
+
+export type DiagnosisId = (typeof DIAGNOSIS_IDS)[number];
+
+export function isDiagnosisId(value: unknown): value is DiagnosisId {
+  return typeof value === "string" && (DIAGNOSIS_IDS as readonly string[]).includes(value);
+}
+
+/**
+ * 集計して並べるときの見出し。回路ごとの事情を含まない一般的な言い方にする
+ * (個別の診断の `title` は「X1 の接点が…」のように回路に依存するので、集計には使えない)。
+ */
+export const DIAGNOSIS_LABELS: Record<DiagnosisId, string> = {
+  "no-coil": "出力コイルを置いていない",
+  "missing-output": "問題が求めているデバイスを出力していない",
+  "double-coil": "同じデバイスのコイルを 2 つ以上置いている(二重コイル)",
+  "no-self-hold": "自己保持の接点が足りず、離すと消えてしまう",
+  unstable: "回路が発振して落ち着かない",
+  "timer-preset": "タイマの設定時間が違う",
+  "counter-preset": "カウンタの設定回数が違う",
+  "contact-kind": "a 接点と b 接点を取り違えている",
+  "device-mixup": "接点やコイルが見ているデバイスが違う",
+  "missing-condition": "直列に入れるべき条件が足りない",
+  "extra-condition": "余分な条件が入っていて通らない",
+  "vline-missing": "並列にすべきところが直列になっている",
+  "vline-extra": "直列にすべきところが並列になっている",
+};
+
 export type Diagnosis = {
-  /** 診断の種類。UI のテストや重複排除に使う */
-  id: string;
+  /** 診断の種類。UI のテストや重複排除、集計に使う */
+  id: DiagnosisId;
   /**
    * cells の意味。
    * - "repair": そのセルを直せばテストが通る。「ここが間違っている」と言い切れる
@@ -442,7 +491,7 @@ function* singleEditCandidates(
       yield {
         circuit: next,
         diagnosis: {
-          id: on ? "vline-extra" : "vline-missing",
+          id: (on ? "vline-extra" : "vline-missing") satisfies DiagnosisId,
           kind: "repair",
           title: on
             ? `${row + 1} 行目と ${row + 2} 行目のつながりが余分です`

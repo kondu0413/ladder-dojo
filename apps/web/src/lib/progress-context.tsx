@@ -37,7 +37,12 @@ export type ProgressContextValue = {
    * 提出した回路を履歴に残す(SPEC.md §3.5)。ログイン中だけサーバーに送る。
    * `record` と同じく、セッション確認中に呼ばれたら確認が済むまで預かる
    */
-  recordSubmission: (problemId: string, circuit: Circuit, passed: boolean) => void;
+  recordSubmission: (
+    problemId: string,
+    circuit: Circuit,
+    passed: boolean,
+    diagnosisId?: string,
+  ) => void;
   acceptMerge: () => Promise<void>;
   dismissMerge: () => void;
 };
@@ -45,7 +50,13 @@ export type ProgressContextValue = {
 /** セッション確認中に預かる書き込み */
 type PendingWrite =
   | { kind: "attempt"; problemId: string; passed: boolean }
-  | { kind: "submission"; problemId: string; circuit: Circuit; passed: boolean };
+  | {
+      kind: "submission";
+      problemId: string;
+      circuit: Circuit;
+      passed: boolean;
+      diagnosisId?: string;
+    };
 
 const ProgressContext = createContext<ProgressContextValue | undefined>(undefined);
 
@@ -159,14 +170,22 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
   );
 
   const recordSubmission = useCallback(
-    (problemId: string, circuit: Circuit, passed: boolean) => {
+    (problemId: string, circuit: Circuit, passed: boolean, diagnosisId?: string) => {
       if (isPending) {
-        deferred.current.push({ kind: "submission", problemId, circuit, passed });
+        deferred.current.push({
+          kind: "submission",
+          problemId,
+          circuit,
+          passed,
+          ...(diagnosisId ? { diagnosisId } : {}),
+        });
         return;
       }
       // 未ログインなら提出履歴は残さない(サーバーにしか置き場がない)
       if (!user) return;
-      api.submit({ problemId, circuit, passed }).catch(() => undefined);
+      api
+        .submit({ problemId, circuit, passed, ...(diagnosisId ? { diagnosisId } : {}) })
+        .catch(() => undefined);
     },
     [user, isPending],
   );
@@ -183,7 +202,9 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
         else setProgress(recordLocal(write.problemId, write.passed));
         continue;
       }
-      if (user) api.submit({ ...write }).catch(() => undefined);
+      if (!user) continue;
+      const { kind: _kind, diagnosisId, ...rest } = write;
+      api.submit({ ...rest, ...(diagnosisId ? { diagnosisId } : {}) }).catch(() => undefined);
     }
   }, [isPending, user, sendAttempt]);
 

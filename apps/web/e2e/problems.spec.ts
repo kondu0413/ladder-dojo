@@ -1,8 +1,19 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
+import { SUBMISSIONS, waitForPost } from "./sync.js";
 
 /**
  * 学習モード(SPEC.md §3.2)と判定結果の表示(§3.3)。
  */
+
+const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:8787";
+
+async function signUp(page: Page): Promise<void> {
+  const email = `mistake-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.test`;
+  const res = await page.request.post("/api/auth/sign-up/email", {
+    data: { email, password: "correct-horse-battery", name: "つまずく人" },
+  });
+  expect(res.status()).toBe(200);
+}
 
 test.describe("読む", () => {
   test("正解を選ぶと解説が出て、動かして確かめられる", async ({ page }) => {
@@ -212,5 +223,49 @@ test.describe("タイムチャート", () => {
     await page.goto("/problems/selfhold-read-1");
     // 読む問題には答え合わせが無いので、波形も出ない
     await expect(page.getByTestId("time-chart")).toHaveCount(0);
+  });
+});
+
+test.describe("みんながつまずくところ", () => {
+  // 公式問題の集計は全員で 1 つ。ローカル D1 は mobile / desktop で共有し、
+  // 実行を重ねると数も増えていく。だから E2E は「出るか / 読めるか」だけを見て、
+  // 数え方そのもの(重複を弾く・並び順・しきい値)は API テストで固めている
+  test("誰もつまずいていない問題では出ない", async ({ page }) => {
+    // この問題は他のテストで答え合わせしないこと(数えられてしまうと前提が崩れる)
+    await page.goto("/problems/combo-write-2");
+    await expect(page.getByTestId("common-mistakes")).toHaveCount(0);
+  });
+
+  test("しきい値の人数がつまずくと、人数つきで出る", async ({ browser }) => {
+    // この問題も、集計のためだけに使う
+    const problemId = "counter-fix-2";
+    const MIN_USERS = 3;
+
+    for (let i = 0; i < MIN_USERS; i++) {
+      const ctx = await browser.newContext({ baseURL: BASE_URL });
+      const learner = await ctx.newPage();
+      await signUp(learner);
+      await learner.goto(`/problems/${problemId}`);
+      const submitted = waitForPost(learner, SUBMISSIONS);
+      await learner.getByTestId("check-answer").click();
+      await expect(learner.getByTestId("judge-result")).toHaveAttribute("data-passed", "false");
+      await submitted;
+      await ctx.close();
+    }
+
+    const ctx = await browser.newContext({ baseURL: BASE_URL });
+    const viewer = await ctx.newPage();
+    await viewer.goto(`/problems/${problemId}`);
+    const panel = viewer.getByTestId("common-mistakes");
+    await expect(panel).toBeVisible();
+    // 自己保持の枝が無いままなので、この間違いが数えられている
+    const row = panel.getByTestId("common-mistake-no-self-hold");
+    // 畳んである。開くかどうかは本人に決めてもらう
+    await expect(row).toBeHidden();
+    await panel.getByText("みんながつまずくところ").click();
+    await expect(row).toBeVisible();
+    await expect(row).toContainText(/[0-9]+ 人/);
+    await expect(row).toContainText("自己保持");
+    await ctx.close();
   });
 });
