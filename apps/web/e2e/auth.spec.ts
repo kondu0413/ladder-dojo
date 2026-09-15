@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { ATTEMPTS, waitForPost } from "./sync.js";
 
 /**
  * ログインと進捗同期(SPEC.md §3.5 / DECISIONS.md S-002)。
@@ -16,13 +17,20 @@ async function signUp(page: Page): Promise<string> {
   return email;
 }
 
-/** 読む問題を全問正解してクリアにする */
-async function clearReadProblem(page: Page) {
+/**
+ * 読む問題を全問正解してクリアにする。
+ *
+ * ログイン中はクリアがサーバーへ投げっぱなしで送られる(S-002)。そのまま次の操作に
+ * 進むと送信が間に合わないことがあるので、`syncsToServer` のときは完了を待つ。
+ */
+async function clearReadProblem(page: Page, syncsToServer = false) {
   await page.goto("/problems/selfhold-read-1");
   await page.getByTestId("choice-1").click();
   await page.getByTestId("next-question").click();
+  const saved = syncsToServer ? waitForPost(page, ATTEMPTS) : undefined;
   await page.getByTestId("choice-0").click();
   await expect(page.getByTestId("read-complete")).toHaveAttribute("data-cleared", "true");
+  await saved;
 }
 
 test("未ログインでも問題は解け、ログインを促す表示が出る", async ({ page }) => {
@@ -50,7 +58,7 @@ test("ログイン中の進捗はサーバーに保存され、再読み込み�
   await page.goto("/");
   await expect(page.getByTestId("auth-bar")).toHaveAttribute("data-signed-in", "true");
 
-  await clearReadProblem(page);
+  await clearReadProblem(page, true);
   await page.goto("/");
   await expect(page.getByTestId("cleared-count")).toContainText("クリア: 1 / 30 問");
 
