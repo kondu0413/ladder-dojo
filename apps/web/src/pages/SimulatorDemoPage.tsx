@@ -19,8 +19,8 @@ export function SimulatorDemoPage() {
       <header className="flex flex-col gap-1">
         <div className="flex items-baseline justify-between gap-2">
           <h1 className="text-xl font-bold text-slate-900">ラダー図トレーニング</h1>
-          <Link to="/sandbox" className="text-sm text-slate-500 underline">
-            サンドボックス
+          <Link to="/" className="text-sm text-slate-500 underline">
+            問題一覧
           </Link>
         </div>
         <p className="text-xs text-slate-500">
