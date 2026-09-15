@@ -1,6 +1,6 @@
 import type { Circuit, TestCase } from "@ladder-dojo/core";
-import { useState } from "react";
-import { ApiError, api, type SolutionFailure } from "../lib/api.js";
+import { useEffect, useState } from "react";
+import { ApiError, api, type OrgSummary, type SolutionFailure } from "../lib/api.js";
 
 export type PublishDialogProps = {
   circuit: Circuit;
@@ -25,7 +25,20 @@ export function PublishDialog({
   const [spec, setSpec] = useState("");
   const [difficulty, setDifficulty] = useState(3);
   const [tags, setTags] = useState("");
-  const [visibility, setVisibility] = useState<"public" | "private">("public");
+  const [visibility, setVisibility] = useState<"public" | "org" | "private">("public");
+  const [orgs, setOrgs] = useState<OrgSummary[]>([]);
+  const [orgId, setOrgId] = useState("");
+
+  // 組織限定で公開する選択肢は、どこかの組織に入っているときだけ出す(§3.8)
+  useEffect(() => {
+    api
+      .listOrgs()
+      .then((res) => {
+        setOrgs(res.orgs);
+        setOrgId((cur) => cur || (res.orgs[0]?.id ?? ""));
+      })
+      .catch(() => setOrgs([]));
+  }, []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const [failures, setFailures] = useState<SolutionFailure[]>([]);
@@ -47,6 +60,7 @@ export function PublishDialog({
           .filter(Boolean)
           .slice(0, 10),
         visibility,
+        ...(visibility === "org" && orgId ? { orgId } : {}),
       });
       onPublished(res.problem.id);
     } catch (err) {
@@ -67,7 +81,11 @@ export function PublishDialog({
     }
   };
 
-  const canPublish = title.trim().length > 0 && spec.trim().length > 0 && testCases.length > 0;
+  const canPublish =
+    title.trim().length > 0 &&
+    spec.trim().length > 0 &&
+    testCases.length > 0 &&
+    (visibility !== "org" || orgId !== "");
 
   return (
     <section
@@ -131,14 +149,32 @@ export function PublishDialog({
           公開範囲
           <select
             value={visibility}
-            onChange={(e) => setVisibility(e.target.value as "public" | "private")}
+            onChange={(e) => setVisibility(e.target.value as "public" | "org" | "private")}
             data-testid="publish-visibility"
             className="min-h-11 rounded-lg border border-slate-300 px-2"
           >
             <option value="public">みんなに公開</option>
+            {orgs.length > 0 && <option value="org">組織のメンバーだけ</option>}
             <option value="private">自分だけ</option>
           </select>
         </label>
+        {visibility === "org" && orgs.length > 0 && (
+          <label className="flex flex-col gap-1 text-sm text-slate-700">
+            公開先の組織
+            <select
+              value={orgId}
+              onChange={(e) => setOrgId(e.target.value)}
+              data-testid="publish-org"
+              className="min-h-11 rounded-lg border border-slate-300 px-2"
+            >
+              {orgs.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       {testCases.length === 0 && (

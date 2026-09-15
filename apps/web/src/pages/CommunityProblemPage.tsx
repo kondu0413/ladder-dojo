@@ -86,6 +86,8 @@ export function CommunityProblemPage() {
         .recordPostedAttempt(problem.id, judged.passed)
         .then(() => reload())
         .catch(() => setNotice("挑戦の記録をサーバーに送れませんでした。"));
+      // 提出した回路そのものも履歴に残す(SPEC.md §3.5)。失敗しても挑戦の記録とは切り離す
+      api.submit({ problemId: problem.id, circuit, passed: judged.passed }).catch(() => undefined);
     } else if (judged.passed) {
       setNotice("ログインすると、クリアが記録されて模範解答も見られます。");
     }

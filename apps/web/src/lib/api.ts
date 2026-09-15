@@ -1,6 +1,10 @@
 import type {
   ApiErrorDto,
+  AssignmentListDto,
   MeDto,
+  OrgDetailDto,
+  OrgInviteDto,
+  OrgListDto,
   PostedProblemDetailResponseDto,
   PostedProblemListDto,
   PostedProblemOneDto,
@@ -8,9 +12,14 @@ import type {
   ProgressListDto,
   ProgressMergeDto,
   ProgressOneDto,
+  RankingDto,
+  RankingMetric,
+  RankingPeriod,
   SandboxListDto,
   SandboxOneDto,
   SolutionFailedDto,
+  StuckDto,
+  SubmissionListDto,
   SubmissionOneDto,
 } from "@ladder-dojo/api/dto";
 import type { Circuit, TestCase } from "@ladder-dojo/core";
@@ -27,6 +36,12 @@ export type { MeDto, ProgressDto, SandboxListDto, SandboxOneDto };
 export type PostedProblemSummary = PostedProblemListDto["problems"][number];
 export type PostedProblemDetail = PostedProblemDetailResponseDto["problem"];
 export type SolutionFailure = SolutionFailedDto["failures"][number];
+export type OrgSummary = OrgListDto["orgs"][number];
+export type OrgDetail = OrgDetailDto;
+export type OrgMember = OrgDetailDto["members"][number];
+export type Assignment = AssignmentListDto["assignments"][number];
+export type Ranking = RankingDto;
+export type { RankingMetric, RankingPeriod };
 export type SandboxSummary = SandboxListDto["circuits"][number];
 
 export class ApiError extends Error {
@@ -130,7 +145,9 @@ export const api = {
     testCases: TestCase[];
     difficulty: number;
     tags: string[];
-    visibility: "public" | "private";
+    visibility: "public" | "org" | "private";
+    /** visibility が "org" のときの公開先 */
+    orgId?: string;
   }) => request<PostedProblemOneDto>("/problems", { method: "POST", body: JSON.stringify(input) }),
 
   deletePosted: (id: string) => request<{ deleted: true }>(`/problems/${id}`, { method: "DELETE" }),
@@ -155,4 +172,59 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ reason }),
     }),
+
+  // --- 組織とランキング(フェーズ3、SPEC.md §3.7 / §3.8)---
+
+  listOrgs: () => request<OrgListDto>("/orgs"),
+
+  createOrg: (name: string) =>
+    request<{ org: OrgSummary }>("/orgs", { method: "POST", body: JSON.stringify({ name }) }),
+
+  joinOrg: (code: string) =>
+    request<{ org: OrgSummary; joined: boolean }>("/orgs/join", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    }),
+
+  getOrg: (orgId: string) => request<OrgDetailDto>(`/orgs/${orgId}`),
+
+  createInvite: (orgId: string) =>
+    request<OrgInviteDto>(`/orgs/${orgId}/invites`, { method: "POST" }),
+
+  setMemberRole: (orgId: string, userId: string, role: "admin" | "member") =>
+    request<{ updated: true }>(`/orgs/${orgId}/members/${userId}/role`, {
+      method: "PUT",
+      body: JSON.stringify({ role }),
+    }),
+
+  removeMember: (orgId: string, userId: string) =>
+    request<{ removed: true }>(`/orgs/${orgId}/members/${userId}`, { method: "DELETE" }),
+
+  memberProgress: (orgId: string, userId: string) =>
+    request<ProgressListDto>(`/orgs/${orgId}/members/${userId}/progress`),
+
+  memberSubmissions: (orgId: string, userId: string) =>
+    request<SubmissionListDto>(`/orgs/${orgId}/members/${userId}/submissions`),
+
+  orgStuck: (orgId: string) => request<StuckDto>(`/orgs/${orgId}/stuck`),
+
+  listAssignments: (orgId: string) => request<AssignmentListDto>(`/orgs/${orgId}/assignments`),
+
+  createAssignment: (
+    orgId: string,
+    input: { kind: "official" | "posted"; problemRef: string; userId?: string; note?: string },
+  ) =>
+    request<{ assignment: Assignment }>(`/orgs/${orgId}/assignments`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+
+  deleteAssignment: (orgId: string, assignmentId: string) =>
+    request<{ deleted: true }>(`/orgs/${orgId}/assignments/${assignmentId}`, { method: "DELETE" }),
+
+  ranking: (params: { metric: RankingMetric; period: RankingPeriod; orgId?: string }) => {
+    const search = new URLSearchParams({ metric: params.metric, period: params.period });
+    if (params.orgId) search.set("orgId", params.orgId);
+    return request<RankingDto>(`/rankings?${search.toString()}`);
+  },
 };
