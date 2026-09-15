@@ -30,6 +30,9 @@ export function ProblemListPage() {
             <Link to="/community" className="underline">
               みんなの問題
             </Link>
+            <Link to="/rankings" className="underline">
+              ランキング
+            </Link>
             <Link to="/sandbox" className="underline">
               サンドボックス
             </Link>
