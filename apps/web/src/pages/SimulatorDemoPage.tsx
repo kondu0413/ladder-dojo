@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router";
 import { DevicePanel } from "../components/DevicePanel.js";
 import { LadderView } from "../components/LadderView.js";
 import { SimulatorControls } from "../components/SimulatorControls.js";
@@ -16,7 +17,12 @@ export function SimulatorDemoPage() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-screen-sm flex-col gap-4 px-4 py-6">
       <header className="flex flex-col gap-1">
-        <h1 className="text-xl font-bold text-slate-900">ラダー図トレーニング</h1>
+        <div className="flex items-baseline justify-between gap-2">
+          <h1 className="text-xl font-bold text-slate-900">ラダー図トレーニング</h1>
+          <Link to="/sandbox" className="text-sm text-slate-500 underline">
+            サンドボックス
+          </Link>
+        </div>
         <p className="text-xs text-slate-500">
           シミュレータの動作確認(開発中)。接点か下のボタンをタップして操作します。
         </p>

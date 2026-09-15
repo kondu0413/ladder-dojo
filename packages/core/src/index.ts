@@ -5,6 +5,7 @@
  * DOM / Node API に依存せず、ブラウザ・Workers・Vitest のどこでも動く純 TypeScript。
  */
 export * from "./builder.js";
+export * from "./edit.js";
 export * from "./fingerprint.js";
 export * from "./judge/judge.js";
 export * from "./metrics.js";
