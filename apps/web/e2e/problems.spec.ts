@@ -7,7 +7,9 @@ import { expect, test } from "@playwright/test";
 test.describe("読む", () => {
   test("正解を選ぶと解説が出て、動かして確かめられる", async ({ page }) => {
     await page.goto("/problems/selfhold-read-1");
-    await expect(page.getByRole("heading", { name: "押しボタンを離したらどうなる?" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "押しボタンを離したらどうなる?" }),
+    ).toBeVisible();
 
     // 設問 1: 正解は「点灯したままになる」
     await page.getByTestId("choice-1").click();
