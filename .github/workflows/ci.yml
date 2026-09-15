@@ -39,11 +39,14 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Unit tests (core)
+      - name: Unit tests (core, カバレッジ閾値つき)
         run: pnpm --filter @ladder-dojo/core test
 
       - name: API tests (workerd + local D1)
         run: pnpm --filter @ladder-dojo/api test
+
+      - name: Unit tests (web)
+        run: pnpm --filter @ladder-dojo/web test
 
       - name: Build (core + web)
         run: pnpm build
