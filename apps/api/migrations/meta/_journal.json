@@ -15,6 +15,13 @@
       "when": 1789485646863,
       "tag": "0001_posted_problems",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789487171217,
+      "tag": "0002_orgs_and_rankings",
+      "breakpoints": true
     }
   ]
 }

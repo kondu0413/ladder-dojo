@@ -8,6 +8,10 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "observability": { "enabled": true },
+  // ランキングの集計(SPEC.md §3.7 / DECISIONS.md D-010)。毎日 18:00 UTC = 翌 03:00 JST
+  "triggers": {
+    "crons": ["0 18 * * *"]
+  },
   "assets": {
     "directory": "../web/dist",
     "binding": "ASSETS",

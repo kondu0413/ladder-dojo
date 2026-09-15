@@ -75,7 +75,9 @@ export type PostedProblemSummaryDto = {
   votedDifficulty: number | null;
   difficultyVotes: number;
   tags: string[];
-  visibility: "public" | "private";
+  visibility: "public" | "org" | "private";
+  /** visibility が "org" のときの対象組織 */
+  orgId: string | null;
   likes: number;
   /** 挑戦した人数 */
   attempts: number;
@@ -113,4 +115,64 @@ export type SolutionFailedDto = {
     /** mismatch = 期待と違う / unstable = 発振して収束しない / limit = 重すぎて打ち切った */
     kind: "mismatch" | "unstable" | "limit";
   }>;
+};
+
+// ---------------------------------------------------------------------------
+// 組織とランキング(フェーズ3、SPEC.md §3.7 / §3.8)
+// ---------------------------------------------------------------------------
+
+export type OrgRole = "admin" | "member";
+
+export type OrgSummaryDto = {
+  id: string;
+  name: string;
+  role: OrgRole;
+  joinedAt?: string;
+};
+
+export type OrgMemberDto = {
+  userId: string;
+  name: string;
+  email: string;
+  role: OrgRole;
+  joinedAt: string;
+};
+
+export type OrgListDto = { orgs: OrgSummaryDto[] };
+export type OrgDetailDto = {
+  org: { id: string; name: string; role: OrgRole; createdAt: string };
+  /** 管理者のときだけ中身が入る */
+  members: OrgMemberDto[];
+};
+export type OrgInviteDto = { invite: { code: string; expiresAt: string } };
+
+export type AssignmentDto = {
+  id: string;
+  kind: "official" | "posted";
+  problemRef: string;
+  /** null = 組織全員への割り当て */
+  userId: string | null;
+  note: string | null;
+  dueAt: string | null;
+  createdAt: string;
+};
+export type AssignmentListDto = { assignments: AssignmentDto[] };
+
+export type StuckDto = {
+  stuck: Array<{ problemId: string; stuckUsers: number; failures: number }>;
+  memberCount: number;
+};
+
+export type RankingMetric = "solved" | "authored_solved" | "authored_likes" | "streak";
+export type RankingPeriod = "weekly" | "monthly" | "all";
+
+export type RankingDto = {
+  period: RankingPeriod;
+  metric: RankingMetric;
+  orgId: string | null;
+  entries: Array<{ rank: number; userId: string; userName: string; value: number }>;
+  /** この順位を計算した時刻 */
+  computedAt: string;
+  /** true = その場で計算(組織内)、false = 1 日 1 回のスナップショット(全体) */
+  live: boolean;
 };
