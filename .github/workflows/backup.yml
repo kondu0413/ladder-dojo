@@ -39,7 +39,7 @@ jobs:
         run: |
           set -euo pipefail
           STAMP=$(date -u +%Y%m%dT%H%M%SZ)
-          pnpm exec wrangler d1 export ladder-dojo --remote --output "$RUNNER_TEMP/ladder-dojo-$STAMP.sql"
+          pnpm exec wrangler d1 export ladder-dojo --remote --env "" --output "$RUNNER_TEMP/ladder-dojo-$STAMP.sql"
           gzip -9 "$RUNNER_TEMP/ladder-dojo-$STAMP.sql"
           ls -l "$RUNNER_TEMP"/ladder-dojo-*.sql.gz
 
