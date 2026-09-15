@@ -59,3 +59,61 @@ test("未ログインでは保護 API が 401", async ({ playwright }) => {
   expect(res.status()).toBe(401);
   await fresh.dispose();
 });
+
+test.describe("シミュレータ", () => {
+  test("X0 を押すと Y0 が点灯し、離しても保持される(自己保持)", async ({ page }) => {
+    await page.goto("/");
+    const y0 = page.getByTestId("device-Y0");
+    await expect(y0).toHaveAttribute("data-on", "false");
+
+    // 押して離す
+    await page.getByRole("button", { name: /^X0/ }).click();
+    await expect(y0).toHaveAttribute("data-on", "true");
+    await page.getByRole("button", { name: /^X0/ }).click();
+    await expect(y0).toHaveAttribute("data-on", "true");
+
+    // 停止ボタンで消える
+    await page.getByRole("button", { name: /^X1/ }).click();
+    await expect(y0).toHaveAttribute("data-on", "false");
+  });
+
+  test("ラダー図の接点を直接タップしても操作できる", async ({ page }) => {
+    await page.goto("/");
+    const y0 = page.getByTestId("device-Y0");
+    // 行 0 / 列 0 の X0 接点
+    await page.getByTestId("cell-0-0").click();
+    await expect(y0).toHaveAttribute("data-on", "true");
+  });
+
+  test("タイマが実時間で進み、3 秒後に自動消灯する", async ({ page }) => {
+    await page.goto("/");
+    await page.getByTestId("sample-timer").click();
+    const y0 = page.getByTestId("device-Y0");
+
+    // 押しっぱなしだと 3 秒ごとに再点灯してしまうので、押して離す(押しボタン相当)
+    await page.getByRole("button", { name: /^X0/ }).click();
+    await expect(y0).toHaveAttribute("data-on", "true");
+    await page.getByRole("button", { name: /^X0/ }).click();
+    // 3 秒のタイマなので、1 秒後はまだ自己保持で点いている
+    await page.waitForTimeout(1000);
+    await expect(y0).toHaveAttribute("data-on", "true");
+    // 3 秒を過ぎると消える
+    await expect(y0).toHaveAttribute("data-on", "false", { timeout: 5000 });
+  });
+
+  test("リセットで全デバイスが初期状態に戻る", async ({ page }) => {
+    await page.goto("/");
+    await page.getByTestId("sample-counter").click();
+    const y0 = page.getByTestId("device-Y0");
+    for (let i = 0; i < 3; i++) {
+      await page.getByRole("button", { name: /^X0/ }).click();
+      await page.waitForTimeout(60);
+      await page.getByRole("button", { name: /^X0/ }).click();
+      await page.waitForTimeout(60);
+    }
+    await expect(y0).toHaveAttribute("data-on", "true");
+
+    await page.getByTestId("sim-reset").click();
+    await expect(y0).toHaveAttribute("data-on", "false");
+  });
+});

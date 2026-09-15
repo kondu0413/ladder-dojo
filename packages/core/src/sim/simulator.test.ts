@@ -357,6 +357,37 @@ describe("通電状態(強調表示用)", () => {
     expect(off.cells[0]?.[2]).toBe(false);
     expect(off.nodes[0]?.[0]).toBe(true); // 左母線は常に通電
   });
+
+  it("並列枝で右側だけ通電している開いた接点は「流れていない」", () => {
+    // 自己保持: Y0 が ON のとき、X0 は離していても右側のノードは通電している
+    const circuit = ladder(4).row(no("X0"), nc("X1"), out("Y0")).row(no("Y0")).v(0, 0).build();
+    const sim = new Simulator(circuit);
+    press(sim, "X0");
+    expect(sim.read("Y0")).toBe(true);
+
+    const p = sim.power;
+    // X0 の左右のノードはどちらも通電している(並列枝が右を押し上げている)
+    expect(p.nodes[0]?.[0]).toBe(true);
+    expect(p.nodes[0]?.[1]).toBe(true);
+    // しかし X0 自身は開いているので、電流は流れていないし導通もしていない
+    expect(p.cells[0]?.[0]).toBe(false);
+    expect(p.conducts[0]?.[0]).toBe(false);
+    // 自己保持の枝(Y0 接点)は流れている
+    expect(p.cells[1]?.[0]).toBe(true);
+    expect(p.conducts[1]?.[0]).toBe(true);
+    // b 接点 X1 とコイルも流れている
+    expect(p.cells[0]?.[1]).toBe(true);
+    expect(p.cells[0]?.[3]).toBe(true);
+  });
+
+  it("通電していなくても閉じている接点は conducts が true", () => {
+    // X0 を押さずに X1(b接点)だけを見る。左母線からは X0 で切れている
+    const circuit = ladder(4).row(no("X0"), nc("X1"), out("Y0")).build();
+    const sim = new Simulator(circuit);
+    settle(sim);
+    expect(sim.power.conducts[0]?.[1]).toBe(true); // b 接点は閉じている
+    expect(sim.power.cells[0]?.[1]).toBe(false); // でも電流は来ていない
+  });
 });
 
 describe("reset と scans", () => {

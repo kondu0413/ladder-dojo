@@ -9,3 +9,9 @@ body,
 #root {
   min-height: 100%;
 }
+
+/* 横スクロールはラダー図のコンテナだけに持たせる(ページ全体は横に動かさない) */
+html,
+body {
+  overflow-x: clip;
+}

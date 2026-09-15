@@ -33,8 +33,14 @@ export type Snapshot = {
 export type PowerMap = {
   /** nodes[row][col]: 行 row の列 col の左端(col = cols は右端)が通電しているか */
   nodes: boolean[][];
-  /** cells[row][col]: セルの要素が通電しているか(接点は導通中、コイルは励磁中、横線は通電中) */
+  /**
+   * cells[row][col]: **その要素を電流が流れているか**。
+   * 接点・横線は「左が通電していて、かつ導通している」。コイルは励磁中。
+   * 並列枝のせいで右側だけ通電している開いた接点は false になる(現場のモニタ表示と同じ)。
+   */
   cells: boolean[][];
+  /** conducts[row][col]: 通電の有無と無関係に、要素自体が閉じている(導通できる)か */
+  conducts: boolean[][];
 };
 
 export type SimulatorOptions = {
@@ -170,21 +176,28 @@ export class Simulator {
     const nextPrev = new Map<string, boolean>();
 
     for (const rung of this.rungs) {
-      const nodes = this.evaluateRung(rung, nextPrev);
+      const { nodes, conducts } = this.evaluateRung(rung, nextPrev);
       // 通電マップに書き込み
       for (const r of rung.rows) {
         const rowNodes = nodes.get(r);
         if (!rowNodes) continue;
         const prow = power.nodes[r];
         const crow = power.cells[r];
-        if (!prow || !crow) continue;
+        const drow = power.conducts[r];
+        if (!prow || !crow || !drow) continue;
         for (let c = 0; c <= cols; c++) prow[c] = rowNodes[c] ?? false;
         for (let c = 0; c < cols; c++) {
-          const cell = this.cells.get(cellKey(r, c));
-          const el = cell?.element;
+          const el = this.cells.get(cellKey(r, c))?.element;
           if (!el) continue;
-          if (el.type === "coil") crow[c] = rowNodes[c] ?? false;
-          else crow[c] = (rowNodes[c] ?? false) && (rowNodes[c + 1] ?? false);
+          if (el.type === "coil") {
+            const energized = rowNodes[c] ?? false;
+            crow[c] = energized;
+            drow[c] = energized;
+          } else {
+            const closed = conducts.get(cellKey(r, c)) ?? false;
+            drow[c] = closed;
+            crow[c] = closed && (rowNodes[c] ?? false);
+          }
         }
       }
       // コイルの書き込み(このラングの評価結果を即時反映)
@@ -202,8 +215,14 @@ export class Simulator {
     return power;
   }
 
-  /** ラング内の各ノードの通電を幅優先で求める。返り値: row → nodes[cols+1] */
-  private evaluateRung(rung: Rung, nextPrev: Map<string, boolean>): Map<number, boolean[]> {
+  /**
+   * ラング内の各ノードの通電を幅優先で求める。
+   * nodes: row → 各ノード(cols+1 個)の通電、conducts: セルキー → 要素が導通しているか
+   */
+  private evaluateRung(
+    rung: Rung,
+    nextPrev: Map<string, boolean>,
+  ): { nodes: Map<number, boolean[]>; conducts: Map<string, boolean> } {
     const { cols } = this.circuit;
     const nodes = new Map<number, boolean[]>();
     for (const r of rung.rows) nodes.set(r, new Array<boolean>(cols + 1).fill(false));
@@ -241,7 +260,7 @@ export class Simulator {
         if (this.cells.get(cellKey(r - 1, c - 1))?.vline) mark(r - 1, c);
       }
     }
-    return nodes;
+    return { nodes, conducts };
   }
 
   private contactConducts(
@@ -319,11 +338,13 @@ export class Simulator {
 }
 
 function emptyPower(circuit: Circuit): PowerMap {
+  const row = () => new Array<boolean>(circuit.cols).fill(false);
   return {
     nodes: Array.from({ length: circuit.rows }, () =>
       new Array<boolean>(circuit.cols + 1).fill(false),
     ),
-    cells: Array.from({ length: circuit.rows }, () => new Array<boolean>(circuit.cols).fill(false)),
+    cells: Array.from({ length: circuit.rows }, row),
+    conducts: Array.from({ length: circuit.rows }, row),
   };
 }
 
