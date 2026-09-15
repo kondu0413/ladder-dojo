@@ -269,3 +269,62 @@ test.describe("みんながつまずくところ", () => {
     await ctx.close();
   });
 });
+
+test.describe("復習の提案", () => {
+  /** localStorage に「昔クリアした」進捗を直接置く(未ログインの進捗、S-002) */
+  async function seedOldClear(page: Page, problemId: string, daysAgo: number) {
+    await page.goto("/");
+    await page.evaluate(
+      ([id, days]) => {
+        const at = new Date(Date.now() - Number(days) * 24 * 60 * 60 * 1000).toISOString();
+        localStorage.setItem(
+          "ladder-dojo:progress:v1",
+          JSON.stringify({
+            [String(id)]: {
+              cleared: true,
+              clearedAt: at,
+              lastAttemptAt: at,
+              attempts: 1,
+              failures: 0,
+            },
+          }),
+        );
+      },
+      [problemId, String(daysAgo)] as const,
+    );
+    await page.reload();
+  }
+
+  test("クリアしたばかりの問題は出ない", async ({ page }) => {
+    await seedOldClear(page, "selfhold-read-1", 1);
+    await expect(page.getByTestId("review-suggestions")).toHaveCount(0);
+  });
+
+  test("日が経った問題は「そろそろ復習しませんか」に出る", async ({ page }) => {
+    await seedOldClear(page, "selfhold-read-1", 40);
+    const panel = page.getByTestId("review-suggestions");
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText("押しボタンを離したらどうなる?");
+    await expect(panel).toContainText("か月ぶり");
+
+    // 押すとその問題へ行ける
+    await panel.getByTestId("review-selfhold-read-1").click();
+    await expect(
+      page.getByRole("heading", { name: "押しボタンを離したらどうなる?" }),
+    ).toBeVisible();
+  });
+
+  test("解き直すと提案から消える", async ({ page }) => {
+    await seedOldClear(page, "selfhold-read-1", 40);
+    await expect(page.getByTestId("review-suggestions")).toBeVisible();
+
+    await page.goto("/problems/selfhold-read-1");
+    await page.getByTestId("choice-1").click();
+    await page.getByTestId("next-question").click();
+    await page.getByTestId("choice-0").click();
+    await expect(page.getByTestId("read-complete")).toHaveAttribute("data-cleared", "true");
+
+    await page.goto("/");
+    await expect(page.getByTestId("review-suggestions")).toHaveCount(0);
+  });
+});
