@@ -25,7 +25,12 @@
 - `pnpm --filter @ladder-dojo/core test`: 1 件通過
 - `pnpm --filter @ladder-dojo/api test`: 4 件通過(workerd 上、ローカル D1 で `select 1`、本番設定に `E2E_AUTH_BYPASS` が無いことを確認)
 - `pnpm build` → `pnpm e2e`: 6 件通過(トップ表示、SPA フォールバック、`/api/health` が `env: "e2e"` を返す)
-- 初回デプロイ: **main マージ後の `deploy.yml` の結果をここに追記する**
+- 初回デプロイ(PR #3 → main、Deploy run [34974133824](https://github.com/kondu0413/ladder-dojo/actions/runs/34974133824)): 成功
+  - `wrangler whoami` からアカウント ID を取得(ログはマスク)
+  - D1 `ladder-dojo` を CI が作成(ID `8a5c01e6-b1b1-4c6c-843e-1868083c0102`、以後 wrangler.jsonc にも記載)
+  - `wrangler deploy` → https://ladder-dojo.mojya.workers.dev(静的アセット 3 ファイル、Worker 起動 4 ms)
+  - シークレット `BETTER_AUTH_SECRET`(CI が生成)/ `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` を登録(3 件 created)
+  - この開発環境からは workers.dev への HTTP アクセスがプロキシで拒否されるため、URL の目視確認は人間に依頼(下記)
 
 ### 仮置きした点
 - `compatibility_date` は `2026-08-01`(vitest-pool-workers 0.22.0 同梱の workerd が 2026-08-22 までしか対応しないため。wrangler 本体はより新しい日付も可)
@@ -35,14 +40,13 @@
 - D1 のロケーションヒントは `apac`
 
 ### 人間への依頼
-- (今のところなし)初回デプロイの結果を待って追記する
+- https://ladder-dojo.mojya.workers.dev を開き「ラダー図トレーニング」の空ページが出ること、https://ladder-dojo.mojya.workers.dev/api/health が `{"ok":true,"env":"production","core":{"schemaVersion":1}}` を返すことを確認してほしい(Claude Code の環境からは workers.dev に到達できない)
 
 ### 次にやること(Claude Code)
-1. 初回デプロイの確認(URL で空のページと `/api/health` が見えること)→ 本ファイルに記録して報告
-2. 着手順 3: 回路 JSON スキーマ(zod)— `Circuit` / `TestCase` / `Problem`、`schemaVersion`
-3. 着手順 4: シミュレータのコア(§3.1)+ ユニットテスト
-4. 着手順 5: `apps/api` の骨組み(Better Auth の Google 設定、Drizzle スキーマ、最初のマイグレーション、`requireUser`、権限テスト、`env.e2e` の E2E 専用ログイン)
-5. 以降 §4 フェーズ1 の DoD を順に潰す
+1. 着手順 3: 回路 JSON スキーマ(zod)— `Circuit` / `TestCase` / `Problem`、`schemaVersion`
+2. 着手順 4: シミュレータのコア(§3.1)+ ユニットテスト
+3. 着手順 5: `apps/api` の骨組み(Better Auth の Google 設定、Drizzle スキーマ、最初のマイグレーション、`requireUser`、権限テスト、`env.e2e` の E2E 専用ログイン)
+4. 以降 §4 フェーズ1 の DoD を順に潰す
 
 ## フェーズ1 DoD(SPEC.md §4)
 - [ ] シミュレータが §3.1 の全命令を正しく評価し、ユニットテストで網羅されている
@@ -52,11 +56,11 @@
 - [ ] 模範解答と指標の比較表示
 - [ ] サンドボックスで回路+テストケースを保存できる
 - [ ] アカウント登録・ログイン・進捗同期(Google ログインのみ)
-- [ ] コスト0円でデプロイされ、URL で触れる(骨組みは着手順 2 でデプロイ)
+- [x] コスト0円でデプロイされ、URL で触れる(骨組みを 2026-09-15 にデプロイ。フェーズ1 完了時に再確認)
 - [ ] README・PROGRESS・DECISIONS・COST が最新
 
 ## デプロイ URL
-- 本番: https://ladder-dojo.mojya.workers.dev(初回デプロイの結果を下に追記)
+- 本番: https://ladder-dojo.mojya.workers.dev(2026-09-15 初回デプロイ済み。空のトップページ + `/api/health`)
 - ヘルスチェック: https://ladder-dojo.mojya.workers.dev/api/health
 
 ## マージ待ち
