@@ -1,4 +1,13 @@
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from "react";
+import type { Circuit } from "@ladder-dojo/core";
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { ApiError, api } from "./api.js";
 import { useSession } from "./auth-client.js";
 import {
@@ -24,9 +33,19 @@ export type ProgressContextValue = {
   pendingMerge?: ProgressMap;
   get: (problemId: string) => ProblemProgress;
   record: (problemId: string, passed: boolean) => void;
+  /**
+   * 提出した回路を履歴に残す(SPEC.md §3.5)。ログイン中だけサーバーに送る。
+   * `record` と同じく、セッション確認中に呼ばれたら確認が済むまで預かる
+   */
+  recordSubmission: (problemId: string, circuit: Circuit, passed: boolean) => void;
   acceptMerge: () => Promise<void>;
   dismissMerge: () => void;
 };
+
+/** セッション確認中に預かる書き込み */
+type PendingWrite =
+  | { kind: "attempt"; problemId: string; passed: boolean }
+  | { kind: "submission"; problemId: string; circuit: Circuit; passed: boolean };
 
 const ProgressContext = createContext<ProgressContextValue | undefined>(undefined);
 
@@ -51,6 +70,16 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
   const [pendingMerge, setPendingMerge] = useState<ProgressMap | undefined>(undefined);
   const [syncError, setSyncError] = useState<string | undefined>(undefined);
   const [askedFor, setAskedFor] = useState<string | undefined>(undefined);
+
+  /**
+   * セッション確認中(`isPending`)に発生した書き込みの控え。
+   *
+   * 確認が済むまで `user` は null なので、そのまま判断すると
+   * 「ログイン済みなのに端末にしか記録されない」「提出が黙って捨てられる」が起きる。
+   * ページを開いた直後に答え合わせを押すと実際にそうなっていた。
+   * 行き先が決まるまでここに預かり、決まってから流す。
+   */
+  const deferred = useRef<PendingWrite[]>([]);
 
   // ログイン状態が変わったら、進捗の取得元を切り替える
   useEffect(() => {
@@ -83,37 +112,80 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
     };
   }, [user, isPending, askedFor]);
 
+  /** サーバーへの送信。投げっぱなしで、失敗しても学習の流れは止めない(S-002 / S-007) */
+  const sendAttempt = useCallback((problemId: string, passed: boolean) => {
+    api.recordAttempt(problemId, passed).catch((err: unknown) => {
+      const message =
+        err instanceof ApiError && err.status === 401
+          ? "ログインが切れています。もう一度ログインしてください。"
+          : "進捗をサーバーに保存できませんでした。";
+      setSyncError(message);
+    });
+  }, []);
+
+  /** 画面の見た目だけ先に進める。サーバーの返事は待たない */
+  const applyLocally = useCallback((problemId: string, passed: boolean) => {
+    setProgress((prev) => {
+      const cur = getProblemProgress(prev, problemId);
+      const now = new Date().toISOString();
+      return {
+        ...prev,
+        [problemId]: {
+          cleared: cur.cleared || passed,
+          attempts: cur.attempts + 1,
+          failures: cur.failures + (passed ? 0 : 1),
+          lastAttemptAt: now,
+          ...(cur.clearedAt ? { clearedAt: cur.clearedAt } : passed ? { clearedAt: now } : {}),
+        },
+      };
+    });
+  }, []);
+
   const record = useCallback(
     (problemId: string, passed: boolean) => {
+      if (isPending) {
+        deferred.current.push({ kind: "attempt", problemId, passed });
+        applyLocally(problemId, passed);
+        return;
+      }
       if (!user) {
         setProgress(recordLocal(problemId, passed));
         return;
       }
-      // 画面はすぐ更新し、サーバーへは後ろで送る
-      setProgress((prev) => {
-        const cur = getProblemProgress(prev, problemId);
-        const now = new Date().toISOString();
-        return {
-          ...prev,
-          [problemId]: {
-            cleared: cur.cleared || passed,
-            attempts: cur.attempts + 1,
-            failures: cur.failures + (passed ? 0 : 1),
-            lastAttemptAt: now,
-            ...(cur.clearedAt ? { clearedAt: cur.clearedAt } : passed ? { clearedAt: now } : {}),
-          },
-        };
-      });
-      api.recordAttempt(problemId, passed).catch((err: unknown) => {
-        const message =
-          err instanceof ApiError && err.status === 401
-            ? "ログインが切れています。もう一度ログインしてください。"
-            : "進捗をサーバーに保存できませんでした。";
-        setSyncError(message);
-      });
+      applyLocally(problemId, passed);
+      sendAttempt(problemId, passed);
     },
-    [user],
+    [user, isPending, applyLocally, sendAttempt],
   );
+
+  const recordSubmission = useCallback(
+    (problemId: string, circuit: Circuit, passed: boolean) => {
+      if (isPending) {
+        deferred.current.push({ kind: "submission", problemId, circuit, passed });
+        return;
+      }
+      // 未ログインなら提出履歴は残さない(サーバーにしか置き場がない)
+      if (!user) return;
+      api.submit({ problemId, circuit, passed }).catch(() => undefined);
+    },
+    [user, isPending],
+  );
+
+  // セッションの確認が済んだら、預かっていた書き込みを流す
+  useEffect(() => {
+    if (isPending) return;
+    const queued = deferred.current;
+    if (queued.length === 0) return;
+    deferred.current = [];
+    for (const write of queued) {
+      if (write.kind === "attempt") {
+        if (user) sendAttempt(write.problemId, write.passed);
+        else setProgress(recordLocal(write.problemId, write.passed));
+        continue;
+      }
+      if (user) api.submit({ ...write }).catch(() => undefined);
+    }
+  }, [isPending, user, sendAttempt]);
 
   const acceptMerge = useCallback(async () => {
     if (!pendingMerge) return;
@@ -148,6 +220,7 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
     loading: isPending,
     get: (problemId) => getProblemProgress(progress, problemId),
     record,
+    recordSubmission,
     acceptMerge,
     dismissMerge,
     ...(syncError ? { syncError } : {}),

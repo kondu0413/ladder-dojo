@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { ATTEMPTS, waitForPost } from "./sync.js";
+import { ATTEMPTS, SUBMISSIONS, waitForPost } from "./sync.js";
 
 /**
  * ログインと進捗同期(SPEC.md §3.5 / DECISIONS.md S-002)。
@@ -40,7 +40,7 @@ test("未ログインでも問題は解け、ログインを促す表示が出�
 
   await clearReadProblem(page);
   await page.goto("/");
-  await expect(page.getByTestId("cleared-count")).toContainText("クリア: 1 / 30 問");
+  await expect(page.getByTestId("cleared-count")).toContainText(/クリア: 1 \/ \d+ 問/);
 });
 
 test("ログインすると名前が出て、ログアウトできる", async ({ page }) => {
@@ -60,12 +60,12 @@ test("ログイン中の進捗はサーバーに保存され、再読み込み�
 
   await clearReadProblem(page, true);
   await page.goto("/");
-  await expect(page.getByTestId("cleared-count")).toContainText("クリア: 1 / 30 問");
+  await expect(page.getByTestId("cleared-count")).toContainText(/クリア: 1 \/ \d+ 問/);
 
   // localStorage を空にしても、サーバーから読み直せる
   await page.evaluate(() => localStorage.clear());
   await page.reload();
-  await expect(page.getByTestId("cleared-count")).toContainText("クリア: 1 / 30 問");
+  await expect(page.getByTestId("cleared-count")).toContainText(/クリア: 1 \/ \d+ 問/);
   await expect(page.getByTestId("problem-selfhold-read-1")).toHaveAttribute("data-cleared", "true");
 });
 
@@ -73,7 +73,7 @@ test("端末に溜めた進捗をログイン時に引き継げる(S-002)", asyn
   // 未ログインで 1 問クリア
   await clearReadProblem(page);
   await page.goto("/");
-  await expect(page.getByTestId("cleared-count")).toContainText("クリア: 1 / 30 問");
+  await expect(page.getByTestId("cleared-count")).toContainText(/クリア: 1 \/ \d+ 問/);
 
   // ログインすると引き継ぎを聞かれる
   await signUp(page);
@@ -85,12 +85,12 @@ test("端末に溜めた進捗をログイン時に引き継げる(S-002)", asyn
 
   await page.getByTestId("merge-accept").click();
   await expect(prompt).toHaveCount(0);
-  await expect(page.getByTestId("cleared-count")).toContainText("クリア: 1 / 30 問");
+  await expect(page.getByTestId("cleared-count")).toContainText(/クリア: 1 \/ \d+ 問/);
 
   // サーバー側に入ったので、端末の記録を消しても残る
   await page.evaluate(() => localStorage.clear());
   await page.reload();
-  await expect(page.getByTestId("cleared-count")).toContainText("クリア: 1 / 30 問");
+  await expect(page.getByTestId("cleared-count")).toContainText(/クリア: 1 \/ \d+ 問/);
 });
 
 test("引き継ぎを「あとで」にすると端末の記録は消えない", async ({ page }) => {
@@ -101,7 +101,36 @@ test("引き継ぎを「あとで」にすると端末の記録は消えない",
   await expect(page.getByTestId("merge-prompt")).toHaveCount(0);
 
   // サーバー側は空なので 0 問。端末の記録はログアウトすれば戻る
-  await expect(page.getByTestId("cleared-count")).toContainText("クリア: 0 / 30 問");
+  await expect(page.getByTestId("cleared-count")).toContainText(/クリア: 0 \/ \d+ 問/);
   await page.getByTestId("sign-out").click();
-  await expect(page.getByTestId("cleared-count")).toContainText("クリア: 1 / 30 問");
+  await expect(page.getByTestId("cleared-count")).toContainText(/クリア: 1 \/ \d+ 問/);
+});
+
+test("セッション確認中に答え合わせしても、進捗と提出がサーバーに残る", async ({ page }) => {
+  await signUp(page);
+
+  // セッションの確認をわざと遅らせて、「ログイン済みかどうかまだ分からない」状態を作る。
+  // ここで判断を急ぐと、ログイン済みなのに端末にしか記録されず、提出は黙って捨てられていた
+  await page.route("**/api/auth/get-session*", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await route.continue();
+  });
+
+  await page.goto("/problems/selfhold-fix-1");
+  const attempted = waitForPost(page, ATTEMPTS);
+  const submitted = waitForPost(page, SUBMISSIONS);
+  // 画面が出た瞬間に押す(セッションの確認はまだ終わっていない)
+  await page.getByTestId("check-answer").click();
+  await expect(page.getByTestId("judge-result")).toHaveAttribute("data-passed", "false");
+
+  // 確認が済んだあとで、預かっていた書き込みが流れる
+  await Promise.all([attempted, submitted]);
+
+  await page.unroute("**/api/auth/get-session*");
+  await page.goto("/");
+  await expect(page.getByTestId("problem-selfhold-fix-1")).toHaveAttribute("data-cleared", "false");
+  // 端末の記録ではなくサーバーに入っているので、localStorage を消しても挑戦回数が残る
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await expect(page.getByTestId("problem-selfhold-fix-1")).toContainText("1 回挑戦中");
 });

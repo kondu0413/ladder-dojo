@@ -26,7 +26,7 @@ import { useProgress } from "../lib/progress-context.jsx";
 export function CommunityProblemPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user } = useProgress();
+  const { user, recordSubmission } = useProgress();
   const [problem, setProblem] = useState<PostedProblemDetail | undefined>(undefined);
   const [testCases, setTestCases] = useState<TestCase[]>([]);
   const [circuit, setCircuit] = useState<Circuit>(() => emptyCircuit(6, 4));
@@ -85,13 +85,13 @@ export function CommunityProblemPage() {
     const judged = judge(circuit, testCases);
     setResult(judged);
     if (!judged.passed) setFailures((n) => n + 1);
+    // 提出した回路そのものも履歴に残す(SPEC.md §3.5)。挑戦の記録とは切り離す
+    recordSubmission(problem.id, circuit, judged.passed);
     if (user) {
       api
         .recordPostedAttempt(problem.id, judged.passed)
         .then(() => reload())
         .catch(() => setNotice("挑戦の記録をサーバーに送れませんでした。"));
-      // 提出した回路そのものも履歴に残す(SPEC.md §3.5)。失敗しても挑戦の記録とは切り離す
-      api.submit({ problemId: problem.id, circuit, passed: judged.passed }).catch(() => undefined);
     } else if (judged.passed) {
       setNotice("ログインすると、クリアが記録されて模範解答も見られます。");
     }

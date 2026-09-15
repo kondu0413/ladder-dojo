@@ -16,7 +16,6 @@ import { LadderView } from "../components/LadderView.js";
 import { SimulatorControls } from "../components/SimulatorControls.js";
 import { SolutionCompare } from "../components/SolutionCompare.js";
 import { useSimulator } from "../hooks/useSimulator.js";
-import { api } from "../lib/api.js";
 import { labelMap } from "../lib/describe.js";
 import { useProgress } from "../lib/progress-context.jsx";
 import { findProblem, MODE_LABELS, STAGE_LABELS } from "../problems/index.js";
@@ -268,7 +267,7 @@ function VerifyPanel({ problem }: { problem: Problem }) {
 // ---------------------------------------------------------------------------
 
 function BuildMode({ problem }: { problem: Problem }) {
-  const { record, user } = useProgress();
+  const { record, recordSubmission } = useProgress();
   const initial = useMemo<Circuit>(
     () => problem.fix?.initial ?? problem.write?.initial ?? emptyCircuit(6, 4),
     [problem],
@@ -286,11 +285,8 @@ function BuildMode({ problem }: { problem: Problem }) {
     setResult(judged);
     if (!judged.passed) setFailures((n) => n + 1);
     record(problem.id, judged.passed);
-    // 提出した回路そのものを履歴に残す(SPEC.md §3.5)。管理者ビューのつまずき分析(§3.8)で使う。
-    // ログイン中だけ。送信に失敗しても答え合わせの流れは止めない(進捗の同期エラーは別途表示される)
-    if (user) {
-      api.submit({ problemId: problem.id, circuit, passed: judged.passed }).catch(() => undefined);
-    }
+    // 提出した回路そのものを履歴に残す(SPEC.md §3.5)。管理者ビューのつまずき分析(§3.8)で使う
+    recordSubmission(problem.id, circuit, judged.passed);
   };
 
   return (

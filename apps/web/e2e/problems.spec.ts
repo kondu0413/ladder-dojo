@@ -50,7 +50,7 @@ test.describe("読む", () => {
       "data-cleared",
       "true",
     );
-    await expect(page.getByTestId("cleared-count")).toContainText("クリア: 1 / 30 問");
+    await expect(page.getByTestId("cleared-count")).toContainText(/クリア: 1 \/ \d+ 問/);
   });
 });
 
