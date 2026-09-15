@@ -10,7 +10,9 @@ export default defineConfig(async () => {
   return {
     plugins: [
       cloudflareTest({
-        wrangler: { configPath: "./wrangler.jsonc" },
+        // env.e2e を使う。メール/パスワードが有効になり、テストからログインできる(D-014)。
+        // 本番設定(E2E_AUTH_BYPASS 無し)の検証は、テスト側で env を差し替えて行う
+        wrangler: { configPath: "./wrangler.jsonc", environment: "e2e" },
         miniflare: {
           bindings: { TEST_MIGRATIONS: migrations },
         },

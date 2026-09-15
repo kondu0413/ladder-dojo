@@ -12,5 +12,16 @@ export type Env = {
   GOOGLE_CLIENT_SECRET?: string;
 };
 
+/** ハンドラから見えるログイン中のユーザー */
+export type SessionUser = {
+  id: string;
+  name: string;
+  email: string;
+  image: string | null;
+};
+
 /** Hono のジェネリクスに渡す型 */
-export type AppBindings = { Bindings: Env };
+export type AppBindings = {
+  Bindings: Env;
+  Variables: { user: SessionUser };
+};

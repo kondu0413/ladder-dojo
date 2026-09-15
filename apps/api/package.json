@@ -13,12 +13,15 @@
   },
   "dependencies": {
     "@ladder-dojo/core": "workspace:*",
+    "better-auth": "1.7.5",
+    "drizzle-orm": "0.45.2",
     "hono": "4.13.8",
     "zod": "4.6.5"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.22.0",
     "@cloudflare/workers-types": "5.20260915.1",
+    "drizzle-kit": "0.31.10",
     "vitest": "4.1.11",
     "wrangler": "4.131.2"
   }
