@@ -9,6 +9,7 @@ import {
   rise,
   SCHEMA_VERSION,
   timer,
+  wire,
 } from "@ladder-dojo/core";
 
 const LABELS = {
@@ -21,6 +22,48 @@ const LABELS = {
   C0: "カウンタ",
   M0: "起動パルス",
 } as const;
+
+/** 自己保持した運転出力から、2 つめの出力を取り出すだけの組み合わせ */
+const runAndLamp = ladder(4)
+  .row(no("X0"), nc("X1"), out("Y0"))
+  .row(no("Y0"))
+  .row(no("Y0"), wire, out("Y1"))
+  .v(0, 0)
+  .build();
+
+const runAndLampCases = [
+  {
+    id: "initial",
+    title: "最初はどちらも消えている",
+    steps: [{ type: "expect" as const, outputs: { Y0: false, Y1: false } }],
+  },
+  {
+    id: "start",
+    title: "起動すると両方点く",
+    steps: [
+      { type: "press" as const, device: "X0" as const },
+      { type: "expect" as const, outputs: { Y0: true, Y1: true } },
+    ],
+  },
+  {
+    id: "held",
+    title: "離しても両方点いたまま",
+    steps: [
+      { type: "press" as const, device: "X0" as const },
+      { type: "wait" as const, ms: 500 },
+      { type: "expect" as const, outputs: { Y0: true, Y1: true } },
+    ],
+  },
+  {
+    id: "stop",
+    title: "停止すると両方消える",
+    steps: [
+      { type: "press" as const, device: "X0" as const },
+      { type: "press" as const, device: "X1" as const },
+      { type: "expect" as const, outputs: { Y0: false, Y1: false } },
+    ],
+  },
+];
 
 /** 運転開始から 5 秒後に警告灯が点く。X1 で全停止 */
 const warnAfter5 = ladder(5)
@@ -206,6 +249,44 @@ const alternateCases = [
 ];
 
 export const comboProblems: Problem[] = [
+  {
+    schemaVersion: SCHEMA_VERSION,
+    id: "combo-read-0",
+    title: "自己保持から 2 つめの出力を取る",
+    mode: "read",
+    stage: "combo",
+    difficulty: 2,
+    tags: ["自己保持", "組み合わせ"],
+    spec: "起動 X0・停止 X1 で運転出力 Y0 を自己保持し、その Y0 の a 接点でもう 1 つの出力 Y1(警告灯)を動かす回路です。",
+    deviceLabels: LABELS,
+    solution: runAndLamp,
+    testCases: runAndLampCases,
+    read: {
+      questions: [
+        {
+          id: "q1",
+          prompt: "起動ボタン X0 を押して離すと、警告灯 Y1 はどうなりますか?",
+          scenario: [{ type: "press", device: "X0" }],
+          choices: ["点かない", "Y0 と一緒に点く", "少し遅れて点く"],
+          answerIndex: 1,
+          explanation:
+            "3 行目のラングは Y0 の a 接点だけでできています。Y0 が自己保持で ON になると、同じスキャンのうちに Y1 も ON になります。上のラングの結果は、同じスキャンの下のラングから見えます。",
+        },
+        {
+          id: "q2",
+          prompt: "停止ボタン X1 を押すと、Y1 はどうなりますか?",
+          scenario: [
+            { type: "press", device: "X0" },
+            { type: "press", device: "X1" },
+          ],
+          choices: ["Y0 だけ消えて Y1 は残る", "両方消える", "Y1 だけ残って点滅する"],
+          answerIndex: 1,
+          explanation:
+            "Y1 は Y0 を見ているだけなので、Y0 が消えれば Y1 も消えます。出力から出力を作ると、こうして 1 か所の停止で全部が止まります。",
+        },
+      ],
+    },
+  },
   {
     schemaVersion: SCHEMA_VERSION,
     id: "combo-read-1",

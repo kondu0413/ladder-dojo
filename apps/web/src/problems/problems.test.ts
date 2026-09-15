@@ -26,12 +26,43 @@ describe("公式問題", () => {
     expect(missing, "2 問に満たない組み合わせ").toEqual([]);
   });
 
+  it("どの段階にも、やさしい入口(難易度 2 以下)がある", () => {
+    const missing = STAGE_ORDER.filter((stage) => {
+      const xs = PROBLEMS.filter((p) => p.stage === stage);
+      return !xs.some((p) => p.difficulty <= 2);
+    });
+    expect(missing, "いきなり難しい問題から始まる段階がある").toEqual([]);
+  });
+
+  it("各段階の先頭は、その段階でいちばんやさしい問題である", () => {
+    const sorted = sortedProblems();
+    for (const stage of STAGE_ORDER) {
+      const xs = sorted.filter((p) => p.stage === stage);
+      const first = xs[0];
+      if (!first) continue;
+      const easiest = Math.min(...xs.map((p) => p.difficulty));
+      expect(first.difficulty, `${stage} の先頭が ${first.id}(難易度 ${first.difficulty})`).toBe(
+        easiest,
+      );
+    }
+  });
+
   it("難易度は 1〜5 で、段階が進むほど平均が上がる", () => {
     const avg = (stage: string) => {
       const xs = PROBLEMS.filter((p) => p.stage === stage).map((p) => p.difficulty);
       return xs.reduce((a, b) => a + b, 0) / xs.length;
     };
-    expect(avg("selfhold")).toBeLessThan(avg("combo"));
+    for (const p of PROBLEMS) {
+      expect(p.difficulty, p.id).toBeGreaterThanOrEqual(1);
+      expect(p.difficulty, p.id).toBeLessThanOrEqual(5);
+    }
+    // 隣り合う段階どうしで見る(最初と最後だけ比べても、途中の逆転を見逃す)
+    for (let i = 1; i < STAGE_ORDER.length; i++) {
+      const prev = STAGE_ORDER[i - 1];
+      const cur = STAGE_ORDER[i];
+      if (!prev || !cur) continue;
+      expect(avg(prev), `${prev} → ${cur}`).toBeLessThanOrEqual(avg(cur));
+    }
   });
 
   it("ID が重複していない", () => {

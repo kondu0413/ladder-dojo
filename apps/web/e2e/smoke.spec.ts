@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test("トップページに公式問題の一覧が出る", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "ラダー図トレーニング" })).toBeVisible();
-  await expect(page.getByTestId("cleared-count")).toContainText("クリア: 0 / 30 問");
+  await expect(page.getByTestId("cleared-count")).toContainText(/クリア: 0 \/ \d+ 問/);
   await expect(page.getByTestId("problem-selfhold-read-1")).toBeVisible();
 });
 

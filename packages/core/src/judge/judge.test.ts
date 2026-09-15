@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { counter, ladder, nc, no, out, reset, timer } from "../builder.js";
+import { counter, ladder, nc, no, out, reset, timer, wire } from "../builder.js";
 import type { TestCase } from "../schema/testcase.js";
 import { judge, runTestCase } from "./judge.js";
 
@@ -321,5 +321,143 @@ describe("判定は回路の形を見ない(振る舞い一致のみ)", () => {
       .row(no("M0"), out("Y0"))
       .build();
     expect(judge(alternative, selfHoldCases).passed).toBe(true);
+  });
+});
+
+describe("タイムチャート(recordTimeline)", () => {
+  const holdCase: TestCase = {
+    id: "hold",
+    title: "押して離しても保持",
+    steps: [
+      { type: "expect", outputs: { Y0: false } },
+      { type: "press", device: "X0", holdMs: 100 },
+      { type: "wait", ms: 500 },
+      { type: "expect", outputs: { Y0: true } },
+      { type: "press", device: "X1", holdMs: 100 },
+      { type: "expect", outputs: { Y0: false } },
+    ],
+  };
+
+  it("既定では記録しない(判定を何百回も回すところの費用を増やさない)", () => {
+    expect(runTestCase(selfHold, holdCase).timeline).toBeUndefined();
+  });
+
+  it("値が変わった時刻だけを記録する", () => {
+    const r = runTestCase(selfHold, holdCase, { recordTimeline: true });
+    const tl = r.timeline;
+    expect(tl).toBeDefined();
+    if (!tl) return;
+
+    // 同じ値が続くところでサンプルが増えない(500 ms 待っても波形は増えない)
+    expect(tl.samples.length).toBeLessThan(10);
+    // 隣り合うサンプルは必ず値が違う
+    for (let i = 1; i < tl.samples.length; i++) {
+      expect(tl.samples[i]?.values).not.toEqual(tl.samples[i - 1]?.values);
+    }
+    // 時刻は単調増加
+    for (let i = 1; i < tl.samples.length; i++) {
+      expect(tl.samples[i]?.t).toBeGreaterThan(tl.samples[i - 1]?.t ?? -1);
+    }
+  });
+
+  it("入力(X)も波形に含む", () => {
+    const tl = runTestCase(selfHold, holdCase, { recordTimeline: true }).timeline;
+    expect(tl?.devices).toContain("X0");
+    expect(tl?.devices).toContain("X1");
+    expect(tl?.devices).toContain("Y0");
+  });
+
+  it("デバイスは X → Y → M → T → C の順に並ぶ", () => {
+    const mixed = ladder(4)
+      .row(no("X0"), wire, timer("T0", 100))
+      .row(no("T0"), wire, out("M0"))
+      .row(no("M0"), wire, out("Y0"))
+      .build();
+    const tl = runTestCase(
+      mixed,
+      {
+        id: "m",
+        title: "m",
+        steps: [
+          { type: "set", inputs: { X0: true } },
+          { type: "wait", ms: 200 },
+          { type: "expect", outputs: { Y0: true } },
+        ],
+      },
+      { recordTimeline: true },
+    ).timeline;
+    expect(tl?.devices).toEqual(["X0", "Y0", "M0", "T0"]);
+  });
+
+  it("波形から Y0 の保持が読み取れる", () => {
+    const tl = runTestCase(selfHold, holdCase, { recordTimeline: true }).timeline;
+    expect(tl).toBeDefined();
+    if (!tl) return;
+    const y0At = (t: number) => {
+      let v = false;
+      for (const s of tl.samples) {
+        if (s.t > t) break;
+        v = s.values.Y0 ?? false;
+      }
+      return v;
+    };
+    // t=0 では「電源投入直後(OFF)」と「X0 を押した直後(ON)」が同じ時刻に起きる。
+    // 波形なので幅ゼロの区間は描けず、その時刻の最後の値が残る
+    expect(y0At(0)).toBe(true);
+    // X0 を押している間と、離したあとの 500 ms 待ちの途中は ON
+    expect(y0At(50)).toBe(true);
+    expect(y0At(400)).toBe(true);
+    // X1 を押したあとは OFF
+    expect(y0At(tl.durationMs)).toBe(false);
+  });
+
+  it("同じ時刻に複数回変わったら、その時刻の最後の値だけを残す", () => {
+    // 待ってから押すケースなら、電源投入直後の OFF が幅を持つので読み取れる
+    const tl = runTestCase(
+      selfHold,
+      {
+        id: "wait-then-press",
+        title: "少し待ってから押す",
+        steps: [
+          { type: "wait", ms: 200 },
+          { type: "press", device: "X0", holdMs: 100 },
+          { type: "expect", outputs: { Y0: true } },
+        ],
+      },
+      { recordTimeline: true },
+    ).timeline;
+    expect(tl?.samples[0]).toMatchObject({ t: 0, values: expect.objectContaining({ Y0: false }) });
+    // 200 ms までは OFF のまま。ON になるのは押した瞬間
+    const onAt = tl?.samples.find((s) => s.values.Y0 === true)?.t;
+    expect(onAt).toBe(200);
+  });
+
+  it("目印はステップを始めた時刻に付く", () => {
+    const tl = runTestCase(selfHold, holdCase, { recordTimeline: true }).timeline;
+    expect(tl?.markers).toHaveLength(holdCase.steps.length);
+    expect(tl?.markers[0]).toMatchObject({ stepIndex: 0, t: 0 });
+    // 2 つめの目印(X0 を押す)も時刻 0。expect は時間を進めない
+    expect(tl?.markers[1]).toMatchObject({ stepIndex: 1, t: 0 });
+    // 3 つめ(500 ms 待つ)は、押して離したあとなので 100 ms 経っている
+    expect(tl?.markers[2]?.t).toBe(100);
+  });
+
+  it("失敗したケースでも、そこまでの波形が残る", () => {
+    const broken = ladder(4).row(no("X0"), nc("X1"), out("Y0")).build();
+    const r = runTestCase(broken, holdCase, { recordTimeline: true });
+    expect(r.passed).toBe(false);
+    expect(r.timeline?.samples.length).toBeGreaterThan(0);
+    expect(r.timeline?.markers.length).toBeGreaterThan(0);
+  });
+
+  it("発振する回路でも波形を返す", () => {
+    const oscillating = ladder(4).row(nc("Y0"), wire, out("Y0")).build();
+    const r = runTestCase(
+      oscillating,
+      { id: "o", title: "o", steps: [{ type: "expect", outputs: { Y0: true } }] },
+      { recordTimeline: true },
+    );
+    expect(r.failure?.kind).toBe("unstable");
+    expect(r.timeline).toBeDefined();
   });
 });

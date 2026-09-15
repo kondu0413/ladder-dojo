@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { ATTEMPTS, SUBMISSIONS, waitForPost } from "./sync.js";
 
 /**
  * 組織・管理者ビュー・ランキング(SPEC.md §3.7 / §3.8)。
@@ -72,16 +73,22 @@ test("管理者はメンバーの学習状況とつまずきを見られる", as
   await member.getByTestId("org-join").click();
   await expect(member.getByTestId("org-message")).toContainText("参加しました");
 
-  // メンバーが 1 問クリアし、別の 1 問で詰まる
+  // メンバーが 1 問クリアし、別の 1 問で詰まる。
+  // 進捗も提出も投げっぱなしで送るので、ページを移る前・閉じる前に完了を待つ
   await member.goto("/problems/selfhold-read-1");
   await member.getByTestId("choice-1").click();
   await member.getByTestId("next-question").click();
+  const cleared = waitForPost(member, ATTEMPTS);
   await member.getByTestId("choice-0").click();
   await expect(member.getByTestId("read-complete")).toHaveAttribute("data-cleared", "true");
+  await cleared;
 
   await member.goto("/problems/selfhold-fix-1");
+  const attempted = waitForPost(member, ATTEMPTS);
+  const submitted = waitForPost(member, SUBMISSIONS);
   await member.getByTestId("check-answer").click();
   await expect(member.getByTestId("judge-result")).toHaveAttribute("data-passed", "false");
+  await Promise.all([attempted, submitted]);
   await ctx.close();
 
   // 管理者が学習状況を見る
@@ -175,10 +182,8 @@ test("管理者はメンバーの提出履歴を回路つきで見られる", as
 
   // 「直す」問題を 1 回失敗して提出履歴を作る。
   // 提出の POST は投げっぱなしなので、ページを閉じる前に完了を待つ
-  const saved = member.waitForResponse(
-    (res) => res.url().includes("/api/submissions") && res.request().method() === "POST",
-  );
   await member.goto("/problems/selfhold-fix-1");
+  const saved = waitForPost(member, SUBMISSIONS);
   await member.getByTestId("check-answer").click();
   await expect(member.getByTestId("judge-result")).toHaveAttribute("data-passed", "false");
   await saved;

@@ -1,4 +1,13 @@
-import { counter, ladder, no, out, type Problem, reset, SCHEMA_VERSION } from "@ladder-dojo/core";
+import {
+  counter,
+  ladder,
+  no,
+  out,
+  type Problem,
+  reset,
+  SCHEMA_VERSION,
+  wire,
+} from "@ladder-dojo/core";
 
 const LABELS = {
   X0: "カウント",
@@ -7,6 +16,47 @@ const LABELS = {
   Y0: "完了ランプ",
   C0: "カウンタ",
 } as const;
+
+/** カウンタ単体。3 回で完了する */
+const countOnly = ladder(3).row(no("X0"), wire, counter("C0", 3)).build();
+
+const countOnlyCases = [
+  {
+    id: "initial",
+    title: "最初は完了していない",
+    steps: [{ type: "expect" as const, outputs: { C0: false } }],
+  },
+  {
+    id: "two-presses",
+    title: "2 回ではまだ完了しない",
+    steps: [
+      { type: "press" as const, device: "X0" as const },
+      { type: "press" as const, device: "X0" as const },
+      { type: "expect" as const, outputs: { C0: false } },
+    ],
+  },
+  {
+    id: "three-presses",
+    title: "3 回目で完了する",
+    steps: [
+      { type: "press" as const, device: "X0" as const },
+      { type: "press" as const, device: "X0" as const },
+      { type: "press" as const, device: "X0" as const },
+      { type: "expect" as const, outputs: { C0: true } },
+    ],
+  },
+  {
+    id: "keeps-done",
+    title: "4 回目以降も完了のまま",
+    steps: [
+      { type: "press" as const, device: "X0" as const },
+      { type: "press" as const, device: "X0" as const },
+      { type: "press" as const, device: "X0" as const },
+      { type: "press" as const, device: "X0" as const },
+      { type: "expect" as const, outputs: { C0: true }, note: "リセットするまで完了のまま" },
+    ],
+  },
+];
 
 /** X0 を 5 回押すと Y0 点灯、X1 でリセット */
 const count5 = ladder(4)
@@ -122,6 +172,49 @@ const forceCases = [
 ];
 
 export const counterProblems: Problem[] = [
+  {
+    schemaVersion: SCHEMA_VERSION,
+    id: "counter-read-0",
+    title: "カウンタは何を数えている?",
+    mode: "read",
+    stage: "counter",
+    difficulty: 1,
+    tags: ["カウンタ"],
+    spec: "押しボタン X0 でカウンタ C0(設定 3 回)を動かすだけの回路です。C0 そのものの動きを見てください。",
+    deviceLabels: LABELS,
+    solution: countOnly,
+    testCases: countOnlyCases,
+    read: {
+      questions: [
+        {
+          id: "q1",
+          prompt: "X0 を 2 回押した時点で、C0 は完了していますか?",
+          scenario: [
+            { type: "press", device: "X0" },
+            { type: "press", device: "X0" },
+          ],
+          choices: ["完了している", "まだ完了していない", "1 回目で完了している"],
+          answerIndex: 1,
+          explanation:
+            "カウンタは通電が OFF から ON に変わった回数を数えます。設定は 3 回なので、2 回ではまだ足りません。",
+        },
+        {
+          id: "q2",
+          prompt: "3 回押して完了したあと、さらに 4 回目を押すとどうなりますか?",
+          scenario: [
+            { type: "press", device: "X0" },
+            { type: "press", device: "X0" },
+            { type: "press", device: "X0" },
+            { type: "press", device: "X0" },
+          ],
+          choices: ["完了が取り消される", "完了のまま変わらない", "0 に戻って数え直す"],
+          answerIndex: 1,
+          explanation:
+            "カウンタは設定値に達したら、そこで止まって完了を保ちます。0 に戻すには RST(リセット)が要ります。タイマが通電を切るだけで 0 に戻るのとは違うところです。",
+        },
+      ],
+    },
+  },
   {
     schemaVersion: SCHEMA_VERSION,
     id: "counter-read-1",

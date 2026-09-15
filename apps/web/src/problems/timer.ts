@@ -1,4 +1,4 @@
-import { ladder, nc, no, out, type Problem, SCHEMA_VERSION, timer } from "@ladder-dojo/core";
+import { ladder, nc, no, out, type Problem, SCHEMA_VERSION, timer, wire } from "@ladder-dojo/core";
 
 const LABELS = { X0: "起動", X1: "停止", Y0: "ランプ", T0: "タイマ" } as const;
 
@@ -12,6 +12,46 @@ const autoOff = ladder(5)
 
 /** X0 を押し続けて 2 秒後に点灯する(オンディレイ) */
 const onDelay = ladder(4).row(no("X0"), timer("T0", 2000)).row(no("T0"), out("Y0")).build();
+
+/** タイマ単体。通電が続いた時間だけを見る */
+const timerOnly = ladder(3).row(no("X0"), wire, timer("T0", 2000)).build();
+
+const timerOnlyCases = [
+  {
+    id: "initial",
+    title: "最初は完了していない",
+    steps: [{ type: "expect" as const, outputs: { T0: false } }],
+  },
+  {
+    id: "one-second",
+    title: "1 秒ではまだ完了しない",
+    steps: [
+      { type: "set" as const, inputs: { X0: true } },
+      { type: "wait" as const, ms: 1000 },
+      { type: "expect" as const, outputs: { T0: false } },
+    ],
+  },
+  {
+    id: "two-seconds",
+    title: "2 秒で完了する",
+    steps: [
+      { type: "set" as const, inputs: { X0: true } },
+      { type: "wait" as const, ms: 2000 },
+      { type: "expect" as const, outputs: { T0: true } },
+    ],
+  },
+  {
+    id: "reset-on-release",
+    title: "離すと 0 に戻る",
+    steps: [
+      { type: "set" as const, inputs: { X0: true } },
+      { type: "wait" as const, ms: 2000 },
+      { type: "expect" as const, outputs: { T0: true } },
+      { type: "set" as const, inputs: { X0: false } },
+      { type: "expect" as const, outputs: { T0: false }, note: "通電が切れると現在値も 0 に戻る" },
+    ],
+  },
+];
 
 const autoOffCases = [
   {
@@ -115,6 +155,52 @@ const onDelayCases = [
 ];
 
 export const timerProblems: Problem[] = [
+  {
+    schemaVersion: SCHEMA_VERSION,
+    id: "timer-read-0",
+    title: "タイマは何を数えている?",
+    mode: "read",
+    stage: "timer",
+    difficulty: 1,
+    tags: ["タイマ"],
+    spec: "押しボタン X0 でタイマ T0(設定 2 秒)を動かすだけの回路です。ランプはまだつないでいません。T0 そのものの動きを見てください。",
+    deviceLabels: LABELS,
+    solution: timerOnly,
+    testCases: timerOnlyCases,
+    read: {
+      questions: [
+        {
+          id: "q1",
+          prompt: "X0 を押してから 1 秒たった時点で、T0 は完了していますか?",
+          scenario: [
+            { type: "set", inputs: { X0: true } },
+            { type: "wait", ms: 1000 },
+          ],
+          choices: ["完了している", "まだ完了していない", "押した瞬間に完了している"],
+          answerIndex: 1,
+          explanation:
+            "オンディレイタイマは、通電が続いた時間を数えます。設定は 2 秒なので、1 秒ではまだ足りません。",
+        },
+        {
+          id: "q2",
+          prompt: "2 秒たって T0 が完了したあと、X0 を離すとどうなりますか?",
+          scenario: [
+            { type: "set", inputs: { X0: true } },
+            { type: "wait", ms: 2000 },
+            { type: "set", inputs: { X0: false } },
+          ],
+          choices: [
+            "完了したままになる",
+            "完了が取り消され、現在値も 0 に戻る",
+            "現在値は残るが完了だけ取り消される",
+          ],
+          answerIndex: 1,
+          explanation:
+            "タイマは通電が切れた瞬間にリセットされます。完了も現在値も 0 に戻るので、押し直すとまた 0 から数え始めます。ここが自己保持との大きな違いです。",
+        },
+      ],
+    },
+  },
   {
     schemaVersion: SCHEMA_VERSION,
     id: "timer-read-1",

@@ -10,6 +10,60 @@ const LABELS = {
   Y1: "逆転出力",
 } as const;
 
+/** 自己保持なしの相互インターロック。押している間だけ動く */
+const momentary = ladder(3)
+  .row(no("X0"), nc("Y1"), out("Y0"))
+  .row(no("X1"), nc("Y0"), out("Y1"))
+  .build();
+
+const momentaryCases = [
+  {
+    id: "initial",
+    title: "最初はどちらも止まっている",
+    steps: [{ type: "expect" as const, outputs: { Y0: false, Y1: false } }],
+  },
+  {
+    id: "forward",
+    title: "正転ボタンを押している間は正転する",
+    steps: [
+      { type: "set" as const, inputs: { X0: true } },
+      { type: "expect" as const, outputs: { Y0: true, Y1: false } },
+    ],
+  },
+  {
+    id: "blocked",
+    title: "正転中に逆転ボタンを押しても逆転は入らない",
+    steps: [
+      { type: "set" as const, inputs: { X0: true } },
+      { type: "expect" as const, outputs: { Y0: true } },
+      { type: "set" as const, inputs: { X1: true } },
+      {
+        type: "expect" as const,
+        outputs: { Y0: true, Y1: false },
+        note: "相手の b 接点で止められる",
+      },
+    ],
+  },
+  {
+    id: "switch-after-release",
+    title: "正転ボタンを離せば逆転が入る",
+    steps: [
+      { type: "set" as const, inputs: { X0: true, X1: true } },
+      { type: "expect" as const, outputs: { Y0: true, Y1: false } },
+      { type: "set" as const, inputs: { X0: false } },
+      { type: "expect" as const, outputs: { Y0: false, Y1: true } },
+    ],
+  },
+  {
+    id: "reverse-only",
+    title: "逆転ボタンだけなら逆転する",
+    steps: [
+      { type: "set" as const, inputs: { X1: true } },
+      { type: "expect" as const, outputs: { Y0: false, Y1: true } },
+    ],
+  },
+];
+
 /** 正転 Y0 と逆転 Y1 の相互インターロック。X2 で停止 */
 const basic = ladder(6)
   .row(no("X0"), nc("Y1"), nc("X2"), out("Y0"))
@@ -171,6 +225,48 @@ const limitCases = [
 ];
 
 export const interlockProblems: Problem[] = [
+  {
+    schemaVersion: SCHEMA_VERSION,
+    id: "interlock-read-0",
+    title: "相手が動いている間は入らない",
+    mode: "read",
+    stage: "interlock",
+    difficulty: 1,
+    tags: ["インターロック"],
+    spec: "正転 X0・逆転 X1 でモータを動かします。自己保持は付けていないので、押している間だけ動きます。それぞれのラングに、相手の出力の b 接点が直列に入っています。",
+    deviceLabels: LABELS,
+    solution: momentary,
+    testCases: momentaryCases,
+    read: {
+      questions: [
+        {
+          id: "q1",
+          prompt:
+            "正転ボタン X0 を押したまま、逆転ボタン X1 も押すと、逆転出力 Y1 はどうなりますか?",
+          scenario: [
+            { type: "set", inputs: { X0: true } },
+            { type: "set", inputs: { X1: true } },
+          ],
+          choices: ["逆転が入って両方 ON になる", "逆転は入らない", "正転が切れて逆転に変わる"],
+          answerIndex: 1,
+          explanation:
+            "逆転のラングには正転出力 Y0 の b 接点が直列に入っています。Y0 が ON の間この接点は開いたままなので、X1 を押しても Y1 には電気が届きません。これがインターロックです。",
+        },
+        {
+          id: "q2",
+          prompt: "両方押したまま、正転ボタン X0 だけを離すとどうなりますか?",
+          scenario: [
+            { type: "set", inputs: { X0: true, X1: true } },
+            { type: "set", inputs: { X0: false } },
+          ],
+          choices: ["どちらも止まる", "逆転が入る", "正転が入ったまま"],
+          answerIndex: 1,
+          explanation:
+            "Y0 が消えると、逆転のラングの b 接点が閉じます。X1 は押したままなので、そのまま逆転が入ります。「相手が止まるまで待つ」という動きになります。",
+        },
+      ],
+    },
+  },
   {
     schemaVersion: SCHEMA_VERSION,
     id: "interlock-read-1",
