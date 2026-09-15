@@ -24,5 +24,13 @@
     "drizzle-kit": "0.31.10",
     "vitest": "4.1.11",
     "wrangler": "4.131.2"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/app.ts"
+    },
+    "./dto": {
+      "types": "./src/dto.ts"
+    }
   }
 }

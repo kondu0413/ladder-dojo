@@ -16,7 +16,7 @@ import { SimulatorControls } from "../components/SimulatorControls.js";
 import { SolutionCompare } from "../components/SolutionCompare.js";
 import { useSimulator } from "../hooks/useSimulator.js";
 import { labelMap } from "../lib/describe.js";
-import { recordAttempt } from "../lib/progress.js";
+import { useProgress } from "../lib/progress-context.jsx";
 import { findProblem, MODE_LABELS, STAGE_LABELS } from "../problems/index.js";
 
 export function ProblemPage() {
@@ -61,6 +61,7 @@ export function ProblemPage() {
 // ---------------------------------------------------------------------------
 
 function ReadMode({ problem }: { problem: Problem }) {
+  const { record } = useProgress();
   const questions = problem.read?.questions ?? [];
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
@@ -77,7 +78,7 @@ function ReadMode({ problem }: { problem: Problem }) {
       const next = { ...prev, [questionId]: choiceIndex };
       // 全設問に答えた時点で、問題としてのクリア判定を記録する(全問正解でクリア)
       if (Object.keys(next).length === questions.length) {
-        recordAttempt(
+        record(
           problem.id,
           questions.every((q) => next[q.id] === q.answerIndex),
         );
@@ -265,6 +266,7 @@ function VerifyPanel({ problem }: { problem: Problem }) {
 // ---------------------------------------------------------------------------
 
 function BuildMode({ problem }: { problem: Problem }) {
+  const { record } = useProgress();
   const initial = useMemo<Circuit>(
     () => problem.fix?.initial ?? problem.write?.initial ?? emptyCircuit(6, 4),
     [problem],
@@ -278,7 +280,7 @@ function BuildMode({ problem }: { problem: Problem }) {
   const check = () => {
     const judged = judge(circuit, problem.testCases);
     setResult(judged);
-    recordAttempt(problem.id, judged.passed);
+    record(problem.id, judged.passed);
   };
 
   return (

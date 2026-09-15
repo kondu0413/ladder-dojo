@@ -112,3 +112,93 @@ test("タイマの設定値を変えて置ける", async ({ page }) => {
   await expect(page.getByTestId("current-device")).toHaveText("T0");
   await expect(page.getByTestId("cell-text-0-5")).toHaveText("T0 3.5s");
 });
+
+test.describe("保存とテストケース(§3.4)", () => {
+  async function signUp(page: import("@playwright/test").Page) {
+    const email = `sandbox-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.test`;
+    const res = await page.request.post("/api/auth/sign-up/email", {
+      data: { email, password: "correct-horse-battery", name: "保存テスト" },
+    });
+    expect(res.status()).toBe(200);
+  }
+
+  /** X0 の a 接点 → Y0 コイルの最小回路を作る */
+  async function buildMinimal(page: import("@playwright/test").Page) {
+    await page.getByTestId("cell-0-0").click();
+    await page.getByTestId("part-no").click();
+    await page.getByTestId("cell-0-5").click();
+    await page.getByTestId("device-type-Y").click();
+    await page.getByTestId("part-out").click();
+    await page.getByTestId("connect-row").click();
+  }
+
+  test("未ログインでは保存できない旨が出る", async ({ page }) => {
+    await page.goto("/sandbox");
+    await expect(page.getByText("保存するにはログインしてください")).toBeVisible();
+    await expect(page.getByTestId("sandbox-save")).toHaveCount(0);
+  });
+
+  test("テストケースを付けて保存し、読み込み直せる", async ({ page }) => {
+    await signUp(page);
+    await page.goto("/sandbox");
+    await expect(page.getByTestId("auth-bar")).toHaveAttribute("data-signed-in", "true");
+
+    await buildMinimal(page);
+
+    // テストケース: X0 を ON にして Y0 が ON になることを確かめる
+    await page.getByTestId("mode-test").click();
+    await page.getByTestId("add-test-case").click();
+    await page.getByTestId("test-title-0").fill("押すと点く");
+    await page.getByTestId("case-0-add-on").click();
+    await page.getByTestId("case-0-expect-on").click();
+    await expect(page.getByTestId("case-0-step-0")).toContainText("X0 を ON");
+    await expect(page.getByTestId("case-0-step-1")).toContainText("Y0=ON");
+
+    // その場で実行できる
+    await page.getByTestId("run-tests").click();
+    await expect(page.getByTestId("judge-result")).toHaveAttribute("data-passed", "true");
+
+    // 保存
+    await page.getByTestId("sandbox-title").fill("保存テスト回路");
+    await page.getByTestId("sandbox-save").click();
+    await expect(page.getByTestId("sandbox-message")).toContainText("保存しました");
+
+    // 新規にしてから読み込み直すと、回路もテストも戻る
+    await page.getByTestId("sandbox-new").click();
+    await expect(page.getByTestId("cell-text-0-0")).toHaveCount(0);
+
+    await page.getByRole("button", { name: "開く" }).click();
+    await expect(page.getByTestId("sandbox-title")).toHaveValue("保存テスト回路");
+    await expect(page.getByTestId("cell-text-0-0")).toHaveText("X0");
+    await expect(page.getByTestId("mode-test")).toContainText("テスト (1)");
+  });
+
+  test("保存した回路を削除できる", async ({ page }) => {
+    await signUp(page);
+    await page.goto("/sandbox");
+    await buildMinimal(page);
+    await page.getByTestId("sandbox-title").fill("消す回路");
+    await page.getByTestId("sandbox-save").click();
+    await expect(page.getByTestId("sandbox-message")).toContainText("保存しました");
+    await expect(page.getByText("消す回路")).toBeVisible();
+
+    await page.getByRole("button", { name: "削除" }).click();
+    await expect(page.getByTestId("sandbox-message")).toContainText("削除しました");
+    await expect(page.getByText("消す回路")).toHaveCount(0);
+  });
+
+  test("テストが通らない回路は、その場で差分が出る", async ({ page }) => {
+    await signUp(page);
+    await page.goto("/sandbox");
+    await buildMinimal(page);
+
+    await page.getByTestId("mode-test").click();
+    await page.getByTestId("add-test-case").click();
+    // わざと「押していないのに ON」という誤ったテストを書く
+    await page.getByTestId("case-0-expect-on").click();
+    await page.getByTestId("run-tests").click();
+
+    await expect(page.getByTestId("judge-result")).toHaveAttribute("data-passed", "false");
+    await expect(page.getByTestId("diff-Y0")).toContainText("OFF");
+  });
+});

@@ -4,6 +4,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { Hono } from "hono";
 import { z } from "zod";
 import { submissions } from "../db/schema.js";
+import type { SubmissionDto } from "../dto.js";
 import type { AppBindings } from "../env.js";
 import { byteLength, MAX_CIRCUIT_JSON_BYTES, newId, sha256Hex } from "../lib/util.js";
 import { requireUser } from "../middleware/auth.js";
@@ -108,7 +109,7 @@ async function pruneFailed(db: Db, userId: string, problemId: string): Promise<v
   `);
 }
 
-function toJson(row: typeof submissions.$inferSelect) {
+function toJson(row: typeof submissions.$inferSelect): SubmissionDto {
   return {
     id: row.id,
     problemId: row.problemId,

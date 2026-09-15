@@ -215,12 +215,20 @@ SPEC.md §2.1 / §6 に基づき、技術上・仕様上の判断を日付付き
 | 用途 | 採用 | 却下 / 備考 |
 |---|---|---|
 | クライアント状態 | Zustand | Redux(過剰)、Jotai(可、好みの差) |
-| サーバーデータ | TanStack Query + **Hono RPC クライアント(`hc<AppType>`)** | API のルート型をそのまま使い、フロント側の型生成ツールを持たない |
+| サーバーデータ | **素の fetch + 共有 DTO 型**(`@ladder-dojo/api/dto`)。2026-09-15 改訂、下記参照 | Hono RPC(`hc<AppType>`)は却下。TanStack Query は未導入(必要になってから) |
 | 認証クライアント | Better Auth の `createAuthClient`(React 用フック) | — |
 | ルーティング | React Router v7(library mode) | TanStack Router(可)。SPA で十分 |
 | フォーム | React Hook Form + zod | — |
 | 日時 | Temporal polyfill or date-fns | 連続学習日数は **JST 日付**で判定(仕様上の暫定、下記 S-001) |
 | ID | ULID or `crypto.randomUUID()` | D1 は自動採番より文字列 ID の方がマージ・エクスポートに強い |
+
+### D-016 追記: Hono RPC をやめて DTO 型の共有にした(2026-09-15)
+
+- **やろうとしたこと**: `apps/web` が `import type { AppType } from "@ladder-dojo/api"` して `hc<AppType>()` を使う
+- **起きた問題**: `AppType` は Hono の `Bindings`(= `Env`)を含み、`Env` は `D1Database` / `Fetcher` という **Cloudflare Workers のグローバル型**を参照する。`@cloudflare/workers-types` はモジュールではなくグローバル宣言ファイルなので、`apps/web` 側でこれを読ませるには tsconfig の `types` に足すしかない。すると `Response` / `Request` / `Headers` などが DOM の型と二重定義になる
+- **採用**: `apps/api/src/dto.ts` に **レスポンスの型だけ**を置き、`@ladder-dojo/api/dto` として types のみ公開する。このファイルは Workers のグローバル型を一切参照しない。ハンドラは返り値にこの型を注釈するので、web と API の型がずれるとコンパイルで落ちる。呼び出しは素の `fetch`(同一オリジンなので Cookie はそのまま送られる)
+- **失うもの**: パスとメソッドの型安全(`/api/progres` のような綴り間違いはコンパイルで防げない)。API 8 本ぶんのクライアント関数を手で書く手間。いずれも E2E テストが実 API を叩いて担保する
+- **却下**: `apps/web` の tsconfig に `@cloudflare/workers-types` を足す(DOM 型と衝突)、`skipLibCheck` に頼る(衝突は型解決の時点で起きるので効かない)、OpenAPI からの型生成(ツールが増える)
 
 ### D-017 権限判定は API 層で行う(RLS の代替)(2026-09-14 新設)
 
@@ -328,6 +336,7 @@ SPEC.md §2.1 / §6 に基づき、技術上・仕様上の判断を日付付き
 | 2026-09-14 | D-018 | 新設: Drizzle + drizzle-kit + Wrangler のマイグレーション運用、フェーズ1 テーブル見立て | D-006 に伴う |
 | 2026-09-14 | S-002, S-003 | Supabase 前提の記述(MAU、500 MB)を D1 前提に修正。判断内容は変更なし | D-006 に伴う |
 | 2026-09-15 | D-017 | フェーズ1 の権限テストを実装。所有者チェックは WHERE に user_id を入れる方式に統一 | 着手順 5 の実装に伴う |
+| 2026-09-15 | D-016 | Hono RPC を却下し、DTO 型の共有 + 素の fetch に変更 | Workers のグローバル型が DOM の型と衝突するため |
 | 2026-09-15 | D-005 | 公式問題の記述を素の JSON から TypeScript モジュール(ビルダー使用)に。スキーマと同梱方法は変えない | 型チェックと検証テストのため |
 | 2026-09-15 | S-004〜S-006 | 新設: スキャン内の評価順(実機と同じ即時反映)、判定の時間モデル(仮想時間 + settle)、回路 JSON のグリッド表現 | 着手順 3〜4 の実装に伴う |
 | 2026-09-15 | D-012 | GitHub Secrets を 3 つに削減。アカウント ID は `wrangler whoami`、D1 は CI が自動作成し ID を実行時置換、`BETTER_AUTH_SECRET` は CI が初回生成。public リポジトリのため Actions 分数制限なし | 人間の指示(外部サービス準備完了) |

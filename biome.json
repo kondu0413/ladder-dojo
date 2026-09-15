@@ -73,7 +73,7 @@
               "options": {
                 "paths": {
                   "drizzle-orm": "web は DB に触らない(D-002 / D-017)",
-                  "@ladder-dojo/api": "web は api の型のみ参照する(import type のみ可、D-002)"
+                  "drizzle-orm/d1": "web は DB に触らない(D-002 / D-017)"
                 }
               }
             }

@@ -16,6 +16,11 @@ const protectedRoutes: Array<{ method: string; path: string; body?: unknown }> =
   { method: "GET", path: "/api/progress" },
   { method: "GET", path: "/api/progress/selfhold-1" },
   { method: "POST", path: "/api/progress/selfhold-1/attempts", body: { passed: true } },
+  {
+    method: "POST",
+    path: "/api/progress/merge",
+    body: { entries: [{ problemId: "selfhold-write-1", attempts: 1, failures: 0, cleared: true }] },
+  },
   { method: "GET", path: "/api/sandbox" },
   { method: "POST", path: "/api/sandbox", body: { title: "t", circuit } },
   { method: "GET", path: "/api/sandbox/some-id" },

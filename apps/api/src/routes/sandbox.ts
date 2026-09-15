@@ -1,9 +1,10 @@
-import { circuitSchema, testCasesSchema } from "@ladder-dojo/core";
+import { circuitSchema, sandboxTestCasesSchema } from "@ladder-dojo/core";
 import { and, desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { Hono } from "hono";
 import { z } from "zod";
 import { sandboxCircuits } from "../db/schema.js";
+import type { SandboxDto } from "../dto.js";
 import type { AppBindings } from "../env.js";
 import { byteLength, MAX_CIRCUIT_JSON_BYTES, newId } from "../lib/util.js";
 import { requireUser } from "../middleware/auth.js";
@@ -14,7 +15,7 @@ const MAX_CIRCUITS_PER_USER = 50;
 const bodySchema = z.object({
   title: z.string().min(1).max(100),
   circuit: circuitSchema,
-  testCases: testCasesSchema.optional(),
+  testCases: sandboxTestCasesSchema.optional(),
 });
 
 /**
@@ -125,7 +126,7 @@ function findOwn(db: Db, userId: string, id: string) {
     .get();
 }
 
-function toJson(row: typeof sandboxCircuits.$inferSelect) {
+function toJson(row: typeof sandboxCircuits.$inferSelect): SandboxDto {
   return {
     id: row.id,
     title: row.title,
