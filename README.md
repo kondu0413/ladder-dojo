@@ -5,15 +5,32 @@ PLC のラダー図を「読む」→「直す」→「書く」の順に身に�
 - 本番 URL: https://ladder-dojo.mojya.workers.dev
 - ランニングコスト: 0 円(Cloudflare Workers Free + D1 Free + Google OAuth + GitHub Actions)。詳細は [docs/COST.md](./docs/COST.md)
 
+## いまできること(フェーズ1)
+
+| 画面 | パス | 内容 |
+|---|---|---|
+| 問題一覧 | `/` | 公式問題 30 問を段階別に表示。クリア状況つき |
+| 問題 | `/problems/:id` | 読む(選択式の予測 + 解説 + シミュレータで答え合わせ)/ 直す / 書く |
+| サンドボックス | `/sandbox` | 自由に回路を作り、テストを付けて保存・実行 |
+| サンプル | `/samples` | 代表的な回路 5 種を動かして見る |
+
+- ラダー図は SVG で描画し、電流が流れている要素・電圧だけ来ている配線・無電圧を色分けする
+- 操作はタップ中心(ドラッグ非依存)。スマホ幅で E2E を回している
+- タイマは実時間。1x / 5x / 即時 を切り替えられる
+- 判定は「入力操作 → 期待出力」の振る舞い一致。回路の形は見ない。不正解のときは、どのテストのどの操作のあとで何が違ったかを表示する
+- 未ログインでも全部解ける。ログイン(Google)すると進捗がサーバーに同期され、端末に溜めた進捗を引き継げる
+
 ## 構成
 
 ```
-packages/core   シミュレータ・判定・回路 JSON スキーマ(純 TypeScript、DOM / Node API 非依存)
-apps/web        React 19 + Vite + Tailwind v4 の SPA。ビルド成果物 dist/ を Worker の静的アセットとして配信
-apps/api        Cloudflare Worker(Hono + D1)。wrangler.jsonc、D1 マイグレーション、API テスト
+packages/core   シミュレータ・判定・回路 JSON スキーマ・編集操作(純 TypeScript、DOM / Node API 非依存)
+apps/web        React 19 + Vite + Tailwind v4 の SPA。公式問題もここに同梱(src/problems/)
+apps/api        Cloudflare Worker(Hono + D1 + Better Auth)。wrangler.jsonc、D1 マイグレーション、API テスト
 .github/        CI(ci.yml)、デプロイ(deploy.yml)、D1 バックアップ(backup.yml)
 docs/           PROGRESS / DECISIONS / COST / SETUP
 ```
+
+`apps/web` は `apps/api` から **DTO の型だけ**を import する(`@ladder-dojo/api/dto`)。実行時コードは import しない(D-002 / D-016)。
 
 1 つの Worker `ladder-dojo` が `/api/*` を Hono で処理し、それ以外は `apps/web/dist` の静的ファイル(SPA フォールバック付き)を返す。
 
@@ -34,7 +51,7 @@ pnpm dev          # Vite(http://localhost:5173)と wrangler dev(http://localhost
 ```sh
 pnpm lint         # Biome
 pnpm typecheck    # tsc(全パッケージ)
-pnpm test         # core ユニット + API テスト(workerd + ローカル D1)
+pnpm test         # core ユニット(カバレッジ閾値つき)+ API テスト(workerd + ローカル D1)+ web ユニット
 pnpm build        # core → web(dist/)
 pnpm e2e          # Playwright。ビルド済み SPA を wrangler dev --env e2e で配信して接続(モバイル + デスクトップ)
 pnpm ci           # 上記すべて
