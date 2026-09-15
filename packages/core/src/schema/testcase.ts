@@ -68,4 +68,11 @@ export type TestCase = z.infer<typeof testCaseSchema>;
 /** press の既定の押下時間 */
 export const DEFAULT_HOLD_MS = 100;
 
+/** 問題のテストケース。判定に使うので最低 1 件は要る */
 export const testCasesSchema = z.array(testCaseSchema).min(1).max(50);
+
+/**
+ * サンドボックスのテストケース。まだ付けていない状態(0 件)を許す(SPEC.md §3.4)。
+ * 問題として公開する(フェーズ2)ときに `testCasesSchema` で 1 件以上を要求する。
+ */
+export const sandboxTestCasesSchema = z.array(testCaseSchema).max(50);

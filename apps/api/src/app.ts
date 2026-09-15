@@ -1,6 +1,7 @@
 import { coreVersion } from "@ladder-dojo/core";
 import { Hono } from "hono";
 import { getAuth, isE2EAuthBypass } from "./auth.js";
+import type { MeDto } from "./dto.js";
 import type { AppBindings } from "./env.js";
 import { optionalUser } from "./middleware/auth.js";
 import { progressRoutes } from "./routes/progress.js";
@@ -27,7 +28,7 @@ export const app = new Hono<AppBindings>()
   // Better Auth のハンドラ(Google ログイン開始・コールバック・セッション取得・ログアウト)
   .on(["GET", "POST"], "/auth/*", (c) => getAuth(c.env).handler(c.req.raw))
   /** ログイン中のユーザー。未ログインでも 200 で `user: null` を返す(§3.5) */
-  .get("/me", optionalUser, (c) => c.json({ user: c.get("user") ?? null }))
+  .get("/me", optionalUser, (c) => c.json<MeDto>({ user: c.get("user") ?? null }))
   .route("/progress", progressRoutes)
   .route("/sandbox", sandboxRoutes)
   .route("/submissions", submissionRoutes)

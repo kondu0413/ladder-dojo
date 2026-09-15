@@ -1,12 +1,13 @@
 import type { Problem } from "@ladder-dojo/core";
 import { useMemo } from "react";
 import { Link } from "react-router";
-import { getProblemProgress, loadProgress } from "../lib/progress.js";
+import { AuthBar } from "../components/AuthBar.js";
+import { useProgress } from "../lib/progress-context.jsx";
 import { MODE_LABELS, STAGE_LABELS, STAGE_ORDER, sortedProblems } from "../problems/index.js";
 
 /** 公式問題の一覧。段階ごとにまとめ、クリア状況を出す */
 export function ProblemListPage() {
-  const progress = useMemo(() => loadProgress(), []);
+  const { get } = useProgress();
   const problems = useMemo(() => sortedProblems(), []);
   const byStage = useMemo(() => {
     const map = new Map<string, Problem[]>();
@@ -18,7 +19,7 @@ export function ProblemListPage() {
     return map;
   }, [problems]);
 
-  const clearedCount = problems.filter((p) => getProblemProgress(progress, p.id).cleared).length;
+  const clearedCount = problems.filter((p) => get(p.id).cleared).length;
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-screen-sm flex-col gap-5 px-4 py-6">
@@ -35,6 +36,7 @@ export function ProblemListPage() {
         <p className="text-xs text-slate-500" data-testid="cleared-count">
           クリア: {clearedCount} / {problems.length} 問
         </p>
+        <AuthBar />
       </header>
 
       {STAGE_ORDER.map((stage) => {
@@ -45,7 +47,7 @@ export function ProblemListPage() {
             <h2 className="mb-2 text-base font-bold text-slate-800">{STAGE_LABELS[stage]}</h2>
             <ul className="flex flex-col gap-2">
               {list.map((problem) => {
-                const p = getProblemProgress(progress, problem.id);
+                const p = get(problem.id);
                 return (
                   <li key={problem.id}>
                     <Link

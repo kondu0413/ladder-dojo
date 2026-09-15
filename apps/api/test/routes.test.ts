@@ -85,6 +85,82 @@ describe("進捗", () => {
   });
 });
 
+describe("進捗のマージ(S-002)", () => {
+  const merge = (user: TestUser, entries: unknown) =>
+    app.request(
+      "/api/progress/merge",
+      { method: "POST", headers: jsonHeaders(user), body: JSON.stringify({ entries }) },
+      env,
+    );
+
+  it("端末の進捗を取り込める", async () => {
+    const user = await signUp();
+    const res = await merge(user, [
+      { problemId: "selfhold-write-1", attempts: 3, failures: 2, cleared: true },
+      { problemId: "timer-write-1", attempts: 1, failures: 1, cleared: false },
+    ]);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { merged: number; progress: ProgressJson[] };
+    expect(body.merged).toBe(2);
+
+    const cleared = body.progress.find((p) => p.problemId === "selfhold-write-1");
+    expect(cleared).toMatchObject({ attempts: 3, failures: 2 });
+    expect(cleared?.clearedAt).not.toBeNull();
+
+    const open = body.progress.find((p) => p.problemId === "timer-write-1");
+    expect(open).toMatchObject({ attempts: 1, failures: 1, clearedAt: null });
+  });
+
+  it("既にサーバーにある進捗とは加算され、クリアは取り消されない", async () => {
+    const user = await signUp();
+    await attempt(user, "selfhold-write-1", true);
+    await attempt(user, "selfhold-write-1", false);
+
+    const res = await merge(user, [
+      { problemId: "selfhold-write-1", attempts: 5, failures: 4, cleared: false },
+    ]);
+    const body = (await res.json()) as { progress: ProgressJson[] };
+    const row = body.progress.find((p) => p.problemId === "selfhold-write-1");
+    expect(row).toMatchObject({ attempts: 7, failures: 5 });
+    expect(row?.clearedAt, "サーバー側のクリアは取り消さない").not.toBeNull();
+  });
+
+  it("端末側だけがクリアしていればクリアになる", async () => {
+    const user = await signUp();
+    await attempt(user, "timer-write-1", false);
+    const res = await merge(user, [
+      { problemId: "timer-write-1", attempts: 2, failures: 0, cleared: true },
+    ]);
+    const body = (await res.json()) as { progress: ProgressJson[] };
+    expect(body.progress.find((p) => p.problemId === "timer-write-1")?.clearedAt).not.toBeNull();
+  });
+
+  it("件数の上限を超えると 400", async () => {
+    const user = await signUp();
+    const entries = Array.from({ length: 46 }, (_, i) => ({
+      problemId: `problem-${i}`,
+      attempts: 1,
+      failures: 0,
+      cleared: false,
+    }));
+    expect((await merge(user, entries)).status).toBe(400);
+  });
+
+  it("空の配列は 400", async () => {
+    const user = await signUp();
+    expect((await merge(user, [])).status).toBe(400);
+  });
+
+  it("他人の進捗には影響しない", async () => {
+    const alice = await signUp("alice");
+    const bob = await signUp("bob");
+    await merge(bob, [{ problemId: "selfhold-write-1", attempts: 9, failures: 9, cleared: true }]);
+
+    const res = await app.request("/api/progress", { headers: authHeaders(alice) }, env);
+    expect((await res.json()) as { progress: unknown[] }).toEqual({ progress: [] });
+  });
+});
+
 describe("サンドボックス", () => {
   async function create(user: TestUser, title: string, body: Circuit = circuit) {
     const res = await app.request(
@@ -136,6 +212,22 @@ describe("サンドボックス", () => {
 
     const gone = await app.request(`/api/sandbox/${saved.id}`, { headers: authHeaders(user) }, env);
     expect(gone.status).toBe(404);
+  });
+
+  it("テストケースがまだ無くても保存できる(§3.4)", async () => {
+    const user = await signUp();
+    const res = await app.request(
+      "/api/sandbox",
+      {
+        method: "POST",
+        headers: jsonHeaders(user),
+        body: JSON.stringify({ title: "テスト未設定", circuit, testCases: [] }),
+      },
+      env,
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { circuit: { testCases: unknown } };
+    expect(body.circuit.testCases).toEqual([]);
   });
 
   it("テストケースを付けて保存できる(§3.4)", async () => {

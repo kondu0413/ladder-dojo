@@ -14,11 +14,13 @@
   },
   "dependencies": {
     "@ladder-dojo/core": "workspace:*",
+    "better-auth": "1.7.5",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-router": "7.18.3"
   },
   "devDependencies": {
+    "@ladder-dojo/api": "workspace:*",
     "@playwright/test": "1.63.0",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "22.20.2",

@@ -54,6 +54,9 @@ importers:
       '@ladder-dojo/core':
         specifier: workspace:*
         version: link:../../packages/core
+      better-auth:
+        specifier: 1.7.5
+        version: 1.7.5(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@cloudflare/workers-types@5.20260915.1)(kysely@0.29.5))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@4.1.11)
       react:
         specifier: 19.3.0
         version: 19.3.0
@@ -64,6 +67,9 @@ importers:
         specifier: 7.18.3
         version: 7.18.3(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
     devDependencies:
+      '@ladder-dojo/api':
+        specifier: workspace:*
+        version: link:../api
       '@playwright/test':
         specifier: 1.63.0
         version: 1.63.0
