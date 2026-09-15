@@ -1,0 +1,104 @@
+name: Deploy
+
+# main への push で CI(ci.yml)を通し、成功時のみ本番 Worker にデプロイする(DECISIONS.md D-012)。
+# 必要な Secrets は CLOUDFLARE_API_TOKEN / GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET の 3 つだけ。
+#   - アカウント ID は wrangler whoami で取得
+#   - D1 `ladder-dojo` は無ければ作成し、ID を wrangler.jsonc に反映
+#   - BETTER_AUTH_SECRET は Worker に無ければ初回だけ生成して登録
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Deploy to Cloudflare Workers
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: production
+      url: https://ladder-dojo.mojya.workers.dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build (core + web)
+        run: pnpm build
+
+      - name: Cloudflare setup (account ID / D1)
+        id: cf
+        uses: ./.github/actions/cloudflare-setup
+        with:
+          api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: Apply D1 migrations (remote)
+        working-directory: apps/api
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          if ls migrations/*.sql >/dev/null 2>&1; then
+            pnpm exec wrangler d1 migrations apply ladder-dojo --remote
+          else
+            echo "migrations/*.sql が無いためスキップ"
+          fi
+
+      - name: Deploy Worker
+        working-directory: apps/api
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: pnpm exec wrangler deploy
+
+      - name: Sync Worker secrets
+        working-directory: apps/api
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          EXISTING=$(pnpm exec wrangler secret list --format json 2>/dev/null || echo '[]')
+          HAS_AUTH_SECRET=$(printf '%s' "$EXISTING" | jq -r 'map(select(.name == "BETTER_AUTH_SECRET")) | length')
+          FILE="$RUNNER_TEMP/secrets.json"
+          if [ "$HAS_AUTH_SECRET" = "0" ]; then
+            echo "BETTER_AUTH_SECRET が未登録のため生成して登録します(初回のみ)"
+            BETTER_AUTH_SECRET=$(openssl rand -base64 32)
+            echo "::add-mask::$BETTER_AUTH_SECRET"
+            jq -n --arg a "$BETTER_AUTH_SECRET" --arg g "$GOOGLE_CLIENT_ID" --arg s "$GOOGLE_CLIENT_SECRET" \
+              '{BETTER_AUTH_SECRET: $a, GOOGLE_CLIENT_ID: $g, GOOGLE_CLIENT_SECRET: $s}' > "$FILE"
+          else
+            jq -n --arg g "$GOOGLE_CLIENT_ID" --arg s "$GOOGLE_CLIENT_SECRET" \
+              '{GOOGLE_CLIENT_ID: $g, GOOGLE_CLIENT_SECRET: $s}' > "$FILE"
+          fi
+          pnpm exec wrangler secret bulk "$FILE"
+          rm -f "$FILE"
+
+      - name: Summary
+        run: |
+          {
+            echo "## Deploy"
+            echo "- URL: https://ladder-dojo.mojya.workers.dev"
+            echo "- D1 database_id: \`${{ steps.cf.outputs.d1-id }}\`"
+            echo "- commit: \`${{ github.sha }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

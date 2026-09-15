@@ -175,7 +175,14 @@ SPEC.md §2.1 / §6 に基づき、技術上・仕様上の判断を日付付き
 - **マイグレーションの安全策**: 本番マイグレーションに人間の手動承認は置かない(§2.1 の自律サイクルを止めないため)。代わりに (1) 破壊的変更(列削除・型変更)は「追加 → コード切替 → 次のリリースで削除」の2段階に分ける、(2) `wrangler d1 migrations apply --local` を CI の API テストで毎回通す、(3) 失敗時は Time Travel で復元する、の3点で担保する
 - **理由**: §2.4「CIでテストが通らない状態で次に進まない」を**デプロイのゲート**として実装するため、デプロイは CI の後段に置く。Cloudflare の Git 連携(Workers Builds)はテスト失敗でもデプロイされてしまうため使わない
 - **プレビューデプロイ**: 行わない。Workers のプレビュー URL は本番と同じ D1 バインディングを共有するため、PR の検証はローカル E2E で行う(D-014)。必要になれば `ladder-dojo-preview` Worker + 別 D1 を追加する
-- **前提**: リポジトリは private のため Actions は月 2,000 分。E2E が重くなれば COST.md の縮退方針に従う
+- **前提**: ~~リポジトリは private のため Actions は月 2,000 分~~ → 2026-09-15 にリポジトリは public と確認。Actions の分数制限なし
+- **2026-09-15 追記(人間の指示: Secrets を 3 つに減らす)**:
+  - GitHub Secrets は **`CLOUDFLARE_API_TOKEN` / `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` の 3 つだけ**。以前の 5 つから `CLOUDFLARE_ACCOUNT_ID` と `BETTER_AUTH_SECRET` を外した
+  - **アカウント ID**: `.github/actions/cloudflare-setup`(composite action)が `wrangler whoami` の出力から 32 桁 16 進の ID を正規表現で拾い、`CLOUDFLARE_ACCOUNT_ID` 環境変数としてジョブ内にだけ流す(ログはマスク)。トークンが複数アカウントに紐づく場合は最初の 1 つを使う
+  - **D1 の作成と ID 反映**: 同 action が `wrangler d1 list --json` で `ladder-dojo` を探し、無ければ `wrangler d1 create ladder-dojo --location apac` で作る。得た ID で `apps/api/wrangler.jsonc` のトップレベル `d1_databases[0].database_id` を **CI の作業コピー上でだけ**書き換える(コミットしない)。リポジトリ上の値はプレースホルダのままでよく、ローカル(`wrangler dev` / vitest / E2E)はプレースホルダで動く。理由: CI からのコミットバックは push 権限とループ防止が必要で、実行時置換の方が単純。`env.e2e` 側の `database_id` はローカル専用なので触らない
+  - **`BETTER_AUTH_SECRET`**: `deploy.yml` が `wrangler deploy` の後に `wrangler secret list --format json` を見て、未登録なら `openssl rand -base64 32` で生成し `wrangler secret bulk` で登録する(初回のみ。以後は既存値を維持)。値は誰も保管しない。作り直す場合は Cloudflare ダッシュボードで削除して再デプロイ。初回デプロイでは Worker が数秒間シークレット無しで公開されるが、認証を lazy 初期化にして落ちないようにする
+  - **順序**: CI(workflow_call)→ build → cloudflare-setup → `d1 migrations apply --remote`(`migrations/*.sql` がある場合のみ)→ `wrangler deploy` → secrets 同期。`ci.yml` は main 以外の push と PR で直接動き、main では `deploy.yml` から呼ばれる(二重実行しない)
+  - **`backup.yml`** も同じ composite action でアカウント ID と D1 ID を解決してから `wrangler d1 export --remote` する。保持 28 日(週次 4 世代)
 
 ### D-013 Lint / Format: Biome(変更なし・補足)
 
@@ -284,3 +291,4 @@ SPEC.md §2.1 / §6 に基づき、技術上・仕様上の判断を日付付き
 | 2026-09-14 | D-017 | 新設: 権限判定を API 層で行う方針と必須テスト観点。SPEC.md §2.4 に API テストを追記 | 人間の指示 |
 | 2026-09-14 | D-018 | 新設: Drizzle + drizzle-kit + Wrangler のマイグレーション運用、フェーズ1 テーブル見立て | D-006 に伴う |
 | 2026-09-14 | S-002, S-003 | Supabase 前提の記述(MAU、500 MB)を D1 前提に修正。判断内容は変更なし | D-006 に伴う |
+| 2026-09-15 | D-012 | GitHub Secrets を 3 つに削減。アカウント ID は `wrangler whoami`、D1 は CI が自動作成し ID を実行時置換、`BETTER_AUTH_SECRET` は CI が初回生成。public リポジトリのため Actions 分数制限なし | 人間の指示(外部サービス準備完了) |

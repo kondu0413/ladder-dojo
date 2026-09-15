@@ -1,0 +1,51 @@
+// Cloudflare Worker `ladder-dojo` の設定(DECISIONS.md D-009 / D-014 / D-018)
+// SPA(../web/dist)と Hono API(/api/*)を 1 つの Worker で配信する。
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ladder-dojo",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "observability": { "enabled": true },
+  "assets": {
+    "directory": "../web/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  // database_id は deploy.yml / backup.yml が `wrangler d1 list` の結果で毎回上書きする(D-012)。
+  // ローカル(wrangler dev / vitest / E2E)では任意の文字列でよい。
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ladder-dojo",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "BETTER_AUTH_URL": "https://ladder-dojo.mojya.workers.dev",
+    "APP_ENV": "production"
+  },
+  // シークレット(CI が wrangler secret bulk で登録。ここには書かない):
+  //   BETTER_AUTH_SECRET / GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
+  "env": {
+    // E2E 専用環境(D-014)。ローカル D1 のみ。E2E_AUTH_BYPASS は本番には存在しない。
+    "e2e": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "ladder-dojo",
+          "database_id": "00000000-0000-0000-0000-00000000e2e0",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "vars": {
+        "BETTER_AUTH_URL": "http://localhost:8787",
+        "APP_ENV": "e2e",
+        "E2E_AUTH_BYPASS": "1"
+      }
+    }
+  }
+}

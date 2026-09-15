@@ -1,0 +1,8 @@
+packages:
+  - packages/*
+  - apps/*
+
+# pnpm 10 は依存の postinstall を既定で無効化する。バイナリ取得が必要なものだけ許可する
+onlyBuiltDependencies:
+  - esbuild
+  - workerd
