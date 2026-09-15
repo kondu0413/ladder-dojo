@@ -25,10 +25,10 @@ SPA の静的ファイルと Hono API を 1 つの Worker `ladder-dojo` で配�
 | 短時間のリクエスト上限 | 1,000 リクエスト / 分 | 授業で 40 人が同時にログインしても ≈ 数百 / 分 | |
 | CPU 時間 | **10 ms / リクエスト** | 通常の API は 1〜3 ms。フェーズ2 の投稿公開時のサーバー側再検証(core のシミュレータ実行)が最も重い | |
 | メモリ | 128 MB / Worker | 十分 | |
-| Worker のサイズ(圧縮後) | 3 MB | Hono + Better Auth + Drizzle + core で 数百 KB 見込み。Prisma 等の重い ORM を避ける理由(D-018) | |
+| Worker のサイズ(圧縮後) | 3 MB | **実測 gzip 476 KiB**(非圧縮 2.8 MB)。Hono + Better Auth + Drizzle + core + zod。上限に対して 6 倍の余裕がある。Prisma 等の重い ORM を避ける理由(D-018) | 2026-09-15 |
 | サブリクエスト数 | 50 / リクエスト | Google の OAuth トークン交換で 2〜3。D1 クエリもここに数える(D1 §1.2 参照) | |
 | Worker 数 | 100 / アカウント | 1(必要になれば preview 用にもう 1 つ) | |
-| 環境変数 / シークレット | 64 個 / Worker、1 つ 5 KB | 5 個程度 | |
+| 環境変数 / シークレット | 64 個 / Worker、1 つ 5 KB | 3 個(BETTER_AUTH_SECRET / GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET) | |
 | Cron Triggers | 利用可(アカウントあたり 5 個、要確認) | フェーズ3 のランキング集計で 1〜2 個 | |
 | `workers.dev` サブドメイン | 無料、1 アカウント 1 つ | `https://ladder-dojo.<サブドメイン>.workers.dev` を本番 URL にする(独自ドメインは 0円制約外) | |
 | 静的アセット | 20,000 ファイル / Worker、1 ファイル 25 MiB | 数百ファイル、最大でも JS バンドル 1〜2 MB | |

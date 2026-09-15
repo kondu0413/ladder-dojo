@@ -2,10 +2,13 @@
 
 最終更新: 2026-09-15
 
-## 現在のフェーズ: フェーズ1(一人で学べる)— 着手順 3〜4「回路スキーマ + シミュレータコア」まで完了
+## 現在のフェーズ: フェーズ1(一人で学べる)— 着手順 5「apps/api の骨組み」まで完了
 
 ### 2026-09-15 の作業(着手順 1〜2)
 外部サービスの準備完了を受けて実装を開始した。人間の指示に合わせて GitHub Secrets を 3 つ(`CLOUDFLARE_API_TOKEN` / `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`)に減らし、アカウント ID・D1 作成・`BETTER_AUTH_SECRET` 生成を CI に寄せた(DECISIONS.md D-012 追記、SETUP.md 書き直し)。
+
+### 2026-09-15 の作業(着手順 5)
+Better Auth(Google ログイン)、Drizzle スキーマと最初のマイグレーション、`requireUser`、フェーズ1 の API(進捗・サンドボックス・提出履歴)、権限テストを実装した。
 
 ### 2026-09-15 の作業(着手順 3〜4)
 回路 JSON スキーマ(zod)とシミュレータコア、振る舞い判定を `packages/core` に実装した。UI より先にロジックを固める方針(人間の指示)に従い、`apps/web` は空のままにしてある。
@@ -34,7 +37,35 @@
   - 指標(`metrics.ts`): ラング数・接点数・コイル数・セル数。模範解答との比較表示用で正誤には使わない
   - 回路記述用のビルダー(`builder.ts`)。テストと今後の公式問題を簡潔に書く
 
-### 動作確認(この環境で実行、2026-09-15 着手順 3〜4 時点)
+### 完了(着手順 5)
+- [x] Better Auth を Worker 上に設置(`apps/api/src/auth.ts`)。Google ログインのみ。セッションは D1、Cookie ベース。`session.cookieCache`(5 分)と `updateAge`(1 日)で D1 の読み書きを節約(D-018)
+- [x] Drizzle スキーマ(`apps/api/src/db/schema.ts`)と最初のマイグレーション `migrations/0000_init.sql`
+  - Better Auth: `user` / `session` / `account` / `verification`
+  - アプリ: `progress` / `submissions` / `sandbox_circuits` / `activity_days`。すべて `user_id` 先頭の複合インデックス
+- [x] `requireUser` / `optionalUser` ミドルウェア(D-017 方針 2)
+- [x] フェーズ1 の API
+  - `GET /api/me`(未ログインでも 200 で `user: null`)
+  - `GET /api/progress` / `GET /api/progress/:problemId` / `POST /api/progress/:problemId/attempts`(試行・失敗の加算、クリア日時、活動日の記録)
+  - `GET|POST /api/sandbox` / `GET|PUT|DELETE /api/sandbox/:id`(テストケース同梱、1 ユーザー 50 件上限)
+  - `GET|POST /api/submissions`(同一回路は指紋で重複排除、不正解は直近 20 件に切り詰め)
+- [x] E2E 専用ログイン(`env.e2e` の `E2E_AUTH_BYPASS=1` でのみメール/パスワードを有効化、D-014)
+- [x] 権限テスト(SPEC.md §2.4 必須 / D-017)
+
+### 動作確認(この環境で実行、2026-09-15 着手順 5 時点)
+- `pnpm lint` / `pnpm typecheck`: 通過
+- API テスト **44 件** 通過(workerd + ローカル D1)。内訳と確認した観点:
+  - 未ログインで保護ルート 10 本すべてが 401。壊れた Cookie でも 401(500 にしない)
+  - 他人のサンドボックス回路の取得・更新・削除がすべて 404 で、DB の行が変わらない
+  - 一覧に他人のデータが出ない
+  - ボディに他人の `user_id` を混ぜても、セッションのユーザーにしか紐づかない(進捗・提出履歴とも)
+  - **本番設定ではメール/パスワードのサインアップ・サインインが無効で、ユーザー行も作られない**(D-014)
+  - 壊れた回路 JSON・壊れたテストケース・不正な problemId を保存しない
+  - 進捗の加算、一度クリアした問題の `cleared_at` が失敗で消えないこと、活動日が 1 日 1 行
+  - 提出履歴の重複排除と、不正解 20 件への切り詰め(正解は残る)
+- E2E **10 件** 通過。実 Worker + ローカル D1 で「サインアップ → セッション保持 → 回路を保存 → 読み戻して一致」まで確認
+- `wrangler deploy --dry-run`: Worker は gzip 476 KiB(上限 3 MB に対して 6 倍の余裕)
+
+### 動作確認(2026-09-15 着手順 3〜4 時点)
 - `pnpm lint` / `pnpm typecheck`: 通過
 - `pnpm test`: core 104 件 + API 4 件 通過。core のカバレッジは 文 98.4% / 分岐 91.7% / 関数 100% / 行 100%(D-011 の 90% 目標を満たす。閾値を vitest 設定に入れて CI で強制)
 - `pnpm build` → `pnpm e2e`: 6 件通過
@@ -59,6 +90,13 @@
   - シークレット `BETTER_AUTH_SECRET`(CI が生成)/ `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` を登録(3 件 created)
   - この開発環境からは workers.dev への HTTP アクセスがプロキシで拒否されるため、URL の目視確認は人間に依頼(下記)
 
+### 仮置きした点(着手順 5)
+- サンドボックスの保存上限は 1 ユーザー 50 件(COST.md §1.2 の縮退方針の先取り)
+- 回路 JSON + テストケースの上限は 1 件 256 KB
+- `BETTER_AUTH_SECRET` が未設定でも Worker は落とさず、認証を使うリクエストだけが失敗する(初回デプロイ直後の数秒間の保険)
+- `GET /api/health` に `e2eAuthBypass` を出し、本番で E2E 専用ログインが無効であることを外から確認できるようにした
+- 提出履歴の一覧は 100 件まで、進捗の一覧は 500 件まで
+
 ### 仮置きした点(着手順 3〜4)
 - スキャン内の評価順は実機と同じ「コイルは即時反映」(DECISIONS.md S-004)。SPEC.md §3.1 の「出力は次スキャンに反映」は物理出力の書き出しタイミングと解釈した
 - 判定は仮想時間(1 スキャン = 10 ms)。UI のシミュレータは実時間で動かす(S-005)
@@ -78,10 +116,11 @@
 - https://ladder-dojo.mojya.workers.dev を開き「ラダー図トレーニング」の空ページが出ること、https://ladder-dojo.mojya.workers.dev/api/health が `{"ok":true,"env":"production","core":{"schemaVersion":1}}` を返すことを確認してほしい(Claude Code の環境からは workers.dev に到達できない)
 
 ### 次にやること(Claude Code)
-1. 着手順 5: `apps/api` の骨組み(Better Auth の Google 設定、Drizzle スキーマ、最初のマイグレーション、`requireUser`、権限テスト、`env.e2e` の E2E 専用ログイン)
-2. ラダー図の SVG 描画と操作 UI(スマホ対応)
-3. 公式問題 30 問以上(自己保持 / タイマ / カウンタ / インターロック / 組み合わせ × 読む / 直す / 書く)
-4. 以降 §4 フェーズ1 の DoD を順に潰す
+1. ラダー図の SVG 描画と操作 UI(スマホ対応。閲覧・入力操作・編集)
+2. 学習モードの画面(読む / 直す / 書く)と判定結果の表示(不正解時の差分、模範解答と指標の比較)
+3. 公式問題 30 問以上(自己保持 / タイマ / カウンタ / インターロック / 組み合わせ × 各モード 2 問以上)
+4. サンドボックス画面(保存・テストケース編集)、Google ログイン UI、進捗同期
+5. フェーズ1 DoD を満たしたらフェーズ2 へ
 
 ## フェーズ1 DoD(SPEC.md §4)
 - [x] シミュレータが §3.1 の全命令を正しく評価し、ユニットテストで網羅されている(core 104 件、カバレッジ 98%)
@@ -89,8 +128,8 @@
 - [ ] 公式問題 30 問以上
 - [~] 振る舞い判定(core 実装済み・テスト済み)。不正解時の差分表示は UI 未実装
 - [~] 指標の算出(core 実装済み)。比較表示は UI 未実装
-- [ ] サンドボックスで回路+テストケースを保存できる
-- [ ] アカウント登録・ログイン・進捗同期(Google ログインのみ)
+- [~] サンドボックスの保存 API は実装・テスト済み。UI 未実装
+- [~] アカウント登録・ログイン・進捗同期: API と認証は実装・テスト済み。UI 未実装
 - [x] コスト0円でデプロイされ、URL で触れる(骨組みを 2026-09-15 にデプロイ。フェーズ1 完了時に再確認)
 - [ ] README・PROGRESS・DECISIONS・COST が最新
 

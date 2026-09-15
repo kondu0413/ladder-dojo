@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ladder, nc, no, out, timer, wire } from "./builder.js";
+import { circuitFingerprint } from "./fingerprint.js";
 import { coreVersion } from "./index.js";
 import { circuitMetrics } from "./metrics.js";
 import { cellKey, cellMap, circuitSchema, emptyCircuit, SCHEMA_VERSION } from "./schema/circuit.js";
@@ -133,5 +134,54 @@ describe("回路スキーマの追加検証", () => {
     const r = circuitSchema.safeParse(bad);
     expect(r.success).toBe(false);
     expect(JSON.stringify(r.error?.issues)).toContain("最右列");
+  });
+});
+
+describe("circuitFingerprint(比較専用の指紋)", () => {
+  it("セルの並び順が違っても同じ文字列になる", () => {
+    const a = circuitSchema.parse({
+      schemaVersion: SCHEMA_VERSION,
+      cols: 3,
+      rows: 1,
+      cells: [
+        { row: 0, col: 2, element: out("Y0") },
+        { row: 0, col: 0, element: no("X0") },
+        { row: 0, col: 1, element: wire },
+      ],
+    });
+    const b = ladder(3).row(no("X0"), out("Y0")).build();
+    expect(circuitFingerprint(a)).toBe(circuitFingerprint(b));
+  });
+
+  it("要素も縦線も無いセルは無視される", () => {
+    const withEmpty = circuitSchema.parse({
+      schemaVersion: SCHEMA_VERSION,
+      cols: 3,
+      rows: 1,
+      cells: [
+        { row: 0, col: 0, element: no("X0") },
+        { row: 0, col: 1, element: wire },
+        { row: 0, col: 2, element: out("Y0") },
+      ],
+    });
+    const same = circuitSchema.parse({
+      ...withEmpty,
+      cells: [...withEmpty.cells, { row: 0, col: 1, vline: false }].filter(
+        (c, i, arr) => arr.findIndex((x) => x.row === c.row && x.col === c.col) === i,
+      ),
+    });
+    expect(circuitFingerprint(same)).toBe(circuitFingerprint(withEmpty));
+  });
+
+  it("タイマの設定値が違えば別の文字列になる", () => {
+    const a = ladder(3).row(no("X0"), timer("T0", 1000)).build();
+    const b = ladder(3).row(no("X0"), timer("T0", 2000)).build();
+    expect(circuitFingerprint(a)).not.toBe(circuitFingerprint(b));
+  });
+
+  it("接点の種類が違えば別の文字列になる", () => {
+    const a = ladder(3).row(no("X0"), out("Y0")).build();
+    const b = ladder(3).row(nc("X0"), out("Y0")).build();
+    expect(circuitFingerprint(a)).not.toBe(circuitFingerprint(b));
   });
 });
