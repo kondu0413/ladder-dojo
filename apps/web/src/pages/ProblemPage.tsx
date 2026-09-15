@@ -359,7 +359,7 @@ function BuildMode({ problem }: { problem: Problem }) {
         </details>
       )}
 
-      {result && <JudgeResultView result={result} problem={problem} />}
+      {result && <JudgeResultView result={result} problem={problem} circuit={circuit} />}
       {result && (
         <DiagnosisPanel
           circuit={circuit}

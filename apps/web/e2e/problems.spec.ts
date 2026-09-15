@@ -190,3 +190,27 @@ test.describe("つまずき診断", () => {
     await expect(page.getByTestId("diagnosis")).toHaveCount(0);
   });
 });
+
+test.describe("タイムチャート", () => {
+  test("不正解のとき、波形と操作の並びが出る", async ({ page }) => {
+    await page.goto("/problems/selfhold-fix-1");
+    await page.getByTestId("check-answer").click();
+    await expect(page.getByTestId("judge-result")).toHaveAttribute("data-passed", "false");
+
+    const chart = page.getByTestId("time-chart");
+    await expect(chart).toBeVisible();
+    // 入力と出力の両方の波形が出る
+    await expect(chart.getByTestId("chart-row-X0")).toBeVisible();
+    await expect(chart.getByTestId("chart-row-Y0")).toBeVisible();
+    // 食い違ったデバイスの行が目立つ
+    await expect(chart.getByTestId("chart-row-Y0")).toHaveAttribute("data-mismatched", "true");
+    // 何をした結果なのかが読める
+    await expect(chart).toContainText("押して離す");
+  });
+
+  test("正解したら波形は出ない", async ({ page }) => {
+    await page.goto("/problems/selfhold-read-1");
+    // 読む問題には答え合わせが無いので、波形も出ない
+    await expect(page.getByTestId("time-chart")).toHaveCount(0);
+  });
+});

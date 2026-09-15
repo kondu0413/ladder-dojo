@@ -1,16 +1,21 @@
-import type { CaseResult, JudgeResult, Problem } from "@ladder-dojo/core";
+import type { CaseResult, Circuit, JudgeResult, Problem } from "@ladder-dojo/core";
+import { runTestCase } from "@ladder-dojo/core";
+import { useMemo } from "react";
 import { describeStep, diffOutputs, labelMap, onOff } from "../lib/describe.js";
+import { TimeChart } from "./TimeChart.js";
 
 export type JudgeResultViewProps = {
   result: JudgeResult;
   problem: Problem;
+  /** 学習者の回路。渡すと、通らなかったテストのタイムチャートを出す */
+  circuit?: Circuit | undefined;
 };
 
 /**
  * 判定結果(SPEC.md §3.3)。
  * 不正解のときは「どのテストケースの、どの操作のあとで、何がどう違ったか」を具体的に出す。
  */
-export function JudgeResultView({ result, problem }: JudgeResultViewProps) {
+export function JudgeResultView({ result, problem, circuit }: JudgeResultViewProps) {
   const failed = result.cases.find((c) => !c.passed);
   const passedCount = result.cases.filter((c) => c.passed).length;
 
@@ -41,14 +46,32 @@ export function JudgeResultView({ result, problem }: JudgeResultViewProps) {
           {result.cases.length} 件中 {passedCount} 件が成功しました。
         </p>
       </div>
-      {failed && <FailureDetail result={failed} problem={problem} />}
+      {failed && <FailureDetail result={failed} problem={problem} circuit={circuit} />}
     </div>
   );
 }
 
-function FailureDetail({ result, problem }: { result: CaseResult; problem: Problem }) {
+function FailureDetail({
+  result,
+  problem,
+  circuit,
+}: {
+  result: CaseResult;
+  problem: Problem;
+  circuit: Circuit | undefined;
+}) {
   const labels = labelMap(problem.deviceLabels);
   const failure = result.failure;
+
+  // 通らなかったケースだけ、波形を記録しながらもう一度流す。
+  // 判定そのもので毎回記録すると、つまずき診断の総当たりが重くなるので分けている
+  const timeline = useMemo(() => {
+    if (!circuit) return undefined;
+    const testCase = problem.testCases.find((t) => t.id === result.caseId);
+    if (!testCase) return undefined;
+    return runTestCase(circuit, testCase, { recordTimeline: true }).timeline;
+  }, [circuit, problem.testCases, result.caseId]);
+
   if (!failure) return null;
 
   if (failure.kind === "unstable") {
@@ -122,6 +145,17 @@ function FailureDetail({ result, problem }: { result: CaseResult; problem: Probl
           </tbody>
         </table>
       </div>
+
+      {timeline && (
+        <div>
+          <p className="text-xs font-semibold text-slate-500">時間の流れ</p>
+          <TimeChart
+            timeline={timeline}
+            deviceLabels={labels}
+            mismatched={diffs.map((d) => d.device)}
+          />
+        </div>
+      )}
 
       {failure.note && <p className="text-sm text-slate-600">ヒント: {failure.note}</p>}
     </div>

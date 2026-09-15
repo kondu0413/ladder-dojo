@@ -223,7 +223,11 @@ export function CommunityProblemPage() {
       </button>
 
       {result && (
-        <JudgeResultView result={result} problem={asProblem(problem, circuit, testCases)} />
+        <JudgeResultView
+          result={result}
+          problem={asProblem(problem, circuit, testCases)}
+          circuit={circuit}
+        />
       )}
       {result && (
         <DiagnosisPanel
