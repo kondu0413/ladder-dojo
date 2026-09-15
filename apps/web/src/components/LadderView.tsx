@@ -30,6 +30,8 @@ export type LadderViewProps = {
   onTapCell?: ((row: number, col: number) => void) | undefined;
   /** 編集モードで選択中のセル */
   selected?: { row: number; col: number } | undefined;
+  /** 見てほしいセル(つまずき診断)。選択とは別の色で囲む */
+  highlight?: ReadonlyArray<{ row: number; col: number }> | undefined;
 };
 
 /** 電流が流れている色 / 通電しているだけの色 / 無電圧の色 */
@@ -54,8 +56,13 @@ export function LadderView({
   onTapInput,
   onTapCell,
   selected,
+  highlight,
 }: LadderViewProps) {
   const cells = useMemo(() => cellMap(circuit), [circuit]);
+  const highlighted = useMemo(
+    () => new Set((highlight ?? []).map((c) => cellKey(c.row, c.col))),
+    [highlight],
+  );
   const width = svgWidth(circuit);
   const height = svgHeight(circuit);
   const leftX = RAIL_PAD;
@@ -88,6 +95,7 @@ export function LadderView({
             onTapInput={onTapInput}
             onTapCell={onTapCell}
             isSelected={selected?.row === row && selected?.col === col}
+            isHighlighted={highlighted.has(cellKey(row, col))}
           />
         )),
       )}
@@ -106,6 +114,7 @@ type CellViewProps = {
   onTapInput: ((device: DeviceId) => void) | undefined;
   onTapCell: ((row: number, col: number) => void) | undefined;
   isSelected: boolean;
+  isHighlighted: boolean;
 };
 
 function leadColor(on: boolean): string {
@@ -123,6 +132,7 @@ function CellView({
   onTapInput,
   onTapCell,
   isSelected,
+  isHighlighted,
 }: CellViewProps) {
   const { x, y } = cellOrigin(row, col);
   const y0 = wireY(row);
@@ -137,7 +147,24 @@ function CellView({
   };
 
   return (
-    <g data-testid={`cell-${row}-${col}`} data-flowing={flowing}>
+    <g
+      data-testid={`cell-${row}-${col}`}
+      data-flowing={flowing}
+      data-highlighted={isHighlighted || undefined}
+    >
+      {isHighlighted && (
+        <rect
+          x={x + 1}
+          y={y + 1}
+          width={CELL_W - 2}
+          height={CELL_H - 2}
+          rx={6}
+          fill="#fef3c7"
+          stroke="#d97706"
+          strokeWidth={2}
+          strokeDasharray="4 3"
+        />
+      )}
       {isSelected && (
         <rect
           x={x + 2}

@@ -9,6 +9,7 @@ import {
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
 import { DevicePanel } from "../components/DevicePanel.js";
+import { DiagnosisPanel } from "../components/DiagnosisPanel.js";
 import { JudgeResultView } from "../components/JudgeResultView.js";
 import { LadderEditor } from "../components/LadderEditor.js";
 import { LadderView } from "../components/LadderView.js";
@@ -275,12 +276,15 @@ function BuildMode({ problem }: { problem: Problem }) {
   const [circuit, setCircuit] = useState<Circuit>(initial);
   const [tab, setTab] = useState<"edit" | "run">("edit");
   const [result, setResult] = useState<JudgeResult | undefined>(undefined);
+  // この画面で「答え合わせ」に失敗した回数。つまずき診断を出すかどうかに使う(S-009)
+  const [failures, setFailures] = useState(0);
   const labels = labelMap(problem.deviceLabels);
   const hint = problem.fix?.hint ?? problem.write?.hint;
 
   const check = () => {
     const judged = judge(circuit, problem.testCases);
     setResult(judged);
+    if (!judged.passed) setFailures((n) => n + 1);
     record(problem.id, judged.passed);
     // 提出した回路そのものを履歴に残す(SPEC.md §3.5)。管理者ビューのつまずき分析(§3.8)で使う。
     // ログイン中だけ。送信に失敗しても答え合わせの流れは止めない(進捗の同期エラーは別途表示される)
@@ -340,6 +344,7 @@ function BuildMode({ problem }: { problem: Problem }) {
           onClick={() => {
             setCircuit(initial);
             setResult(undefined);
+            setFailures(0);
           }}
           className="min-h-11 rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700"
         >
@@ -355,6 +360,15 @@ function BuildMode({ problem }: { problem: Problem }) {
       )}
 
       {result && <JudgeResultView result={result} problem={problem} />}
+      {result && (
+        <DiagnosisPanel
+          circuit={circuit}
+          testCases={problem.testCases}
+          result={result}
+          failures={failures}
+          deviceLabels={labels}
+        />
+      )}
       {result?.passed && <SolutionCompare problem={problem} yours={circuit} />}
     </div>
   );

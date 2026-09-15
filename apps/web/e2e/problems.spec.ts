@@ -150,3 +150,43 @@ test.describe("書く", () => {
     await expect(page.getByTestId("cell-text-0-0")).toHaveCount(0);
   });
 });
+
+test.describe("つまずき診断", () => {
+  test("1 回目の失敗では出ないが、2 回目から出る", async ({ page }) => {
+    // selfhold-fix-1 は「ボタンを離すと消えてしまう」= 自己保持の枝が無い問題
+    await page.goto("/problems/selfhold-fix-1");
+
+    await page.getByTestId("check-answer").click();
+    await expect(page.getByTestId("judge-result")).toHaveAttribute("data-passed", "false");
+    // 1 回目は自分で考えてもらう
+    await expect(page.getByTestId("diagnosis")).toHaveCount(0);
+
+    await page.getByTestId("check-answer").click();
+    await expect(page.getByTestId("diagnosis")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("diagnosis")).toContainText("ここを見てみましょう");
+    // 直し方までは言わない
+    await expect(page.getByTestId("diagnosis")).toContainText("自分で考えてみてください");
+  });
+
+  test("診断が指したセルがラダー図で囲まれる", async ({ page }) => {
+    await page.goto("/problems/timer-fix-1");
+    await page.getByTestId("check-answer").click();
+    await page.getByTestId("check-answer").click();
+    const panel = page.getByTestId("diagnosis");
+    await expect(panel).toBeVisible({ timeout: 15_000 });
+    // timer-fix-1 は設定値の間違い。タイマのセルが囲まれる
+    await expect(panel.getByTestId("diagnosis-timer-preset")).toBeVisible();
+    await expect(panel.locator("[data-highlighted]")).toHaveCount(1);
+  });
+
+  test("正解したら診断は出ない", async ({ page }) => {
+    await page.goto("/problems/selfhold-fix-1");
+    await page.getByTestId("check-answer").click();
+    await page.getByTestId("check-answer").click();
+    await expect(page.getByTestId("diagnosis")).toBeVisible({ timeout: 15_000 });
+
+    // 「最初から」を押すと失敗回数もリセットされ、診断が消える
+    await page.getByTestId("reset-circuit").click();
+    await expect(page.getByTestId("diagnosis")).toHaveCount(0);
+  });
+});

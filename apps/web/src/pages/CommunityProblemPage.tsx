@@ -12,6 +12,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { DevicePanel } from "../components/DevicePanel.js";
+import { DiagnosisPanel } from "../components/DiagnosisPanel.js";
 import { JudgeResultView } from "../components/JudgeResultView.js";
 import { LadderEditor } from "../components/LadderEditor.js";
 import { LadderView } from "../components/LadderView.js";
@@ -31,6 +32,8 @@ export function CommunityProblemPage() {
   const [circuit, setCircuit] = useState<Circuit>(() => emptyCircuit(6, 4));
   const [tab, setTab] = useState<"edit" | "run">("edit");
   const [result, setResult] = useState<JudgeResult | undefined>(undefined);
+  // この画面で「答え合わせ」に失敗した回数。つまずき診断を出すかどうかに使う(S-009)
+  const [failures, setFailures] = useState(0);
   const [error, setError] = useState<string | undefined>(undefined);
   const [notice, setNotice] = useState<string | undefined>(undefined);
 
@@ -81,6 +84,7 @@ export function CommunityProblemPage() {
     }
     const judged = judge(circuit, testCases);
     setResult(judged);
+    if (!judged.passed) setFailures((n) => n + 1);
     if (user) {
       api
         .recordPostedAttempt(problem.id, judged.passed)
@@ -220,6 +224,14 @@ export function CommunityProblemPage() {
 
       {result && (
         <JudgeResultView result={result} problem={asProblem(problem, circuit, testCases)} />
+      )}
+      {result && (
+        <DiagnosisPanel
+          circuit={circuit}
+          testCases={testCases}
+          result={result}
+          failures={failures}
+        />
       )}
 
       {solution?.success && (
