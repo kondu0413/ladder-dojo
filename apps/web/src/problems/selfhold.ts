@@ -1,4 +1,4 @@
-import { ladder, nc, no, out, type Problem, SCHEMA_VERSION } from "@ladder-dojo/core";
+import { ladder, nc, no, out, type Problem, SCHEMA_VERSION, wire } from "@ladder-dojo/core";
 
 const LABELS = { X0: "起動", X1: "停止", X2: "非常停止", Y0: "ランプ" } as const;
 
@@ -11,6 +11,35 @@ const withEmergency = ladder(6)
   .row(no("Y0"))
   .v(0, 0)
   .build();
+
+/** 自己保持の前段: 接点 1 つとコイル 1 つだけ。押している間しか点かない */
+const direct = ladder(3).row(no("X0"), wire, out("Y0")).build();
+
+const directCases = [
+  {
+    id: "initial",
+    title: "何も押していなければ消えている",
+    steps: [{ type: "expect" as const, outputs: { Y0: false } }],
+  },
+  {
+    id: "while-pressed",
+    title: "押している間は点く",
+    steps: [
+      { type: "set" as const, inputs: { X0: true } },
+      { type: "expect" as const, outputs: { Y0: true } },
+    ],
+  },
+  {
+    id: "released",
+    title: "離すと消える",
+    steps: [
+      { type: "set" as const, inputs: { X0: true } },
+      { type: "expect" as const, outputs: { Y0: true } },
+      { type: "set" as const, inputs: { X0: false } },
+      { type: "expect" as const, outputs: { Y0: false }, note: "保持する仕組みが無い" },
+    ],
+  },
+];
 
 const basicCases = [
   {
@@ -108,6 +137,44 @@ const emergencyCases = [
 ];
 
 export const selfholdProblems: Problem[] = [
+  {
+    schemaVersion: SCHEMA_VERSION,
+    id: "selfhold-read-0",
+    title: "接点とコイルだけの回路",
+    mode: "read",
+    stage: "selfhold",
+    difficulty: 1,
+    tags: ["接点とコイル"],
+    spec: "いちばん簡単な回路です。押しボタン X0 の a 接点が 1 つと、ランプ Y0 のコイルが 1 つだけつながっています。",
+    deviceLabels: LABELS,
+    solution: direct,
+    testCases: directCases,
+    read: {
+      questions: [
+        {
+          id: "q1",
+          prompt: "押しボタン X0 を押している間、ランプ Y0 はどうなりますか?",
+          scenario: [{ type: "set", inputs: { X0: true } }],
+          choices: ["点灯する", "消えたまま", "点いたり消えたりする"],
+          answerIndex: 0,
+          explanation:
+            "a 接点は、そのデバイスが ON のときだけ電気を通します。X0 を押している間は左の母線から右の母線まで道がつながるので、Y0 のコイルに電気が流れて点灯します。",
+        },
+        {
+          id: "q2",
+          prompt: "そのあと X0 を離すと、Y0 はどうなりますか?",
+          scenario: [
+            { type: "set", inputs: { X0: true } },
+            { type: "set", inputs: { X0: false } },
+          ],
+          choices: ["点灯したままになる", "消える", "しばらくしてから消える"],
+          answerIndex: 1,
+          explanation:
+            "離すと a 接点が開いて道が切れるので、すぐ消えます。コイルは「いま電気が流れているか」をそのまま映すだけで、覚えておく力はありません。押したあとも点いたままにしたいなら、次の問題で出てくる自己保持が要ります。",
+        },
+      ],
+    },
+  },
   {
     schemaVersion: SCHEMA_VERSION,
     id: "selfhold-read-1",
