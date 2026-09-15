@@ -110,12 +110,50 @@ export const submissions = sqliteTable(
     /** 同一回路の重複保存を避けるための正規化 JSON のハッシュ(S-003) */
     circuitHash: text("circuit_hash").notNull(),
     passed: integer("passed", { mode: "boolean" }).notNull(),
+    /**
+     * つまずき診断の種類(core の DIAGNOSIS_IDS)。不正解のときだけ入る。
+     * 判定も診断もクライアント側で動く(SPEC.md §6)ので、値はクライアントが送る。
+     * サーバーは既知の ID かどうかだけ検証する(S-011)
+     */
+    diagnosisId: text("diagnosis_id"),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   },
   (t) => [
     index("submissions_user_problem_idx").on(t.userId, t.problemId, t.createdAt),
     index("submissions_user_problem_hash_idx").on(t.userId, t.problemId, t.circuitHash),
   ],
+);
+
+/**
+ * 「みんながつまずくところ」の集計(SPEC.md §3.5 の「つまずき分析」)。
+ *
+ * 毎回 submissions を数えると読み取り行数を使いすぎる(COST.md §1.2)ので、
+ * 提出のたびに数えた結果をここに持つ。数えるのは**人数**で、
+ * 同じ人が同じ間違いを何度しても 1 人と数える(problem_mistake_users で重複を弾く)。
+ */
+export const problemMistakes = sqliteTable(
+  "problem_mistakes",
+  {
+    problemId: text("problem_id").notNull(),
+    diagnosisId: text("diagnosis_id").notNull(),
+    /** この間違いをした人数 */
+    users: integer("users").notNull().default(0),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.problemId, t.diagnosisId] })],
+);
+
+/** 誰がどの間違いをしたか。人数を二重に数えないためだけの表(内容は表に出さない) */
+export const problemMistakeUsers = sqliteTable(
+  "problem_mistake_users",
+  {
+    problemId: text("problem_id").notNull(),
+    diagnosisId: text("diagnosis_id").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.problemId, t.diagnosisId, t.userId] })],
 );
 
 /** サンドボックスの保存回路(SPEC.md §3.4) */
@@ -389,6 +427,8 @@ export const schema = {
   account,
   verification,
   progress,
+  problemMistakes,
+  problemMistakeUsers,
   submissions,
   sandboxCircuits,
   activityDays,

@@ -2,6 +2,7 @@ import type {
   ApiErrorDto,
   AssignmentListDto,
   MeDto,
+  MistakeListDto,
   OrgDetailDto,
   OrgInviteDto,
   OrgListDto,
@@ -109,8 +110,11 @@ export const api = {
 
   deleteSandbox: (id: string) => request<{ deleted: true }>(`/sandbox/${id}`, { method: "DELETE" }),
 
-  submit: (input: { problemId: string; circuit: Circuit; passed: boolean }) =>
+  submit: (input: { problemId: string; circuit: Circuit; passed: boolean; diagnosisId?: string }) =>
     request<SubmissionOneDto>("/submissions", { method: "POST", body: JSON.stringify(input) }),
+
+  /** 「みんながつまずくところ」。ログイン不要 */
+  mistakes: (problemId: string) => request<MistakeListDto>(`/mistakes/${problemId}`),
 
   // --- 投稿問題(フェーズ2、SPEC.md §3.6)---
 

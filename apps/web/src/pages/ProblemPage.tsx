@@ -6,8 +6,9 @@ import {
   type Problem,
   type ReadQuestion,
 } from "@ladder-dojo/core";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
+import { CommonMistakes } from "../components/CommonMistakes.js";
 import { DevicePanel } from "../components/DevicePanel.js";
 import { DiagnosisPanel } from "../components/DiagnosisPanel.js";
 import { JudgeResultView } from "../components/JudgeResultView.js";
@@ -15,6 +16,7 @@ import { LadderEditor } from "../components/LadderEditor.js";
 import { LadderView } from "../components/LadderView.js";
 import { SimulatorControls } from "../components/SimulatorControls.js";
 import { SolutionCompare } from "../components/SolutionCompare.js";
+import { useDiagnosis } from "../hooks/useDiagnosis.js";
 import { useSimulator } from "../hooks/useSimulator.js";
 import { labelMap } from "../lib/describe.js";
 import { useProgress } from "../lib/progress-context.jsx";
@@ -274,20 +276,46 @@ function BuildMode({ problem }: { problem: Problem }) {
   );
   const [circuit, setCircuit] = useState<Circuit>(initial);
   const [tab, setTab] = useState<"edit" | "run">("edit");
-  const [result, setResult] = useState<JudgeResult | undefined>(undefined);
+  /**
+   * 答え合わせしたときの回路と結果を 1 組で持つ。
+   * 回路だけ別に持つと、結果を出したあとに編集されたとき、判定は古いのに
+   * タイムチャートや診断だけ新しい回路のものになってしまう
+   */
+  const [checked, setChecked] = useState<{ circuit: Circuit; result: JudgeResult } | undefined>(
+    undefined,
+  );
   // この画面で「答え合わせ」に失敗した回数。つまずき診断を出すかどうかに使う(S-009)
   const [failures, setFailures] = useState(0);
   const labels = labelMap(problem.deviceLabels);
   const hint = problem.fix?.hint ?? problem.write?.hint;
+  const result = checked?.result;
+
+  const diagnosis = useDiagnosis(checked?.circuit, problem.testCases, result);
 
   const check = () => {
     const judged = judge(circuit, problem.testCases);
-    setResult(judged);
+    setChecked({ circuit, result: judged });
     if (!judged.passed) setFailures((n) => n + 1);
     record(problem.id, judged.passed);
-    // 提出した回路そのものを履歴に残す(SPEC.md §3.5)。管理者ビューのつまずき分析(§3.8)で使う
-    recordSubmission(problem.id, circuit, judged.passed);
   };
+
+  /**
+   * 提出は診断がついてから送る(SPEC.md §3.5)。
+   * つまずきの種類を一緒に送ると「みんながつまずくところ」を人数で数えられる。
+   * 診断は 1 秒近くかかることがあるので、判定の表示を待たせないよう、済んでから送る。
+   */
+  const [sent, setSent] = useState<JudgeResult | undefined>(undefined);
+  useEffect(() => {
+    if (!checked || diagnosis.state !== "done") return;
+    if (sent === checked.result) return;
+    setSent(checked.result);
+    recordSubmission(
+      problem.id,
+      checked.circuit,
+      checked.result.passed,
+      diagnosis.diagnoses[0]?.id,
+    );
+  }, [checked, diagnosis, sent, problem.id, recordSubmission]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -339,7 +367,7 @@ function BuildMode({ problem }: { problem: Problem }) {
           data-testid="reset-circuit"
           onClick={() => {
             setCircuit(initial);
-            setResult(undefined);
+            setChecked(undefined);
             setFailures(0);
           }}
           className="min-h-11 rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700"
@@ -355,12 +383,15 @@ function BuildMode({ problem }: { problem: Problem }) {
         </details>
       )}
 
-      {result && <JudgeResultView result={result} problem={problem} circuit={circuit} />}
-      {result && (
+      <CommonMistakes problemId={problem.id} />
+
+      {checked && (
+        <JudgeResultView result={checked.result} problem={problem} circuit={checked.circuit} />
+      )}
+      {checked && (
         <DiagnosisPanel
-          circuit={circuit}
-          testCases={problem.testCases}
-          result={result}
+          circuit={checked.circuit}
+          diagnosis={diagnosis}
           failures={failures}
           deviceLabels={labels}
         />

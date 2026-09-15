@@ -4,6 +4,7 @@ import { getAuth, isE2EAuthBypass } from "./auth.js";
 import type { MeDto } from "./dto.js";
 import type { AppBindings } from "./env.js";
 import { optionalUser } from "./middleware/auth.js";
+import { mistakeRoutes } from "./routes/mistakes.js";
 import { orgRoutes } from "./routes/orgs.js";
 import { problemRoutes } from "./routes/problems.js";
 import { progressRoutes } from "./routes/progress.js";
@@ -33,6 +34,7 @@ export const app = new Hono<AppBindings>()
   /** ログイン中のユーザー。未ログインでも 200 で `user: null` を返す(§3.5) */
   .get("/me", optionalUser, (c) => c.json<MeDto>({ user: c.get("user") ?? null }))
   .route("/progress", progressRoutes)
+  .route("/mistakes", mistakeRoutes)
   .route("/problems", problemRoutes)
   .route("/orgs", orgRoutes)
   .route("/rankings", rankingRoutes)

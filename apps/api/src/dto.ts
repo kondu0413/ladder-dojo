@@ -49,6 +49,20 @@ export type SubmissionDto = {
 };
 
 export type SubmissionListDto = { submissions: SubmissionDto[] };
+
+/** 「みんながつまずくところ」。個人は出さず、人数だけ */
+export type MistakeDto = {
+  /** core の DIAGNOSIS_IDS のいずれか */
+  diagnosisId: string;
+  users: number;
+};
+
+export type MistakeListDto = {
+  problemId: string;
+  /** この人数に達していない種類は返していない */
+  minUsers: number;
+  mistakes: MistakeDto[];
+};
 export type SubmissionOneDto = { submission: SubmissionDto; deduplicated: boolean };
 
 export type ApiErrorDto = {

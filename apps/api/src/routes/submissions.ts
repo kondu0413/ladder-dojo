@@ -1,9 +1,9 @@
-import { circuitFingerprint, circuitSchema } from "@ladder-dojo/core";
+import { circuitFingerprint, circuitSchema, DIAGNOSIS_IDS } from "@ladder-dojo/core";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { Hono } from "hono";
 import { z } from "zod";
-import { submissions } from "../db/schema.js";
+import { problemMistakes, problemMistakeUsers, submissions } from "../db/schema.js";
 import type { SubmissionDto } from "../dto.js";
 import type { AppBindings } from "../env.js";
 import { byteLength, MAX_CIRCUIT_JSON_BYTES, newId, sha256Hex } from "../lib/util.js";
@@ -20,6 +20,11 @@ const bodySchema = z.object({
     .regex(/^[a-z0-9-]+$/),
   circuit: circuitSchema,
   passed: z.boolean(),
+  /**
+   * つまずき診断の種類。判定も診断もクライアント側で動く(SPEC.md §6)ので、
+   * サーバーは既知の ID かどうかだけ見る(S-011)
+   */
+  diagnosisId: z.enum(DIAGNOSIS_IDS).optional(),
 });
 
 /**
@@ -54,7 +59,7 @@ export const submissionRoutes = new Hono<AppBindings>()
 
     const db = drizzle(c.env.DB);
     const userId = c.var.user.id;
-    const { problemId, passed } = body.data;
+    const { problemId, passed, diagnosisId } = body.data;
 
     // 同じ回路を出し直した場合は行を増やさない(S-003)
     const existing = await db
@@ -68,7 +73,11 @@ export const submissionRoutes = new Hono<AppBindings>()
         ),
       )
       .get();
-    if (existing) return c.json({ submission: toJson(existing), deduplicated: true as const });
+    if (existing) {
+      // 同じ回路の出し直しでも、つまずきの人数には数える(初回だけ増える)
+      if (!passed && diagnosisId) await countMistake(db, problemId, diagnosisId, userId);
+      return c.json({ submission: toJson(existing), deduplicated: true as const });
+    }
 
     const row = await db
       .insert(submissions)
@@ -79,17 +88,52 @@ export const submissionRoutes = new Hono<AppBindings>()
         circuitJson,
         circuitHash,
         passed,
+        ...(diagnosisId ? { diagnosisId } : {}),
         createdAt: new Date(),
       })
       .returning()
       .get();
 
-    if (!passed) await pruneFailed(db, userId, problemId);
+    if (!passed) {
+      await pruneFailed(db, userId, problemId);
+      if (diagnosisId) await countMistake(db, problemId, diagnosisId, userId);
+    }
 
     return c.json({ submission: toJson(row), deduplicated: false as const }, 201);
   });
 
 type Db = ReturnType<typeof drizzle>;
+
+/**
+ * 「みんながつまずくところ」の人数を数える(SPEC.md §3.5)。
+ *
+ * 同じ人が同じ間違いを何度しても 1 人。先に重複よけの表へ入れてみて、
+ * 実際に行が増えたときだけ人数を足す。毎回 submissions を数え直すと
+ * 読み取り行数を使いすぎるため(COST.md §1.2、D-018)。
+ */
+async function countMistake(
+  db: Db,
+  problemId: string,
+  diagnosisId: string,
+  userId: string,
+): Promise<void> {
+  const inserted = await db
+    .insert(problemMistakeUsers)
+    .values({ problemId, diagnosisId, userId })
+    .onConflictDoNothing()
+    .run();
+  // 既に数えた人なら行が増えないので、そこで終わり
+  if ((inserted.meta?.changes ?? 0) === 0) return;
+
+  await db
+    .insert(problemMistakes)
+    .values({ problemId, diagnosisId, users: 1, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: [problemMistakes.problemId, problemMistakes.diagnosisId],
+      set: { users: sql`${problemMistakes.users} + 1`, updatedAt: new Date() },
+    })
+    .run();
+}
 
 /** 不正解の履歴を直近 MAX_FAILED_PER_PROBLEM 件に切り詰める(S-003) */
 async function pruneFailed(db: Db, userId: string, problemId: string): Promise<void> {
