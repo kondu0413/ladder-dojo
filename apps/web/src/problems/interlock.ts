@@ -150,6 +150,16 @@ const limitCases = [
     ],
   },
   {
+    id: "interlock-reverse",
+    title: "下降中に上昇ボタンを押しても切り替わらない",
+    steps: [
+      { type: "press" as const, device: "X1" as const },
+      { type: "expect" as const, outputs: { Y1: true, Y0: false } },
+      { type: "press" as const, device: "X0" as const },
+      { type: "expect" as const, outputs: { Y1: true, Y0: false } },
+    ],
+  },
+  {
     id: "stop",
     title: "停止ボタンで両方止まる",
     steps: [
