@@ -1,0 +1,25 @@
+{
+  "name": "@ladder-dojo/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "ラダーシミュレータ・判定・回路 JSON スキーマ(DOM / Node API 非依存)",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "vitest": "4.1.11"
+  }
+}

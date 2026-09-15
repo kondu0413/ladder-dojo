@@ -1,62 +1,48 @@
 # SETUP.md — 外部サービスのセットアップ手順(人間用)
 
-この手順は **人間が行う作業** だけを書いている。コードの実装・CI 設定ファイル(`.github/workflows/*.yml`、`apps/api/wrangler.jsonc`)の作成、Worker へのシークレット設定、D1 マイグレーションの適用は Claude Code が行う。
-所要時間の目安: 全部で 30〜40 分。すべて無料プランで、クレジットカードは不要。
+この手順は **人間が行う作業** だけを書いている。それ以外(CI 設定、`apps/api/wrangler.jsonc`、D1 データベースの作成、マイグレーション、Worker へのシークレット設定、デプロイ)はすべて Claude Code と CI が行う。
+所要時間の目安: 20〜30 分。すべて無料プランで、クレジットカードは不要。
 
-> 2026-09-14 改訂: Supabase と Brevo は使わない(DECISIONS.md D-006 / D-008)。人間の作業は **Cloudflare・Google Cloud・GitHub Secrets の 3 つだけ**。
+> 2026-09-15 改訂: 人間が GitHub Secrets に入れる値は **`CLOUDFLARE_API_TOKEN` / `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` の 3 つだけ**。
+> Cloudflare のアカウント ID は CI が `wrangler whoami` で取得し、D1 データベースは CI が無ければ作成し、`BETTER_AUTH_SECRET` は CI が初回に生成して Worker に登録する(DECISIONS.md D-012)。
+> 開発はクラウドの Claude Code + GitHub のみ。ローカル PC・`.env.local` は前提にしない。
 
-## 0. 全体像と「いつ必要か」
+## 0. 全体像
 
 | 時点 | 必要になる作業 | 理由 |
 |---|---|---|
-| **A. ローカル開発〜認証実装**(今〜フェーズ1 中盤) | **なし** | シミュレータ・公式問題・サンドボックスはサーバー不要。認証・保存の実装とテストも Wrangler のローカル D1 と E2E 専用ログインで完結する(D-014) |
-| **B. デプロイ時点**(フェーズ1 終盤) | §1 Cloudflare、§2 Google Cloud、§3 GitHub Secrets | 公開 URL と Google ログイン |
+| **A. デプロイ前** | **なし** | シミュレータ・公式問題・サンドボックスはサーバー不要。認証・保存の実装とテストも Wrangler のローカル D1 と E2E 専用ログインで完結する(D-014) |
+| **B. 初回デプロイ** | §1 Cloudflare、§2 Google Cloud、§3 GitHub Secrets | 公開 URL と Google ログイン |
 | **C. フェーズ2 / 3** | (追加作業なし) | 同じ Worker と D1 を使い続ける |
-
-**進め方**: Claude Code が `docs/PROGRESS.md` に「B の準備をお願いします」と書いた時点で §1 → §2 → §3 の順に行う。先にまとめてやっても問題ない(A の間は何もしなくてよい)。
 
 ### 用意するもの
 - Google アカウント(Cloudflare / Google Cloud のサインインに使う)
 - パスワードマネージャ(取得したキーの保管先。**キーを Slack や Issue に貼らない**)
-- 手元で動かす場合のみ Node.js 22 LTS と pnpm(`corepack enable && corepack prepare pnpm@latest --activate`)。必須ではない
 
-### 作業が終わったら Claude Code に伝える値(秘密ではないもの)
-以下の 3 つは秘密ではないので、PR コメントや `docs/PROGRESS.md` に書いて伝えてよい。Claude Code が `apps/api/wrangler.jsonc` に反映する。
+### Claude Code に伝える値(秘密ではないもの)
 
 | 値 | どこで分かるか |
 |---|---|
 | Cloudflare の **workers.dev サブドメイン**(例: `example.workers.dev` の `example`) | §1.2 |
-| **D1 データベース ID**(UUID) | §1.3 |
-| Worker 名を `ladder-dojo` 以外にした場合、その名前 | §1.2 |
 
-秘密の値(API トークン、Google のクライアントシークレット、`BETTER_AUTH_SECRET`)は **GitHub Secrets にだけ**入れる(§3)。Claude Code には「登録した」とだけ伝える。
+本番 URL は `https://ladder-dojo.<サブドメイン>.workers.dev` になる。Claude Code が `apps/api/wrangler.jsonc` の `BETTER_AUTH_URL` に反映する。現在の値は `mojya`(URL: https://ladder-dojo.mojya.workers.dev)。
+
+秘密の値(API トークン、Google のクライアントシークレット)は **GitHub Secrets にだけ**入れる(§3)。Claude Code には「登録した」とだけ伝える。
 
 ---
 
-## 1. Cloudflare(ホスティング・API・DB)— B 時点
+## 1. Cloudflare(ホスティング・API・DB)
 
 ### 1.1 アカウント
 1. https://dash.cloudflare.com/sign-up でアカウント作成(メール + パスワード。カード不要。プランは Free)。既にアカウントがあればログイン
-2. 左メニュー「Workers & Pages」を開く。初回は **`<なにか>.workers.dev` のサブドメイン名**を決めるよう促される。任意でよい(例: 自分のハンドル名)。本番 URL は `https://ladder-dojo.<このサブドメイン>.workers.dev` になる
+2. 左メニュー「Workers & Pages」を開く。初回は **`<なにか>.workers.dev` のサブドメイン名**を決めるよう促される。任意でよい
 
-### 1.2 workers.dev サブドメインとアカウント ID を控える
-「Workers & Pages」→ 概要ページの右側に以下がある。両方コピーする。
-- **Subdomain**: `xxxx.workers.dev` の `xxxx` 部分 → Claude Code に伝える(秘密ではない)。もし表示されない場合は「Change」から設定する
-- **Account ID** → `CLOUDFLARE_ACCOUNT_ID`(§3 で GitHub Secrets に入れる。ダッシュボードの URL `https://dash.cloudflare.com/<ここ>/...` と同じ)
+### 1.2 workers.dev サブドメインを控える
+「Workers & Pages」→ 概要ページの右側「Subdomain」の `xxxx.workers.dev` の `xxxx` 部分 → Claude Code に伝える(秘密ではない)。表示されない場合は「Change」から設定する。
 
-Worker(`ladder-dojo`)自体は **作らなくてよい**。最初の `wrangler deploy`(CI)が自動で作る。
+Worker(`ladder-dojo`)と D1 データベース(`ladder-dojo`)は **作らなくてよい**。初回の `deploy.yml`(CI)が自動で作る。アカウント ID も控える必要はない(CI が `wrangler whoami` で取得する)。
 
-### 1.3 D1 データベースの作成
-1. 左メニュー「Storage & Databases」→「D1 SQL Database」→「Create Database」
-2. 以下で作成
-   | 項目 | 値 |
-   |---|---|
-   | Database name | `ladder-dojo` |
-   | Location(表示される場合) | `Asia Pacific (APAC)`。表示されなければ自動でよい |
-3. 作成後のデータベース画面(または一覧)に表示される **Database ID**(UUID)をコピー → Claude Code に伝える(秘密ではない)
-4. テーブルは作らない。マイグレーションは CI の `wrangler d1 migrations apply` が行う
-
-### 1.4 API トークン(CI がデプロイ・マイグレーション・シークレット設定に使う)
+### 1.3 API トークン(CI がデプロイ・D1 作成/マイグレーション・シークレット設定に使う)
 1. 右上アバター →「My Profile」→「API Tokens」→「Create Token」
 2. テンプレート「**Edit Cloudflare Workers**」の「Use template」を選び、**権限に D1 を追加**する:
    | Permissions | 値 |
@@ -66,68 +52,58 @@ Worker(`ladder-dojo`)自体は **作らなくてよい**。最初の `wrangler d
    | (テンプレート既定)User → User Details | Read |
    | **追加** Account → D1 | **Edit** |
    | Account Resources | Include → 自分のアカウント |
-   - テンプレートに含まれる Workers KV / R2 / Routes などの権限はそのままでよい(使わないだけ)。最小にしたい場合は「Create Custom Token」で上の 4 行だけを付ける
+   - `Account Settings: Read` と `User Details: Read` は `wrangler whoami` でアカウント ID を取得するために必要。外さないこと
+   - テンプレートに含まれる Workers KV / R2 / Routes などの権限はそのままでよい(使わないだけ)
 3. 「Continue to summary」→「Create Token」→ 表示されたトークンを保存 → `CLOUDFLARE_API_TOKEN`(**この画面を閉じると再表示できない**)
 
-### 1.5 Worker のシークレット・環境変数について(人間の作業なし)
-`BETTER_AUTH_SECRET` / `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` は、CI(`deploy.yml`)が GitHub Secrets から `wrangler secret` で Worker に流し込む。Cloudflare のダッシュボードで手入力する必要はない。
+### 1.4 Worker のシークレットについて(人間の作業なし)
+`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` は CI(`deploy.yml`)が GitHub Secrets から `wrangler secret bulk` で Worker に流し込む。`BETTER_AUTH_SECRET` は CI が Worker に未登録のときだけ `openssl rand -base64 32` で生成して登録する(値は誰も見ない・保管しない。作り直したいときは Cloudflare ダッシュボードで Worker のシークレットを削除して `deploy.yml` を再実行する)。
 
 ---
 
-## 2. Google Cloud(Google ログイン用 OAuth クライアント)— B 時点
+## 2. Google Cloud(Google ログイン用 OAuth クライアント)
 
-課金アカウントは不要。無料。**既存の OAuth クライアント(`ladder-dojo-web`)のリダイレクト URI を Supabase 用から Worker 用に差し替える**作業が中心。
+課金アカウントは不要。無料。
 
-### 2.1 リダイレクト URI と生成元の差し替え
-1. https://console.cloud.google.com/ にログインし、プロジェクト `ladder-dojo` を選択
-2. 「API とサービス」→「認証情報」→ OAuth 2.0 クライアント ID `ladder-dojo-web` を開く
-3. 以下のように編集して保存(`<サブドメイン>` は §1.2 の値)
-   | 項目 | 削除する値 | 設定する値 |
-   |---|---|---|
-   | 承認済みの JavaScript 生成元 | (Supabase 関連があれば削除) | `https://ladder-dojo.<サブドメイン>.workers.dev`、`http://localhost:5173`(手元で動かす場合) |
-   | 承認済みのリダイレクト URI | `https://<ref>.supabase.co/auth/v1/callback` | `https://ladder-dojo.<サブドメイン>.workers.dev/api/auth/callback/google`、`http://localhost:5173/api/auth/callback/google`(手元で動かす場合) |
+### 2.1 OAuth クライアント
+1. https://console.cloud.google.com/ にログインし、プロジェクト `ladder-dojo` を選択(無ければ作成)
+2. 「API とサービス」→「OAuth 同意画面」(新 UI では「Google Auth Platform」→「ブランディング」)で対象 **外部**、アプリ名 `ラダー図トレーニング`、サポートメール・連絡先に自分のメール、スコープは追加不要(既定の `email` `profile` `openid`)
+3. 「認証情報」→「認証情報を作成」→「OAuth クライアント ID」→ 種類「ウェブ アプリケーション」、名前 `ladder-dojo-web`
+   | 項目 | 値(`<サブドメイン>` は §1.2) |
+   |---|---|
+   | 承認済みの JavaScript 生成元 | `https://ladder-dojo.<サブドメイン>.workers.dev` |
+   | 承認済みのリダイレクト URI | `https://ladder-dojo.<サブドメイン>.workers.dev/api/auth/callback/google` |
 4. 反映まで数分〜かかることがある
 
-> **OAuth クライアントをまだ作っていない場合**: 「API とサービス」→「OAuth 同意画面」(新UIでは「Google Auth Platform」→「ブランディング」)で対象 **外部**、アプリ名 `ラダー図トレーニング`、サポートメール・連絡先に自分のメール、スコープは追加不要(既定の `email` `profile` `openid`)で作成 → 「認証情報」→「認証情報を作成」→「OAuth クライアント ID」→ 種類「ウェブ アプリケーション」、名前 `ladder-dojo-web`、生成元とリダイレクト URI は上の表の「設定する値」
-
 ### 2.2 クライアント ID とシークレットを控える
-同じクライアントの画面で:
 - **クライアント ID**(`....apps.googleusercontent.com`)→ `GOOGLE_CLIENT_ID`
-- **クライアント シークレット** → `GOOGLE_CLIENT_SECRET`。作成時に保存していない場合は「クライアント シークレットを追加」(または「シークレットをリセット」)で新しいものを発行し、古いものを無効化する
+- **クライアント シークレット** → `GOOGLE_CLIENT_SECRET`。保存していない場合は「クライアント シークレットを追加」で新しいものを発行し、古いものを無効化する
 
-以前は Supabase のダッシュボードに貼っていたが、今回は **§3 で GitHub Secrets に入れる**(アプリのコードや `.env` には入れない)。
-
-### 2.3 公開ステータス(公開前に必ず)
-「OAuth 同意画面」→ 公開ステータスを「テスト」から「**本番環境**」に切り替える(テスト中は 100 ユーザーまでしかログインできない)。`email/profile` のみなら Google の審査は不要。
+### 2.3 公開ステータス
+「OAuth 同意画面」→ 公開ステータスを「テスト」から「**本番環境**」に切り替える(テスト中は 100 ユーザーまで)。`email/profile` のみなら Google の審査は不要。
 
 ---
 
-## 3. GitHub リポジトリの設定 — B 時点
+## 3. GitHub リポジトリの設定
 
-### 3.1 `BETTER_AUTH_SECRET` を生成する
-セッション Cookie の署名に使うランダム文字列。ターミナルで生成し、パスワードマネージャに保存する:
-```
-openssl rand -base64 32
-```
-(ターミナルがない場合は https://generate-secret.vercel.app/32 のような生成サービスでも可。32 バイト以上ならよい)
-
-### 3.2 Actions Secrets
-リポジトリ → Settings → Secrets and variables → Actions →「New repository secret」で以下の **5 つ**を登録する。
+### 3.1 Actions Secrets
+リポジトリ → Settings → Secrets and variables → Actions →「New repository secret」で以下の **3 つ**を登録する。
 
 | Secret 名 | 値の出どころ | 用途 |
 |---|---|---|
-| `CLOUDFLARE_API_TOKEN` | §1.4 | Worker のデプロイ・D1 マイグレーション・シークレット設定 |
-| `CLOUDFLARE_ACCOUNT_ID` | §1.2 | 同上 |
-| `BETTER_AUTH_SECRET` | §3.1 | セッション Cookie の署名(CI が Worker に設定) |
+| `CLOUDFLARE_API_TOKEN` | §1.3 | Worker のデプロイ・D1 作成/マイグレーション/バックアップ・シークレット設定 |
 | `GOOGLE_CLIENT_ID` | §2.2 | Google ログイン(CI が Worker に設定) |
 | `GOOGLE_CLIENT_SECRET` | §2.2 | 同上 |
 
 PR の CI(lint / テスト / E2E)はこれらを使わない。使うのは `main` へのマージ後の `deploy.yml` と週次の `backup.yml` だけ。
 
-### 3.3 Actions の有効化確認
+### 3.2 Actions の有効化確認
 Settings → Actions → General → 「Allow all actions and reusable workflows」であることを確認。
 
-GitHub Environments(手動承認)は **作らなくてよい**(D-012: 本番マイグレーションは 2 段階の追加専用変更 + Time Travel で担保する)。
+GitHub Environments(手動承認)は **作らなくてよい**。`deploy.yml` は `production` という Environment 名を使うが、保護ルール無しで自動作成される。
+
+### 3.3 リポジトリの公開設定
+リポジトリは public。Actions の実行時間に上限はない(COST.md §1.4)。
 
 ---
 
@@ -137,55 +113,53 @@ GitHub Environments(手動承認)は **作らなくてよい**(D-012: 本番マ�
 git push (feature branch / PR)
    └─ GitHub Actions: ci.yml(シークレット不要)
         lint → typecheck → unit(core) → API テスト(ローカル D1)
-        → build → E2E(wrangler dev + ローカル D1 + E2E 専用ログイン)
+        → build → E2E(wrangler dev --env e2e + ローカル D1)
 
 git push (main)
-   └─ ci.yml 成功時のみ deploy.yml
-        wrangler d1 migrations apply ladder-dojo --remote
+   └─ deploy.yml: ci.yml を呼び出し → 成功時のみ
+        wrangler whoami                      … アカウント ID を取得
+        wrangler d1 list / create            … D1 `ladder-dojo` が無ければ作成、ID を wrangler.jsonc に反映
+        wrangler d1 migrations apply --remote
         wrangler deploy                      … Worker(静的アセット + API)を更新
-        wrangler secret bulk                 … GitHub Secrets → Worker のシークレット
+        wrangler secret bulk                 … GOOGLE_* を同期、BETTER_AUTH_SECRET は初回のみ生成
           └─ https://ladder-dojo.<サブドメイン>.workers.dev が更新される
 
-毎週
-   └─ backup.yml: wrangler d1 export → Actions アーティファクト(4 世代)
+毎週月曜 03:00 JST
+   └─ backup.yml: wrangler d1 export → Actions アーティファクト(28 日保持 = 4 世代)
 ```
 
-- 人間が行うのは §1〜§3 のみ。ワークフローファイルと `apps/api/wrangler.jsonc` は Claude Code が作る
 - Cloudflare 側で GitHub 連携(Workers Builds の「Connect to Git」)は **設定しない**。設定すると CI と二重にデプロイされ、テスト失敗時もデプロイされてしまう
-- プレビューデプロイは行わない(D-012)。PR の動作確認はローカル E2E の結果と、必要なら手元での `pnpm dev`
-- デプロイ先 URL は `docs/PROGRESS.md` に Claude Code が記載する
+- プレビューデプロイは行わない(D-012)。PR の動作確認はローカル E2E の結果で行う
 
 ---
 
-## 5. 手元で動かす場合(任意)
+## 5. 手元で動かす場合(任意・非推奨)
 
-Claude Code の開発・テストは手元の環境を必要としない。人間が触って確認したい場合のみ:
+開発は Claude Code(クラウド)のみで行う前提だが、人間が手元で触りたい場合:
 
-1. `pnpm install`
-2. `cp .env.example .env.local` して、`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`(§2.2)と `BETTER_AUTH_SECRET`(何でもよい。`openssl rand -base64 32`)を記入
-3. `pnpm dev` … Vite(`http://localhost:5173`)と `wrangler dev`(ローカル D1、`http://localhost:8787`)が同時に起動し、`/api` は Vite からプロキシされる。初回はローカル D1 にマイグレーションが自動適用される
-4. Google ログインを試すには §2.1 の `http://localhost:5173/...` の 2 行が登録されている必要がある。試さないなら不要
-5. `.env.local` は `.gitignore` 済み。コミットされないことを `git status` で確認
+1. Node.js 22 と pnpm(`corepack enable && corepack prepare pnpm@10.33.0 --activate`)
+2. `pnpm install` → `pnpm dev`(Vite `http://localhost:5173` + `wrangler dev` ローカル D1 `http://localhost:8787`)
+3. Google ログインを試す場合は `.env.example` を `.env.local` にコピーして `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `BETTER_AUTH_SECRET`(任意の文字列)を入れ、Google Cloud のクライアントに `http://localhost:5173` と `http://localhost:5173/api/auth/callback/google` を追加する
+4. `.env.local` は `.gitignore` 済み
 
 ---
 
 ## 6. 環境変数 一覧(まとめ)
 
-「置き場所」の凡例: **local** = リポジトリ直下 `.env.local`(手元で動かす場合のみ)/ **GH** = GitHub Actions Secrets / **CF** = Worker のシークレット(CI が GH から自動設定。人間は触らない)/ **wrangler.jsonc** = リポジトリにコミットする設定(秘密でない値)
+「置き場所」の凡例: **GH** = GitHub Actions Secrets / **CF** = Worker のシークレット(CI が設定。人間は触らない)/ **wrangler.jsonc** = リポジトリにコミットする設定(秘密でない値)
 
-| 変数名 | いつから必要 | 置き場所 | 用途 | 取得場所 |
-|---|---|---|---|---|
-| `CLOUDFLARE_API_TOKEN` | B デプロイ時点 | GH(local は手動デプロイ時のみ) | wrangler によるデプロイ・D1 操作 | Cloudflare → My Profile → API Tokens(§1.4) |
-| `CLOUDFLARE_ACCOUNT_ID` | B デプロイ時点 | GH(local は手動デプロイ時のみ) | 同上 | Cloudflare → Workers & Pages → Account ID(§1.2) |
-| `BETTER_AUTH_SECRET` | B デプロイ時点(local は認証を試すとき) | GH → CF、local | セッション Cookie の署名鍵 | 自分で生成(§3.1) |
-| `GOOGLE_CLIENT_ID` | B デプロイ時点(local は認証を試すとき) | GH → CF、local | Google ログイン | Google Cloud → 認証情報(§2.2) |
-| `GOOGLE_CLIENT_SECRET` | B デプロイ時点(local は認証を試すとき) | GH → CF、local | 同上 | 同上 |
-| `BETTER_AUTH_URL` | — | wrangler.jsonc の `vars`(本番 URL)/ ローカルは既定値 `http://localhost:5173` | Better Auth が OAuth のコールバック URL を組み立てる基準 | 秘密でない。Claude Code が設定 |
-| D1 の `database_id` | B デプロイ時点 | wrangler.jsonc の `d1_databases` | Worker と D1 の紐付け | Cloudflare → D1(§1.3)。秘密でない |
-| `E2E_AUTH_BYPASS` | — | wrangler.jsonc の `env.e2e.vars` のみ | E2E 専用ログインの有効化。**本番には存在しない** | Claude Code が設定 |
-| `E2E_BASE_URL` | — | local / GH(任意) | Playwright の接続先。未設定なら `wrangler dev` を自動起動 | 通常は設定不要 |
-
-**アプリの環境変数に入れないもの**: なし。以前 Supabase・Brevo のダッシュボードに設定していた値は、すべて GitHub Secrets 経由に置き換わった。
+| 変数名 | 置き場所 | 用途 | 出どころ |
+|---|---|---|---|
+| `CLOUDFLARE_API_TOKEN` | GH | wrangler によるデプロイ・D1 操作 | Cloudflare → My Profile → API Tokens(§1.3) |
+| `GOOGLE_CLIENT_ID` | GH → CF | Google ログイン | Google Cloud → 認証情報(§2.2) |
+| `GOOGLE_CLIENT_SECRET` | GH → CF | 同上 | 同上 |
+| `CLOUDFLARE_ACCOUNT_ID` | (CI が実行時に `wrangler whoami` で取得。どこにも保存しない) | 同上 | — |
+| `BETTER_AUTH_SECRET` | CF(CI が初回に生成) | セッション Cookie の署名鍵 | — |
+| `BETTER_AUTH_URL` | wrangler.jsonc の `vars` | Better Auth のコールバック URL の基準 | Claude Code が設定 |
+| `APP_ENV` | wrangler.jsonc の `vars` | `production` / `e2e` の識別 | Claude Code が設定 |
+| D1 の `database_id` | wrangler.jsonc(CI が実行時に上書き) | Worker と D1 の紐付け | CI が `wrangler d1 list` で取得 |
+| `E2E_AUTH_BYPASS` | wrangler.jsonc の `env.e2e.vars` のみ | E2E 専用ログインの有効化。**本番には存在しない** | Claude Code が設定 |
+| `E2E_BASE_URL` | 任意 | Playwright の接続先。未設定なら `wrangler dev` を自動起動 | 通常は設定不要 |
 
 ---
 
@@ -196,8 +170,9 @@ Claude Code の開発・テストは手元の環境を必要としない。人�
 | Google ログインで `redirect_uri_mismatch` | §2.1 のリダイレクト URI が `https://ladder-dojo.<サブドメイン>.workers.dev/api/auth/callback/google` と一字一句一致しているか確認(末尾のスラッシュ・`http`/`https`)。保存後 5 分ほど待つ |
 | Google ログインで「このアプリは確認されていません」 | `email/profile` のみなら「詳細」→「(安全ではないページ)に移動」で通る。公開ステータスを「本番環境」にしていれば通常表示されない |
 | Google ログインで 100 ユーザー上限エラー | §2.3 の公開ステータス切替を行う |
-| ログイン後すぐログアウトされる / セッションが保持されない | Worker のシークレット `BETTER_AUTH_SECRET` が未設定か、デプロイごとに変わっている。GitHub Secrets の値を確認し、Claude Code に `deploy.yml` の再実行を依頼 |
-| GitHub Actions のデプロイが 403 / `Authentication error` | API トークンの権限に Workers Scripts: Edit と **D1: Edit** が含まれているか確認。トークンを作り直して Secret を更新 |
-| `wrangler d1 migrations apply` が失敗 | Database ID が `wrangler.jsonc` と一致しているか確認。データを壊した疑いがあれば D1 の Time Travel(7 日以内)で復元できる。Claude Code に「Time Travel で <日時> に戻して」と依頼 |
+| ログイン後すぐログアウトされる / セッションが保持されない | Worker のシークレット `BETTER_AUTH_SECRET` が無い可能性。Cloudflare → Workers & Pages → `ladder-dojo` → Settings → Variables and Secrets を確認し、無ければ `deploy.yml` を手動実行(Actions → Deploy → Run workflow) |
+| `deploy.yml` の「Cloudflare setup」で `wrangler whoami からアカウント ID を取得できませんでした` | トークンに `Account Settings: Read` / `User Details: Read` が付いているか確認。トークンを作り直して Secret を更新 |
+| GitHub Actions のデプロイが 403 / `Authentication error` | API トークンの権限に Workers Scripts: Edit と **D1: Edit** が含まれているか確認 |
+| `wrangler d1 migrations apply` が失敗 | Actions のログで `database_id` の反映を確認。データを壊した疑いがあれば D1 の Time Travel(7 日以内)で復元できる。Claude Code に「Time Travel で <日時> に戻して」と依頼 |
 | Cloudflare のダッシュボードで「Free plan limit」の警告 | `docs/COST.md` §1.1 / §1.2 の縮退方針に従う。Claude Code に該当項目を伝える |
 | GitHub Actions のスケジュール(backup)が動かない | 60 日間活動がないと停止する。Actions タブで該当ワークフローを開き「Enable workflow」 |

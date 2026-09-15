@@ -1,0 +1,25 @@
+{
+  "name": "@ladder-dojo/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8787",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e:serve": "rm -rf .wrangler/e2e-state && wrangler d1 migrations apply ladder-dojo --local --env e2e --persist-to .wrangler/e2e-state && wrangler dev --env e2e --port 8787 --persist-to .wrangler/e2e-state",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@ladder-dojo/core": "workspace:*",
+    "hono": "4.13.8",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "0.22.0",
+    "@cloudflare/workers-types": "5.20260915.1",
+    "vitest": "4.1.11",
+    "wrangler": "4.131.2"
+  }
+}

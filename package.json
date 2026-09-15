@@ -1,0 +1,23 @@
+{
+  "name": "ladder-dojo",
+  "private": true,
+  "version": "0.0.0",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "pnpm -r --workspace-concurrency=1 run typecheck",
+    "test": "pnpm -r --workspace-concurrency=1 run test",
+    "build": "pnpm --filter @ladder-dojo/core build && pnpm --filter @ladder-dojo/web build",
+    "e2e": "pnpm --filter @ladder-dojo/web e2e",
+    "dev": "pnpm -r --parallel --stream run dev",
+    "ci": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm e2e"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.13",
+    "typescript": "5.9.3"
+  }
+}

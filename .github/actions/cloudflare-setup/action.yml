@@ -1,0 +1,90 @@
+name: Cloudflare setup
+description: |
+  CLOUDFLARE_API_TOKEN だけを前提に、(1) アカウント ID を `wrangler whoami` から取得し、
+  (2) D1 データベース `ladder-dojo` が無ければ作成し、(3) その Database ID を apps/api/wrangler.jsonc に反映する。
+  (DECISIONS.md D-012 追記分)
+inputs:
+  api-token:
+    description: Cloudflare API トークン(Workers Scripts:Edit, D1:Edit, Account Settings:Read, User Details:Read)
+    required: true
+  d1-name:
+    description: D1 データベース名
+    required: false
+    default: ladder-dojo
+  d1-location:
+    description: 新規作成時のロケーションヒント
+    required: false
+    default: apac
+outputs:
+  account-id:
+    description: Cloudflare アカウント ID
+    value: ${{ steps.account.outputs.account-id }}
+  d1-id:
+    description: D1 データベース ID
+    value: ${{ steps.d1.outputs.d1-id }}
+runs:
+  using: composite
+  steps:
+    - name: Resolve account ID (wrangler whoami)
+      id: account
+      shell: bash
+      working-directory: apps/api
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ inputs.api-token }}
+      run: |
+        set -euo pipefail
+        # whoami は表形式で "Account Name │ Account ID" を出す。ID は 32 桁の 16 進数なので正規表現で拾う
+        WHOAMI=$(pnpm exec wrangler whoami 2>&1 || true)
+        ACCOUNT_ID=$(printf '%s\n' "$WHOAMI" | grep -oE '\b[0-9a-f]{32}\b' | head -n1 || true)
+        if [ -z "$ACCOUNT_ID" ]; then
+          echo "::error::wrangler whoami からアカウント ID を取得できませんでした。トークンの権限(Account Settings: Read / User Details: Read)を確認してください"
+          printf '%s\n' "$WHOAMI"
+          exit 1
+        fi
+        echo "::add-mask::$ACCOUNT_ID"
+        echo "account-id=$ACCOUNT_ID" >> "$GITHUB_OUTPUT"
+        echo "CLOUDFLARE_ACCOUNT_ID=$ACCOUNT_ID" >> "$GITHUB_ENV"
+        echo "アカウント ID を取得しました(マスク済み)"
+
+    - name: Ensure D1 database exists and patch wrangler.jsonc
+      id: d1
+      shell: bash
+      working-directory: apps/api
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ inputs.api-token }}
+        D1_NAME: ${{ inputs.d1-name }}
+        D1_LOCATION: ${{ inputs.d1-location }}
+      run: |
+        set -euo pipefail
+        lookup() {
+          pnpm exec wrangler d1 list --json 2>/dev/null | jq -r --arg n "$D1_NAME" '.[] | select(.name == $n) | .uuid' | head -n1
+        }
+        D1_ID=$(lookup || true)
+        if [ -z "$D1_ID" ]; then
+          echo "D1 '$D1_NAME' が存在しないため作成します(location=$D1_LOCATION)"
+          pnpm exec wrangler d1 create "$D1_NAME" --location "$D1_LOCATION"
+          D1_ID=$(lookup || true)
+        fi
+        if [ -z "$D1_ID" ]; then
+          echo "::error::D1 '$D1_NAME' の ID を取得できませんでした"
+          exit 1
+        fi
+        # wrangler.jsonc のトップレベル d1_databases の database_id を置換する(env.e2e 側はローカル専用なので触らない)
+        node - "$D1_ID" <<'NODE'
+        const fs = require("node:fs");
+        const id = process.argv[2];
+        const path = "wrangler.jsonc";
+        const src = fs.readFileSync(path, "utf8");
+        // "env": { ... } より前(トップレベル)の最初の database_id だけを置換する
+        const envIndex = src.indexOf('"env": {');
+        const head = envIndex === -1 ? src : src.slice(0, envIndex);
+        const tail = envIndex === -1 ? "" : src.slice(envIndex);
+        const re = /("database_id":\s*")[^"]*(")/;
+        if (!re.test(head)) {
+          console.error("wrangler.jsonc に database_id が見つかりません");
+          process.exit(1);
+        }
+        fs.writeFileSync(path, head.replace(re, `$1${id}$2`) + tail);
+        console.log(`wrangler.jsonc の database_id を ${id} に設定しました`);
+        NODE
+        echo "d1-id=$D1_ID" >> "$GITHUB_OUTPUT"

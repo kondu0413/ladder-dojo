@@ -1,0 +1,65 @@
+name: CI
+
+# PR と main 以外の push で実行。main への push は deploy.yml がこのワークフローを workflow_call で呼ぶ(二重実行を避ける)。
+# 外部サービスにアクセスしないためシークレット不要(DECISIONS.md D-012 / D-014)。
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+  workflow_call:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: lint / typecheck / unit / api / build / e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint (Biome)
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests (core)
+        run: pnpm --filter @ladder-dojo/core test
+
+      - name: API tests (workerd + local D1)
+        run: pnpm --filter @ladder-dojo/api test
+
+      - name: Build (core + web)
+        run: pnpm build
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @ladder-dojo/web exec playwright install --with-deps chromium
+
+      - name: E2E (wrangler dev --env e2e + local D1)
+        run: pnpm e2e
+        env:
+          CI: "1"
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          retention-days: 7
