@@ -299,6 +299,58 @@ describe("一覧と取得", () => {
     ).not.toContain(id);
   });
 
+  it("長い日本語の検索語でも落ちない(SQLite の LIKE 長さ上限)", async () => {
+    const author = await signUp();
+    // 50 バイトを超える(日本語 1 文字 = 3 バイト)
+    const longTitle = "非常に長い日本語のタイトルで検索できることを確かめるための問題です";
+    expect(new TextEncoder().encode(longTitle).length).toBeGreaterThan(50);
+    const id = await publishedId(author, { title: longTitle });
+
+    const res = await app.request(`/api/problems?q=${encodeURIComponent(longTitle)}`, {}, env);
+    expect(res.status, await res.clone().text()).toBe(200);
+    const body = (await res.json()) as { problems: Array<{ id: string }> };
+    expect(body.problems.map((p) => p.id)).toContain(id);
+  });
+
+  it("長い日本語のタグでも落ちない", async () => {
+    const author = await signUp();
+    const longTag = "とても長いタグ名前でも絞り込めることを確認する";
+    expect(new TextEncoder().encode(longTag).length).toBeGreaterThan(50);
+    const id = await publishedId(author, { tags: [longTag] });
+
+    const res = await app.request(`/api/problems?tag=${encodeURIComponent(longTag)}`, {}, env);
+    expect(res.status, await res.clone().text()).toBe(200);
+    expect(
+      ((await res.json()) as { problems: Array<{ id: string }> }).problems.map((p) => p.id),
+    ).toContain(id);
+  });
+
+  it("% や _ はワイルドカードではなく文字として扱う", async () => {
+    const author = await signUp();
+    const id = await publishedId(author, { title: "歩留まり 100% を目指す" });
+    await publishedId(author, { title: "まったく別の問題" });
+
+    // % をワイルドカードとして解釈していたら、別の問題まで引っかかる
+    const res = await app.request(`/api/problems?q=${encodeURIComponent("100%")}`, {}, env);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { problems: Array<{ id: string; title: string }> };
+    expect(body.problems.map((p) => p.id)).toContain(id);
+    expect(body.problems.map((p) => p.title)).not.toContain("まったく別の問題");
+
+    // _ も同様(1 文字ワイルドカードにしない)
+    const underscore = await app.request(`/api/problems?q=${encodeURIComponent("1_0")}`, {}, env);
+    expect(((await underscore.json()) as { problems: unknown[] }).problems).toEqual([]);
+  });
+
+  it("英字の検索は大文字小文字を区別しない", async () => {
+    const author = await signUp();
+    const id = await publishedId(author, { title: "Timer の練習" });
+    const res = await app.request(`/api/problems?q=${encodeURIComponent("timer")}`, {}, env);
+    expect(
+      ((await res.json()) as { problems: Array<{ id: string }> }).problems.map((p) => p.id),
+    ).toContain(id);
+  });
+
   it("不正な並び順は 400", async () => {
     expect((await app.request("/api/problems?sort=random", {}, env)).status).toBe(400);
   });

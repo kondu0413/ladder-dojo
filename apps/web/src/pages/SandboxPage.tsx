@@ -10,12 +10,13 @@ import {
   type TestCase,
 } from "@ladder-dojo/core";
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { AuthBar } from "../components/AuthBar.js";
 import { DevicePanel } from "../components/DevicePanel.js";
 import { JudgeResultView } from "../components/JudgeResultView.js";
 import { LadderEditor } from "../components/LadderEditor.js";
 import { LadderView } from "../components/LadderView.js";
+import { PublishDialog } from "../components/PublishDialog.js";
 import { SimulatorControls } from "../components/SimulatorControls.js";
 import { TestCaseEditor } from "../components/TestCaseEditor.js";
 import { useSimulator } from "../hooks/useSimulator.js";
@@ -27,6 +28,8 @@ type Tab = "edit" | "run" | "test";
 /** サンドボックス(SPEC.md §3.4)。自由に回路を作り、テストを付けて保存できる */
 export function SandboxPage() {
   const { user } = useProgress();
+  const navigate = useNavigate();
+  const [publishing, setPublishing] = useState(false);
   const [circuit, setCircuit] = useState<Circuit>(() => emptyCircuit(6, 3));
   const [testCases, setTestCases] = useState<TestCase[]>([]);
   const [title, setTitle] = useState("無題の回路");
@@ -128,10 +131,10 @@ export function SandboxPage() {
           <h1 className="text-xl font-bold text-slate-900">サンドボックス</h1>
           <div className="flex gap-3 text-sm text-slate-500">
             <Link to="/" className="underline">
-              問題一覧
+              公式問題
             </Link>
-            <Link to="/samples" className="underline">
-              サンプル
+            <Link to="/community" className="underline">
+              みんなの問題
             </Link>
           </div>
         </div>
@@ -159,6 +162,16 @@ export function SandboxPage() {
         ) : (
           <span className="text-xs text-slate-500">保存するにはログインしてください</span>
         )}
+        {user && (
+          <button
+            type="button"
+            data-testid="sandbox-publish"
+            onClick={() => setPublishing((v) => !v)}
+            className="min-h-11 rounded-lg border border-sky-300 bg-white px-3 text-sm font-medium text-sky-700"
+          >
+            投稿
+          </button>
+        )}
         <button
           type="button"
           data-testid="sandbox-new"
@@ -177,6 +190,19 @@ export function SandboxPage() {
         >
           {message}
         </p>
+      )}
+
+      {publishing && user && (
+        <PublishDialog
+          circuit={circuit}
+          testCases={testCases}
+          defaultTitle={title}
+          onPublished={(id) => {
+            setPublishing(false);
+            void navigate(`/community/${id}`);
+          }}
+          onCancel={() => setPublishing(false)}
+        />
       )}
 
       {user && list.length > 0 && (
