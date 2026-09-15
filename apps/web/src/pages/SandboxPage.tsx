@@ -21,7 +21,7 @@ export function SandboxPage() {
     <main className="mx-auto flex min-h-dvh max-w-screen-sm flex-col gap-4 px-4 py-6">
       <header className="flex items-baseline justify-between gap-2">
         <h1 className="text-xl font-bold text-slate-900">サンドボックス</h1>
-        <Link to="/" className="text-sm text-slate-500 underline">
+        <Link to="/samples" className="text-sm text-slate-500 underline">
           サンプルを見る
         </Link>
       </header>

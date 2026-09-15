@@ -1,9 +1,10 @@
 import { expect, test } from "@playwright/test";
 
-test("トップページが表示される", async ({ page }) => {
+test("トップページに公式問題の一覧が出る", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "ラダー図トレーニング" })).toBeVisible();
-  await expect(page.getByTestId("schema-version")).toHaveText("schema v1");
+  await expect(page.getByTestId("cleared-count")).toContainText("クリア: 0 / 30 問");
+  await expect(page.getByTestId("problem-selfhold-read-1")).toBeVisible();
 });
 
 test("SPA フォールバック: 未知のパスでもトップが出る", async ({ page }) => {
@@ -62,7 +63,7 @@ test("未ログインでは保護 API が 401", async ({ playwright }) => {
 
 test.describe("シミュレータ", () => {
   test("X0 を押すと Y0 が点灯し、離しても保持される(自己保持)", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/samples");
     const y0 = page.getByTestId("device-Y0");
     await expect(y0).toHaveAttribute("data-on", "false");
 
@@ -78,7 +79,7 @@ test.describe("シミュレータ", () => {
   });
 
   test("ラダー図の接点を直接タップしても操作できる", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/samples");
     const y0 = page.getByTestId("device-Y0");
     // 行 0 / 列 0 の X0 接点
     await page.getByTestId("cell-0-0").click();
@@ -86,7 +87,7 @@ test.describe("シミュレータ", () => {
   });
 
   test("タイマが実時間で進み、3 秒後に自動消灯する", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/samples");
     await page.getByTestId("sample-timer").click();
     const y0 = page.getByTestId("device-Y0");
 
@@ -102,7 +103,7 @@ test.describe("シミュレータ", () => {
   });
 
   test("リセットで全デバイスが初期状態に戻る", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/samples");
     await page.getByTestId("sample-counter").click();
     const y0 = page.getByTestId("device-Y0");
     for (let i = 0; i < 3; i++) {
