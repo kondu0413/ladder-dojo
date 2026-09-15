@@ -4,8 +4,10 @@ import { getAuth, isE2EAuthBypass } from "./auth.js";
 import type { MeDto } from "./dto.js";
 import type { AppBindings } from "./env.js";
 import { optionalUser } from "./middleware/auth.js";
+import { orgRoutes } from "./routes/orgs.js";
 import { problemRoutes } from "./routes/problems.js";
 import { progressRoutes } from "./routes/progress.js";
+import { rankingRoutes } from "./routes/rankings.js";
 import { sandboxRoutes } from "./routes/sandbox.js";
 import { submissionRoutes } from "./routes/submissions.js";
 
@@ -32,6 +34,8 @@ export const app = new Hono<AppBindings>()
   .get("/me", optionalUser, (c) => c.json<MeDto>({ user: c.get("user") ?? null }))
   .route("/progress", progressRoutes)
   .route("/problems", problemRoutes)
+  .route("/orgs", orgRoutes)
+  .route("/rankings", rankingRoutes)
   .route("/sandbox", sandboxRoutes)
   .route("/submissions", submissionRoutes)
   .notFound((c) => c.json({ error: "not_found" } as const, 404))

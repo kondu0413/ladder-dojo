@@ -20,8 +20,11 @@ export type SessionUser = {
   image: string | null;
 };
 
+/** 組織のメンバーシップ(フェーズ3。requireOrgMember / requireOrgAdmin が設定する) */
+export type Membership = { orgId: string; role: "admin" | "member" };
+
 /** Hono のジェネリクスに渡す型 */
 export type AppBindings = {
   Bindings: Env;
-  Variables: { user: SessionUser };
+  Variables: { user: SessionUser; membership: Membership };
 };

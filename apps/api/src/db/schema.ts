@@ -173,10 +173,12 @@ export const postedProblems = sqliteTable(
     /** 投稿者の申告(1〜5)。表示は投票の平均と併記する */
     difficulty: integer("difficulty").notNull(),
     tagsJson: text("tags_json").notNull().default("[]"),
-    /** public = 全体公開 / private = 本人のみ(org はフェーズ3で追加) */
-    visibility: text("visibility", { enum: ["public", "private"] })
+    /** public = 全体公開 / org = 所属組織のみ / private = 本人のみ */
+    visibility: text("visibility", { enum: ["public", "org", "private"] })
       .notNull()
       .default("public"),
+    /** visibility = "org" のときの対象組織 */
+    orgId: text("org_id"),
     likesCount: integer("likes_count").notNull().default(0),
     attemptsCount: integer("attempts_count").notNull().default(0),
     clearsCount: integer("clears_count").notNull().default(0),
@@ -265,6 +267,122 @@ export const postedAttempts = sqliteTable(
   ],
 );
 
+// ---------------------------------------------------------------------------
+// 組織とランキング(フェーズ3、SPEC.md §3.7 / §3.8)
+// ---------------------------------------------------------------------------
+
+/** 組織(会社の教育担当者がメンバーを見守る単位) */
+export const orgs = sqliteTable(
+  "orgs",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [index("orgs_created_by_idx").on(t.createdBy)],
+);
+
+/** 組織のメンバーと権限(admin = 管理者 / member = メンバー) */
+export const orgMembers = sqliteTable(
+  "org_members",
+  {
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    role: text("role", { enum: ["admin", "member"] })
+      .notNull()
+      .default("member"),
+    joinedAt: integer("joined_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.userId] }),
+    // 「自分が所属する組織」を引くための逆引き
+    index("org_members_user_idx").on(t.userId, t.orgId),
+  ],
+);
+
+/** 招待コード。管理者が発行し、コードを知っている人が参加できる */
+export const orgInvites = sqliteTable(
+  "org_invites",
+  {
+    code: text("code").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    maxUses: integer("max_uses").notNull().default(50),
+    uses: integer("uses").notNull().default(0),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [index("org_invites_org_idx").on(t.orgId, t.createdAt)],
+);
+
+/**
+ * 課題の割り当て(§3.8)。
+ * `problemRef` は公式問題の ID か、投稿問題の ID。`kind` でどちらかを示す。
+ * `userId` が null なら組織全員への割り当て。
+ */
+export const assignments = sqliteTable(
+  "assignments",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["official", "posted"] }).notNull(),
+    problemRef: text("problem_ref").notNull(),
+    /** null = 組織全員 */
+    userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
+    note: text("note"),
+    dueAt: integer("due_at", { mode: "timestamp_ms" }),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [
+    index("assignments_org_idx").on(t.orgId, t.createdAt),
+    index("assignments_user_idx").on(t.userId, t.createdAt),
+  ],
+);
+
+/**
+ * ランキングのスナップショット(§3.7)。
+ * 全ユーザーを毎回集計すると D1 の読み取り行数を大量に使うため、
+ * Cron Triggers で定期的に計算してここに書き出す(DECISIONS.md D-010)。
+ * `orgId` が null なら全体ランキング。
+ */
+export const rankingSnapshots = sqliteTable(
+  "ranking_snapshots",
+  {
+    /** weekly / monthly / all */
+    period: text("period", { enum: ["weekly", "monthly", "all"] }).notNull(),
+    /** solved / authored_solved / authored_likes / streak */
+    metric: text("metric", {
+      enum: ["solved", "authored_solved", "authored_likes", "streak"],
+    }).notNull(),
+    /** null = 全体 */
+    orgId: text("org_id").references(() => orgs.id, { onDelete: "cascade" }),
+    rank: integer("rank").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    userName: text("user_name").notNull(),
+    value: integer("value").notNull(),
+    computedAt: integer("computed_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.period, t.metric, t.orgId, t.rank] })],
+);
+
 export const schema = {
   user,
   session,
@@ -279,6 +397,11 @@ export const schema = {
   problemDifficultyVotes,
   problemReports,
   postedAttempts,
+  orgs,
+  orgMembers,
+  orgInvites,
+  assignments,
+  rankingSnapshots,
 };
 
 /** `sql` を import 済みであることを型レベルで保つためのダミー(drizzle-kit の解析用) */

@@ -37,6 +37,13 @@ const protectedRoutes: Array<{ method: string; path: string; body?: unknown }> =
   { method: "DELETE", path: "/api/problems/some-id/like" },
   { method: "PUT", path: "/api/problems/some-id/difficulty", body: { difficulty: 3 } },
   { method: "POST", path: "/api/problems/some-id/report", body: { reason: "x" } },
+  { method: "GET", path: "/api/orgs" },
+  { method: "POST", path: "/api/orgs", body: { name: "org" } },
+  { method: "POST", path: "/api/orgs/join", body: { code: "abcdefghijkl" } },
+  { method: "GET", path: "/api/orgs/some-org" },
+  { method: "POST", path: "/api/orgs/some-org/invites" },
+  { method: "GET", path: "/api/orgs/some-org/stuck" },
+  { method: "GET", path: "/api/orgs/some-org/assignments" },
   { method: "GET", path: "/api/submissions" },
   {
     method: "POST",
@@ -53,6 +60,16 @@ describe("未ログインのアクセス", () => {
     const res = await app.request(path, init, env);
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ error: "unauthorized" });
+  });
+
+  it("全体ランキングは未ログインでも見える(§3.7)", async () => {
+    const res = await app.request("/api/rankings?metric=solved&period=weekly", {}, env);
+    expect(res.status).toBe(200);
+  });
+
+  it("組織内ランキングは未ログインでは 401", async () => {
+    const res = await app.request("/api/rankings?metric=solved&orgId=some-org", {}, env);
+    expect(res.status).toBe(401);
   });
 
   it("投稿問題の一覧と取得は、未ログインでも見える(§3.5)", async () => {

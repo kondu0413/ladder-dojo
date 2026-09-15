@@ -5,11 +5,12 @@ import {
   type TestCase,
   testCasesSchema,
 } from "@ladder-dojo/core";
-import { and, desc, eq, lt, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { Hono } from "hono";
 import { z } from "zod";
 import {
+  orgMembers,
   postedAttempts,
   postedProblems,
   problemDifficultyVotes,
@@ -38,7 +39,9 @@ const publishSchema = z.object({
   }),
   difficulty: z.number().int().min(1).max(5),
   tags: z.array(z.string().min(1).max(30)).max(10).default([]),
-  visibility: z.enum(["public", "private"]).default("public"),
+  visibility: z.enum(["public", "org", "private"]).default("public"),
+  /** visibility = "org" のときに必須。所属組織のみに公開する(§3.8) */
+  orgId: z.string().max(64).optional(),
 });
 
 const listQuerySchema = z.object({
@@ -72,7 +75,19 @@ export const problemRoutes = new Hono<AppBindings>()
     if (mine && me) {
       conditions.push(eq(postedProblems.authorId, me.id));
     } else {
-      conditions.push(eq(postedProblems.visibility, "public"));
+      // 全体公開に加えて、自分が所属する組織に限定公開された問題も見せる(§3.8)
+      const myOrgs = me ? await listMyOrgIds(db, me.id) : [];
+      const publicOnly = eq(postedProblems.visibility, "public");
+      if (myOrgs.length === 0) {
+        conditions.push(publicOnly);
+      } else {
+        const orgScoped = and(
+          eq(postedProblems.visibility, "org"),
+          inArray(postedProblems.orgId, myOrgs),
+        );
+        // drizzle の and()/or() は引数が空だと undefined を返す型なので、念のため畳む
+        conditions.push(orgScoped ? (or(publicOnly, orgScoped) ?? publicOnly) : publicOnly);
+      }
     }
     if (difficulty !== undefined) conditions.push(eq(postedProblems.difficulty, difficulty));
     // LIKE は使わない。SQLite の LIKE パターンには長さ上限(既定 50 バイト)があり、
@@ -124,10 +139,7 @@ export const problemRoutes = new Hono<AppBindings>()
       .where(and(eq(postedProblems.id, c.req.param("id")), eq(postedProblems.hidden, false)))
       .get();
     if (!row) return c.json({ error: "not_found" } as const, 404);
-    // private は本人だけ(D-017 方針 5)
-    if (row.visibility === "private" && row.authorId !== me?.id) {
-      return c.json({ error: "not_found" } as const, 404);
-    }
+    if (!(await canView(db, row, me?.id))) return c.json({ error: "not_found" } as const, 404);
 
     let cleared = false;
     let liked = false;
@@ -188,6 +200,18 @@ export const problemRoutes = new Hono<AppBindings>()
     }
 
     const db = drizzle(c.env.DB);
+
+    // 組織限定で公開するなら、その組織のメンバーでなければならない(D-017 方針 6)
+    if (body.data.visibility === "org") {
+      if (!body.data.orgId) return c.json({ error: "invalid_body" } as const, 400);
+      const membership = await db
+        .select({ orgId: orgMembers.orgId })
+        .from(orgMembers)
+        .where(and(eq(orgMembers.orgId, body.data.orgId), eq(orgMembers.userId, c.var.user.id)))
+        .get();
+      if (!membership) return c.json({ error: "not_found" } as const, 404);
+    }
+
     const now = new Date();
     const row = await db
       .insert(postedProblems)
@@ -201,6 +225,7 @@ export const problemRoutes = new Hono<AppBindings>()
         difficulty: body.data.difficulty,
         tagsJson: JSON.stringify(body.data.tags),
         visibility: body.data.visibility,
+        orgId: body.data.visibility === "org" ? (body.data.orgId ?? null) : null,
         createdAt: now,
         updatedAt: now,
       })
@@ -410,8 +435,35 @@ async function visibleProblem(db: Db, id: string, userId: string) {
     .where(and(eq(postedProblems.id, id), eq(postedProblems.hidden, false)))
     .get();
   if (!row) return undefined;
-  if (row.visibility === "private" && row.authorId !== userId) return undefined;
-  return row;
+  return (await canView(db, row, userId)) ? row : undefined;
+}
+
+/** 可視性の判定(D-017 方針 5): public は誰でも / org は所属メンバー / private は本人だけ */
+async function canView(
+  db: Db,
+  row: typeof postedProblems.$inferSelect,
+  userId: string | undefined,
+): Promise<boolean> {
+  if (row.authorId === userId) return true;
+  if (row.visibility === "public") return true;
+  if (row.visibility === "private") return false;
+  if (!userId || !row.orgId) return false;
+  const membership = await db
+    .select({ orgId: orgMembers.orgId })
+    .from(orgMembers)
+    .where(and(eq(orgMembers.orgId, row.orgId), eq(orgMembers.userId, userId)))
+    .get();
+  return Boolean(membership);
+}
+
+/** 自分が所属する組織の ID(一覧の絞り込みに使う) */
+async function listMyOrgIds(db: Db, userId: string): Promise<string[]> {
+  const rows = await db
+    .select({ orgId: orgMembers.orgId })
+    .from(orgMembers)
+    .where(eq(orgMembers.userId, userId))
+    .limit(50);
+  return rows.map((r) => r.orgId);
 }
 
 export type VerifyFailure = {
@@ -455,6 +507,7 @@ function toSummary(row: typeof postedProblems.$inferSelect): PostedProblemSummar
     difficultyVotes: votes,
     tags: JSON.parse(row.tagsJson) as string[],
     visibility: row.visibility,
+    orgId: row.orgId,
     likes: row.likesCount,
     attempts: row.attemptsCount,
     clears: row.clearsCount,

@@ -360,6 +360,95 @@ describe("一覧と取得", () => {
   });
 });
 
+describe("組織限定の公開(§3.8)", () => {
+  async function orgWithMember() {
+    const admin = await signUp("orgadmin");
+    const member = await signUp("orgmember");
+    const created = await app.request(
+      "/api/orgs",
+      {
+        method: "POST",
+        headers: jsonHeaders(admin),
+        body: JSON.stringify({ name: "公開範囲テスト" }),
+      },
+      env,
+    );
+    const orgId = ((await created.json()) as { org: { id: string } }).org.id;
+    const invited = await app.request(
+      `/api/orgs/${orgId}/invites`,
+      { method: "POST", headers: authHeaders(admin) },
+      env,
+    );
+    const code = ((await invited.json()) as { invite: { code: string } }).invite.code;
+    await app.request(
+      "/api/orgs/join",
+      { method: "POST", headers: jsonHeaders(member), body: JSON.stringify({ code }) },
+      env,
+    );
+    return { admin, member, orgId };
+  }
+
+  it("組織のメンバーだけが、組織限定の問題を見られる", async () => {
+    const { admin, member, orgId } = await orgWithMember();
+    const outsider = await signUp("outsider");
+    const id = await publishedId(admin, {
+      title: "組織限定の問題",
+      visibility: "org",
+      orgId,
+    });
+
+    // メンバーは取得できる
+    expect(
+      (await app.request(`/api/problems/${id}`, { headers: authHeaders(member) }, env)).status,
+    ).toBe(200);
+    // 組織外は 404
+    expect(
+      (await app.request(`/api/problems/${id}`, { headers: authHeaders(outsider) }, env)).status,
+    ).toBe(404);
+    // 未ログインも 404
+    expect((await app.request(`/api/problems/${id}`, {}, env)).status).toBe(404);
+  });
+
+  it("組織限定の問題は、一般の一覧には出ずメンバーの一覧には出る", async () => {
+    const { admin, member, orgId } = await orgWithMember();
+    const outsider = await signUp("outsider");
+    const id = await publishedId(admin, { title: "一覧テスト組織限定", visibility: "org", orgId });
+
+    const asOutsider = await app.request("/api/problems", { headers: authHeaders(outsider) }, env);
+    expect(
+      ((await asOutsider.json()) as { problems: Array<{ id: string }> }).problems.map((p) => p.id),
+    ).not.toContain(id);
+
+    const asMember = await app.request("/api/problems", { headers: authHeaders(member) }, env);
+    expect(
+      ((await asMember.json()) as { problems: Array<{ id: string }> }).problems.map((p) => p.id),
+    ).toContain(id);
+
+    // 組織の問題一覧にも出る
+    const orgList = await app.request(
+      `/api/orgs/${orgId}/problems`,
+      { headers: authHeaders(member) },
+      env,
+    );
+    expect(
+      ((await orgList.json()) as { problems: Array<{ id: string }> }).problems.map((p) => p.id),
+    ).toContain(id);
+  });
+
+  it("所属していない組織を指定して投稿することはできない", async () => {
+    const { orgId } = await orgWithMember();
+    const outsider = await signUp("outsider");
+    const res = await publish(outsider, { visibility: "org", orgId });
+    expect(res.status).toBe(404);
+  });
+
+  it("visibility=org なのに組織 ID が無いと 400", async () => {
+    const author = await signUp();
+    const res = await publish(author, { visibility: "org" });
+    expect(res.status).toBe(400);
+  });
+});
+
 describe("クリア率(§3.6)", () => {
   it("挑戦者数とクリア者数をユーザー単位で数える", async () => {
     const author = await signUp("author");
