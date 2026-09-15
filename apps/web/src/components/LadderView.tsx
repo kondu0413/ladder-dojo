@@ -182,6 +182,7 @@ function CellView({
           x={x + CELL_W / 2}
           y={y + 16}
           textAnchor="middle"
+          data-testid={`cell-text-${row}-${col}`}
           className="fill-slate-700 text-[13px] font-medium"
         >
           {el.device}
