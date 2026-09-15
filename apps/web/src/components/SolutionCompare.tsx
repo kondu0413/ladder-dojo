@@ -1,5 +1,6 @@
-import { type Circuit, circuitMetrics, type Problem } from "@ladder-dojo/core";
+import type { Circuit, Problem } from "@ladder-dojo/core";
 import { labelMap } from "../lib/describe.js";
+import { circuitMetricsRows } from "../lib/metrics-view.js";
 import { LadderView } from "./LadderView.js";
 
 export type SolutionCompareProps = {
@@ -13,15 +14,7 @@ export type SolutionCompareProps = {
  */
 export function SolutionCompare({ problem, yours }: SolutionCompareProps) {
   const labels = labelMap(problem.deviceLabels);
-  const mine = circuitMetrics(yours);
-  const model = circuitMetrics(problem.solution);
-
-  const rows = [
-    { label: "ラング数", mine: mine.rungs, model: model.rungs },
-    { label: "接点の数", mine: mine.contacts, model: model.contacts },
-    { label: "コイルの数", mine: mine.coils, model: model.coils },
-    { label: "使ったマス", mine: mine.cells, model: model.cells },
-  ];
+  const rows = circuitMetricsRows(yours, problem.solution);
   const leaner = rows.some((r) => r.mine > r.model);
 
   return (

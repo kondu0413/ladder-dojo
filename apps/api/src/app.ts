@@ -36,7 +36,17 @@ export const app = new Hono<AppBindings>()
   .route("/submissions", submissionRoutes)
   .notFound((c) => c.json({ error: "not_found" } as const, 404))
   .onError((err, c) => {
-    console.error("unhandled error", err);
+    // クライアントが画面遷移や入力の切り替えでリクエストを中断した場合、
+    // 途中の D1 クエリも一緒に中断される。レスポンスは誰も受け取らないので、
+    // 障害としては扱わない(ログを汚さない)
+    if (!c.req.raw.signal.aborted) {
+      // Drizzle のエラーメッセージには SQL とバインド値(利用者の入力)が入るので、
+      // ログには原因だけを出す(Workers Logs にユーザーの検索語を残さない)
+      const cause = err instanceof Error && err.cause instanceof Error ? err.cause.message : "";
+      console.error(
+        `unhandled error on ${c.req.method} ${new URL(c.req.url).pathname}: ${cause || (err instanceof Error ? err.name : "unknown")}`,
+      );
+    }
     return c.json({ error: "internal_error" } as const, 500);
   });
 

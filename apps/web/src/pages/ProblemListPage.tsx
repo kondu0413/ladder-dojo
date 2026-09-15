@@ -26,9 +26,14 @@ export function ProblemListPage() {
       <header className="flex flex-col gap-1">
         <div className="flex items-baseline justify-between gap-2">
           <h1 className="text-xl font-bold text-slate-900">ラダー図トレーニング</h1>
-          <Link to="/sandbox" className="text-sm text-slate-500 underline">
-            サンドボックス
-          </Link>
+          <div className="flex shrink-0 gap-3 text-sm text-slate-500">
+            <Link to="/community" className="underline">
+              みんなの問題
+            </Link>
+            <Link to="/sandbox" className="underline">
+              サンドボックス
+            </Link>
+          </div>
         </div>
         <p className="text-sm text-slate-600">
           「読む」→「直す」→「書く」の順に進みます。ログインしなくても解けます。

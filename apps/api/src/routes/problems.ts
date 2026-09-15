@@ -5,7 +5,7 @@ import {
   type TestCase,
   testCasesSchema,
 } from "@ladder-dojo/core";
-import { and, desc, eq, like, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, lt, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -75,11 +75,16 @@ export const problemRoutes = new Hono<AppBindings>()
       conditions.push(eq(postedProblems.visibility, "public"));
     }
     if (difficulty !== undefined) conditions.push(eq(postedProblems.difficulty, difficulty));
-    if (tag) conditions.push(like(postedProblems.tagsJson, `%"${tag}"%`));
+    // LIKE は使わない。SQLite の LIKE パターンには長さ上限(既定 50 バイト)があり、
+    // 日本語 17 文字ほどの検索語で「LIKE or GLOB pattern too complex」で落ちる。
+    // また `%` や `_` を含む検索語をワイルドカードとして解釈してしまう。
+    // instr() は上限もワイルドカードも無い単純な部分一致なので、こちらを使う。
+    if (tag) conditions.push(sql`instr(${postedProblems.tagsJson}, ${`"${tag}"`}) > 0`);
     if (q) {
-      const pattern = `%${q}%`;
-      const match = or(like(postedProblems.title, pattern), like(postedProblems.spec, pattern));
-      if (match) conditions.push(match);
+      const needle = q.toLowerCase();
+      conditions.push(
+        sql`(instr(lower(${postedProblems.title}), ${needle}) > 0 or instr(lower(${postedProblems.spec}), ${needle}) > 0)`,
+      );
     }
     // 新着順のときだけ、created_at を使ったカーソルで続きを読む
     if (cursor && sort === "new") {

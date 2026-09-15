@@ -1,12 +1,16 @@
 import type {
   ApiErrorDto,
   MeDto,
+  PostedProblemDetailResponseDto,
+  PostedProblemListDto,
+  PostedProblemOneDto,
   ProgressDto,
   ProgressListDto,
   ProgressMergeDto,
   ProgressOneDto,
   SandboxListDto,
   SandboxOneDto,
+  SolutionFailedDto,
   SubmissionOneDto,
 } from "@ladder-dojo/api/dto";
 import type { Circuit, TestCase } from "@ladder-dojo/core";
@@ -20,16 +24,26 @@ import type { Circuit, TestCase } from "@ladder-dojo/core";
  */
 
 export type { MeDto, ProgressDto, SandboxListDto, SandboxOneDto };
+export type PostedProblemSummary = PostedProblemListDto["problems"][number];
+export type PostedProblemDetail = PostedProblemDetailResponseDto["problem"];
+export type SolutionFailure = SolutionFailedDto["failures"][number];
 export type SandboxSummary = SandboxListDto["circuits"][number];
 
 export class ApiError extends Error {
   constructor(
     readonly status: number,
-    readonly code: ApiErrorDto["error"] | "unknown",
+    readonly code: ApiErrorDto["error"] | "solution_failed" | "unknown",
+    /** 投稿時に模範解答が通らなかった場合の内訳 */
+    readonly failures?: SolutionFailure[],
   ) {
     super(`API エラー: ${status} ${code}`);
     this.name = "ApiError";
   }
+}
+
+/** 画面遷移や入力の切り替えで不要になったリクエストを中断したときのエラー */
+export function isAborted(err: unknown): boolean {
+  return err instanceof DOMException && err.name === "AbortError";
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -41,8 +55,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     },
   });
   if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as ApiErrorDto | null;
-    throw new ApiError(res.status, body?.error ?? "unknown");
+    // 422 は投稿時の検証失敗で、通常のエラーとは形が違う(failures を持つ)
+    const body = (await res.json().catch(() => null)) as ApiErrorDto | SolutionFailedDto | null;
+    const failures = body && "failures" in body ? body.failures : undefined;
+    throw new ApiError(res.status, body?.error ?? "unknown", failures);
   }
   return (await res.json()) as T;
 }
@@ -80,4 +96,63 @@ export const api = {
 
   submit: (input: { problemId: string; circuit: Circuit; passed: boolean }) =>
     request<SubmissionOneDto>("/submissions", { method: "POST", body: JSON.stringify(input) }),
+
+  // --- 投稿問題(フェーズ2、SPEC.md §3.6)---
+
+  listPosted: (
+    params: {
+      sort?: "new" | "likes" | "difficulty";
+      tag?: string;
+      q?: string;
+      difficulty?: number;
+      cursor?: string;
+      mine?: boolean;
+    },
+    signal?: AbortSignal,
+  ) => {
+    const search = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== "") search.set(key, String(value));
+    }
+    const qs = search.toString();
+    return request<PostedProblemListDto>(
+      `/problems${qs ? `?${qs}` : ""}`,
+      signal ? { signal } : undefined,
+    );
+  },
+
+  getPosted: (id: string) => request<PostedProblemDetailResponseDto>(`/problems/${id}`),
+
+  publishProblem: (input: {
+    title: string;
+    spec: string;
+    circuit: Circuit;
+    testCases: TestCase[];
+    difficulty: number;
+    tags: string[];
+    visibility: "public" | "private";
+  }) => request<PostedProblemOneDto>("/problems", { method: "POST", body: JSON.stringify(input) }),
+
+  deletePosted: (id: string) => request<{ deleted: true }>(`/problems/${id}`, { method: "DELETE" }),
+
+  recordPostedAttempt: (id: string, passed: boolean) =>
+    request<PostedProblemOneDto>(`/problems/${id}/attempts`, {
+      method: "POST",
+      body: JSON.stringify({ passed }),
+    }),
+
+  likePosted: (id: string, liked: boolean) =>
+    request<{ liked: boolean }>(`/problems/${id}/like`, { method: liked ? "POST" : "DELETE" }),
+
+  votePostedDifficulty: (id: string, difficulty: number) =>
+    request<PostedProblemOneDto>(`/problems/${id}/difficulty`, {
+      method: "PUT",
+      body: JSON.stringify({ difficulty }),
+    }),
+
+  reportPosted: (id: string, reason: string) =>
+    request<{ reported: true; hidden: boolean }>(`/problems/${id}/report`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
 };
