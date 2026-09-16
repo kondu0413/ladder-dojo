@@ -21,7 +21,16 @@
 const CACHE = "ladder-dojo-v1";
 
 /** 最初から入れておくもの。これだけあれば SPA は起動できる */
-const PRECACHE = ["/", "/index.html", "/manifest.webmanifest", "/icon.svg"];
+const PRECACHE = [
+  "/",
+  "/index.html",
+  "/manifest.webmanifest",
+  "/icon.svg",
+  // ホーム画面のアイコン。圏外で追加されても出るように先に貯めておく
+  "/apple-touch-icon-180.png",
+  "/icon-192.png",
+  "/icon-512.png",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
