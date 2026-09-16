@@ -6,7 +6,7 @@ import type {
   DeviceId,
   PowerMap,
 } from "@ladder-dojo/core";
-import { cellKey, cellMap } from "@ladder-dojo/core";
+import { cellKey, cellMap, describeCircuit } from "@ladder-dojo/core";
 import { useMemo } from "react";
 import {
   CELL_H,
@@ -59,6 +59,17 @@ export function LadderView({
   highlight,
 }: LadderViewProps) {
   const cells = useMemo(() => cellMap(circuit), [circuit]);
+  /**
+   * 読み上げ用の文章(改善候補 14 / S-018)。
+   *
+   * SVG は線と丸の集まりなので、`aria-label="ラダー図"` だけだと
+   * **目で見ない人には回路の中身が何も伝わらない**。core で組み立てた
+   * 行ごとの説明をここに載せる。動かしているときは通電状態も入る。
+   */
+  const description = useMemo(
+    () => describeCircuit(circuit, { deviceLabels, power }),
+    [circuit, deviceLabels, power],
+  );
   const highlighted = useMemo(
     () => new Set((highlight ?? []).map((c) => cellKey(c.row, c.col))),
     [highlight],
@@ -75,9 +86,9 @@ export function LadderView({
       // 画面幅に合わせて縮めるが、1 列 62px を下回ると読めなくなるのでそこからは横スクロールにする
       style={{ width: "100%", height: "auto", minWidth: circuit.cols * 62 }}
       role="img"
-      aria-label="ラダー図"
+      aria-label={description}
     >
-      <title>ラダー図</title>
+      <title>{description}</title>
       <line x1={leftX} y1={4} x2={leftX} y2={height - 4} stroke={RAIL} strokeWidth={4} />
       <line x1={rightX} y1={4} x2={rightX} y2={height - 4} stroke={RAIL} strokeWidth={4} />
 
@@ -117,8 +128,21 @@ type CellViewProps = {
   isHighlighted: boolean;
 };
 
-function leadColor(on: boolean): string {
-  return on ? LIVE : DEAD;
+/**
+ * リード線(要素の左右に伸びる横線)の描き方。
+ *
+ * **色だけに頼らない**(改善候補 14 / S-018)。ここは元々、
+ * 「電圧は来ているが流れていない」薄い橙と「無電圧」の灰色が、
+ * 同じ太さの実線で色だけ違っていた。色の見分けがつかないと区別できない。
+ *
+ * - 電流が流れている: 太い実線
+ * - 電圧は来ているが、この要素を流れていない: **破線**
+ * - 無電圧: 細い実線
+ */
+function leadProps(on: boolean, flowing: boolean) {
+  if (flowing) return { stroke: FLOW, strokeWidth: 3.5 };
+  if (on) return { stroke: LIVE, strokeWidth: 2, strokeDasharray: "5 3" };
+  return { stroke: DEAD, strokeWidth: 2 };
 }
 
 function CellView({
@@ -179,14 +203,7 @@ function CellView({
       )}
 
       {el?.type === "wire" && (
-        <line
-          x1={x}
-          y1={y0}
-          x2={x + CELL_W}
-          y2={y0}
-          stroke={flowing ? FLOW : leadColor(leftOn)}
-          strokeWidth={flowing ? 3.5 : 2}
-        />
+        <line x1={x} y1={y0} x2={x + CELL_W} y2={y0} {...leadProps(leftOn, flowing)} />
       )}
       {el?.type === "contact" && (
         <Contact x={x} y={y0} el={el} flowing={flowing} leftOn={leftOn} rightOn={rightOn} />
@@ -272,22 +289,8 @@ function Contact({
 
   return (
     <g>
-      <line
-        x1={x}
-        y1={y}
-        x2={x + half - gap}
-        y2={y}
-        stroke={flowing ? FLOW : leadColor(leftOn)}
-        strokeWidth={w}
-      />
-      <line
-        x1={x + half + gap}
-        y1={y}
-        x2={x + CELL_W}
-        y2={y}
-        stroke={flowing ? FLOW : leadColor(rightOn)}
-        strokeWidth={w}
-      />
+      <line x1={x} y1={y} x2={x + half - gap} y2={y} {...leadProps(leftOn, flowing)} />
+      <line x1={x + half + gap} y1={y} x2={x + CELL_W} y2={y} {...leadProps(rightOn, flowing)} />
       <line
         x1={x + half - gap}
         y1={barTop}
@@ -356,14 +359,7 @@ function Coil({
             : "";
   return (
     <g>
-      <line
-        x1={x}
-        y1={y}
-        x2={x + half - gap}
-        y2={y}
-        stroke={flowing ? FLOW : leadColor(leftOn)}
-        strokeWidth={w}
-      />
+      <line x1={x} y1={y} x2={x + half - gap} y2={y} {...leadProps(leftOn, flowing)} />
       <line x1={x + half + gap} y1={y} x2={x + CELL_W} y2={y} stroke={color} strokeWidth={w} />
       <path
         d={`M ${x + half - gap} ${y - 13} A 15 15 0 0 0 ${x + half - gap} ${y + 13}`}
