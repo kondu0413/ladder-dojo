@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from "react";
 import { Route, Routes } from "react-router";
-import { ProgressProvider } from "./lib/progress-context.jsx";
+import { ProgressProvider, useProgress } from "./lib/progress-context.jsx";
+import { LandingPage } from "./pages/LandingPage.js";
 import { ProblemListPage } from "./pages/ProblemListPage.js";
 
 /**
@@ -67,7 +68,8 @@ export function App() {
     <ProgressProvider>
       <Suspense fallback={<PageLoading />}>
         <Routes>
-          <Route path="/" element={<ProblemListPage />} />
+          <Route path="/" element={<Home />} />
+          <Route path="/problems" element={<ProblemListPage />} />
           <Route path="/problems/:id" element={<ProblemPage />} />
           <Route path="/community" element={<CommunityListPage />} />
           <Route path="/community/:id" element={<CommunityProblemPage />} />
@@ -76,11 +78,27 @@ export function App() {
           <Route path="/rankings" element={<RankingPage />} />
           <Route path="/sandbox" element={<SandboxPage />} />
           <Route path="/samples" element={<SimulatorDemoPage />} />
-          <Route path="*" element={<ProblemListPage />} />
+          <Route path="*" element={<Home />} />
         </Routes>
       </Suspense>
     </ProgressProvider>
   );
+}
+
+/**
+ * トップ(S-021)。
+ *
+ * **未ログインなら紹介の画面、ログイン済みなら問題一覧**。初めて来た人に
+ * いきなり問題の一覧を出しても何のアプリか分からないが、毎日使う人に
+ * 毎回紹介を見せるのも邪魔なので、入口で分ける。
+ *
+ * セッションの確認中は**どちらにも倒さない**。ここで未ログインと決めると、
+ * ログイン済みの人が一瞬だけ紹介の画面を見ることになる(S-007 と同じ考え方)。
+ */
+function Home() {
+  const { user, loading } = useProgress();
+  if (loading) return <PageLoading />;
+  return user ? <ProblemListPage /> : <LandingPage />;
 }
 
 function PageLoading() {

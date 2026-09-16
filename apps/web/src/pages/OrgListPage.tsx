@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router";
+import { AppShell } from "../components/AppShell.js";
 import { AuthBar } from "../components/AuthBar.js";
+import { PageHeader } from "../components/ui.js";
 import { ApiError, api, type OrgSummary } from "../lib/api.js";
 import { useProgress } from "../lib/progress-context.jsx";
 
@@ -64,24 +66,14 @@ export function OrgListPage() {
   };
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-screen-sm flex-col gap-4 px-4 py-6">
-      <header className="flex flex-col gap-2">
-        <div className="flex items-baseline justify-between gap-2">
-          <h1 className="text-xl font-bold text-slate-900">組織</h1>
-          <div className="flex gap-3 text-sm text-slate-500">
-            <Link to="/" className="underline">
-              公式問題
-            </Link>
-            <Link to="/rankings" className="underline">
-              ランキング
-            </Link>
-          </div>
-        </div>
-        <p className="text-sm text-slate-600">
-          会社やチームで使う単位です。管理者はメンバーの学習状況を見て、課題を割り当てられます。
-        </p>
+    <AppShell width="wide">
+      <PageHeader
+        title="組織"
+        lead="会社やチームで使う単位です。管理者はメンバーの学習状況を見て、課題を割り当てられます。"
+      />
+      <div className="mb-6">
         <AuthBar />
-      </header>
+      </div>
 
       {!user && (
         <p className="rounded-lg bg-slate-100 px-3 py-3 text-sm text-slate-600">
@@ -180,6 +172,6 @@ export function OrgListPage() {
           </section>
         </>
       )}
-    </main>
+    </AppShell>
   );
 }

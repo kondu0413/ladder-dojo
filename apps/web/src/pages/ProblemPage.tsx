@@ -8,6 +8,7 @@ import {
 } from "@ladder-dojo/core";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
+import { AppShell } from "../components/AppShell.js";
 import { CommonMistakes } from "../components/CommonMistakes.js";
 import { DevicePanel } from "../components/DevicePanel.js";
 import { DiagnosisPanel } from "../components/DiagnosisPanel.js";
@@ -16,6 +17,7 @@ import { LadderEditor } from "../components/LadderEditor.js";
 import { LadderView } from "../components/LadderView.js";
 import { SimulatorControls } from "../components/SimulatorControls.js";
 import { SolutionCompare } from "../components/SolutionCompare.js";
+import { Badge, Card, PageHeader } from "../components/ui.js";
 import { useDiagnosis } from "../hooks/useDiagnosis.js";
 import { useSimulator } from "../hooks/useSimulator.js";
 import { labelMap } from "../lib/describe.js";
@@ -28,34 +30,30 @@ export function ProblemPage() {
 
   if (!problem) {
     return (
-      <main className="mx-auto flex min-h-dvh max-w-screen-sm flex-col gap-4 px-4 py-6">
+      <AppShell width="narrow">
         <p className="text-slate-700">問題が見つかりませんでした。</p>
-        <Link to="/" className="text-sm text-slate-500 underline">
+        <Link to="/problems" className="text-sm text-slate-500 underline">
           一覧に戻る
         </Link>
-      </main>
+      </AppShell>
     );
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-screen-sm flex-col gap-4 px-4 py-6">
-      <header className="flex flex-col gap-1">
-        <Link to="/" className="text-sm text-slate-500 underline">
-          ← 問題一覧
-        </Link>
-        <h1 className="text-lg font-bold text-slate-900">{problem.title}</h1>
-        <p className="text-xs text-slate-500">
-          {STAGE_LABELS[problem.stage]} ・ {MODE_LABELS[problem.mode]} ・ 難易度{" "}
-          {problem.difficulty}
-        </p>
-      </header>
+    <AppShell width="narrow">
+      <PageHeader title={problem.title} back={{ to: "/problems", label: "問題一覧" }} />
+      <div className="mb-5 flex flex-wrap gap-1.5">
+        <Badge>{STAGE_LABELS[problem.stage]}</Badge>
+        <Badge tone="blue">{MODE_LABELS[problem.mode]}</Badge>
+        <Badge>難易度 {problem.difficulty}</Badge>
+      </div>
 
-      <p className="whitespace-pre-wrap rounded-lg bg-slate-100 px-3 py-3 text-sm text-slate-700">
-        {problem.spec}
-      </p>
+      <Card className="mb-5 p-5">
+        <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{problem.spec}</p>
+      </Card>
 
       {problem.mode === "read" ? <ReadMode problem={problem} /> : <BuildMode problem={problem} />}
-    </main>
+    </AppShell>
   );
 }
 
@@ -125,7 +123,7 @@ function ReadMode({ problem }: { problem: Problem }) {
               ? "次の問題に進みましょう。"
               : "解説を読んで、実際に動かして確かめてみてください。もう一度開き直せばやり直せます。"}
           </p>
-          <Link to="/" className="mt-2 inline-block underline">
+          <Link to="/problems" className="mt-2 inline-block underline">
             問題一覧に戻る
           </Link>
         </div>
@@ -172,7 +170,7 @@ function ReadQuestionView({
                 data-state={state}
                 disabled={answered}
                 onClick={() => onChoose(i)}
-                className={`w-full rounded-xl border px-3 py-3 text-left text-sm ${
+                className={`w-full rounded-xl border px-4 py-3.5 text-left text-sm font-medium transition ${
                   state === "answer"
                     ? "border-emerald-400 bg-emerald-50 text-emerald-900"
                     : state === "wrong"

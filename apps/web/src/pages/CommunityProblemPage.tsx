@@ -11,6 +11,7 @@ import {
 } from "@ladder-dojo/core";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
+import { AppShell } from "../components/AppShell.js";
 import { CommonMistakes } from "../components/CommonMistakes.js";
 import { DevicePanel } from "../components/DevicePanel.js";
 import { DiagnosisPanel } from "../components/DiagnosisPanel.js";
@@ -76,7 +77,7 @@ export function CommunityProblemPage() {
 
   if (error) {
     return (
-      <main className="mx-auto flex min-h-dvh max-w-screen-sm flex-col gap-4 px-4 py-6">
+      <AppShell width="narrow">
         <p
           data-testid="problem-error"
           className="rounded-lg bg-red-50 px-3 py-3 text-sm text-red-700"
@@ -86,15 +87,15 @@ export function CommunityProblemPage() {
         <Link to="/community" className="text-sm text-slate-500 underline">
           みんなの問題に戻る
         </Link>
-      </main>
+      </AppShell>
     );
   }
 
   if (!problem) {
     return (
-      <main className="mx-auto flex min-h-dvh max-w-screen-sm flex-col px-4 py-6">
+      <AppShell width="narrow">
         <p className="text-sm text-slate-500">読み込み中…</p>
-      </main>
+      </AppShell>
     );
   }
 
@@ -173,7 +174,7 @@ export function CommunityProblemPage() {
   const solution = problem.solution ? circuitSchema.safeParse(problem.solution) : undefined;
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-screen-sm flex-col gap-4 px-4 py-6">
+    <AppShell width="narrow">
       <header className="flex flex-col gap-1">
         <Link to="/community" className="text-sm text-slate-500 underline">
           ← みんなの問題
@@ -324,7 +325,7 @@ export function CommunityProblemPage() {
           </div>
         </div>
       </section>
-    </main>
+    </AppShell>
   );
 }
 

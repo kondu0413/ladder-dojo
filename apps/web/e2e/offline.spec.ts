@@ -98,7 +98,7 @@ test("2 回目の訪問からオフラインでも公式問題を解ける", asy
 });
 
 test("オフラインだと一覧に案内が出て、つながると消える", async ({ page, context }) => {
-  await activateServiceWorker(page, "/");
+  await activateServiceWorker(page, "/problems");
   await expect(page.getByTestId("offline-notice")).toHaveCount(0);
 
   await context.setOffline(true);
@@ -114,7 +114,7 @@ test("オフラインだと一覧に案内が出て、つながると消える",
 test("画面ごとに分けた JS は、裏で取りに行って貯まる(分割してもオフラインで動く)", async ({
   page,
 }) => {
-  await activateServiceWorker(page, "/");
+  await activateServiceWorker(page, "/problems");
   // 一度も開いていない画面のぶんも貯まっている。
   // 読み取りごと繰り返す(1 回読んだ結果を後から確かめると、取り込み途中を掴むことがある)
   await expect
@@ -126,7 +126,7 @@ test("画面ごとに分けた JS は、裏で取りに行って貯まる(分割
 });
 
 test("一度も開いていない画面も、オフラインで開ける", async ({ page, context }) => {
-  await activateServiceWorker(page, "/");
+  await activateServiceWorker(page, "/problems");
 
   await context.setOffline(true);
   try {
