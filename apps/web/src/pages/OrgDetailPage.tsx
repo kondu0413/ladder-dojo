@@ -163,7 +163,7 @@ export function OrgDetailPage() {
         <AssignmentsPanel orgId={id} isAdmin={isAdmin} members={detail.members} />
       )}
 
-      {tab === "matrix" && isAdmin && <ProgressMatrix orgId={id} />}
+      {tab === "matrix" && isAdmin && <ProgressMatrix orgId={id} orgName={detail.org.name} />}
 
       {tab === "stuck" && isAdmin && <StuckPanel orgId={id} />}
     </Shell>
