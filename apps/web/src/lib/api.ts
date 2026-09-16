@@ -220,7 +220,14 @@ export const api = {
 
   createAssignment: (
     orgId: string,
-    input: { kind: "official" | "posted"; problemRef: string; userId?: string; note?: string },
+    input: {
+      kind: "official" | "posted";
+      problemRef: string;
+      userId?: string;
+      /** ISO 8601。省略すると期限なし */
+      dueAt?: string;
+      note?: string;
+    },
   ) =>
     request<{ assignment: Assignment }>(`/orgs/${orgId}/assignments`, {
       method: "POST",

@@ -108,6 +108,45 @@ test("管理者はメンバーの学習状況とつまずきを見られる", as
   await expect(page.getByTestId("stuck-selfhold-fix-1")).toContainText("1 人");
 });
 
+test("課題に期限を付けられ、達成率が出る", async ({ page, browser }) => {
+  await signUp(page, "admin");
+  const orgName = unique("期限テスト");
+  const code = await createOrgWithInvite(page, orgName);
+
+  const ctx = await browser.newContext({ baseURL: BASE_URL });
+  const member = await ctx.newPage();
+  await signUp(member, "rokuro");
+  await member.goto("/orgs");
+  await member.getByTestId("org-code").fill(code);
+  await member.getByTestId("org-join").click();
+  await expect(member.getByTestId("org-message")).toContainText("参加しました");
+
+  // メンバーが 1 問クリアする
+  await member.goto("/problems/selfhold-read-0");
+  await member.getByTestId("choice-0").click();
+  await member.getByTestId("next-question").click();
+  const cleared = waitForPost(member, ATTEMPTS);
+  await member.getByTestId("choice-1").click();
+  await expect(member.getByTestId("read-complete")).toHaveAttribute("data-cleared", "true");
+  await cleared;
+  await ctx.close();
+
+  // 管理者が期限つきで割り当てる(過ぎている日付にして「期限切れ」を確かめる)
+  await page.reload();
+  await page.getByTestId("org-tab-assignments").click();
+  await page.getByTestId("assign-problem").selectOption("selfhold-read-0");
+  await page.getByTestId("assign-due").fill("2020-01-01");
+  await page.getByTestId("assign-submit").click();
+  await expect(page.getByTestId("assignment-message")).toContainText("割り当てました");
+
+  const item = page.getByTestId("assignment-list").getByRole("listitem").first();
+  await expect(item.locator('[data-testid^="due-"]')).toHaveAttribute("data-overdue", "true");
+  await expect(item.locator('[data-testid^="due-"]')).toContainText("期限切れ");
+  // 2 人中 1 人がクリア済み
+  await expect(item.locator('[data-testid^="achievement-"]')).toContainText("クリア 1");
+  await expect(item.locator('[data-testid^="achievement-"]')).toContainText("全 2 人");
+});
+
 test("管理者は課題を割り当てられ、メンバーに見える", async ({ page, browser }) => {
   await signUp(page, "admin");
   const orgName = unique("課題テスト");
