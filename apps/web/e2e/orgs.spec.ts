@@ -12,7 +12,10 @@ function unique(base: string): string {
 }
 
 async function signUp(page: Page, name = "user"): Promise<void> {
-  const email = `${name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.test`;
+  // 表示名はそのまま使うが、メールアドレスには英数字だけを入れる
+  // (表示名に記号を仕込むテストがあるため)
+  const local = name.replaceAll(/[^a-z0-9]/gi, "") || "user";
+  const email = `${local}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.test`;
   const res = await page.request.post("/api/auth/sign-up/email", {
     data: { email, password: "correct-horse-battery", name },
   });
@@ -391,4 +394,57 @@ test("メンバーには一覧表のタブが出ない", async ({ page, browser 
   await expect(member.getByTestId("org-tab-assignments")).toBeVisible();
   await expect(member.getByTestId("org-tab-matrix")).toHaveCount(0);
   await ctx.close();
+});
+
+test("管理者は進捗を CSV で保存できる", async ({ page, browser }) => {
+  await signUp(page, "admin");
+  const orgName = unique("CSV テスト");
+  const code = await createOrgWithInvite(page, orgName);
+
+  const ctx = await browser.newContext({ baseURL: BASE_URL });
+  const member = await ctx.newPage();
+  // 表示名に数式の書き出しを仕込んでおく。Excel で実行されないことを確かめる
+  await signUp(member, "=1+1");
+  await member.goto("/orgs");
+  await member.getByTestId("org-code").fill(code);
+  await member.getByTestId("org-join").click();
+  await expect(member.getByTestId("org-message")).toContainText("参加しました");
+
+  await member.goto("/problems/selfhold-read-0");
+  await member.getByTestId("choice-0").click();
+  await member.getByTestId("next-question").click();
+  const cleared = waitForPost(member, ATTEMPTS);
+  await member.getByTestId("choice-1").click();
+  await expect(member.getByTestId("read-complete")).toHaveAttribute("data-cleared", "true");
+  await cleared;
+  await ctx.close();
+
+  await page.reload();
+  await page.getByTestId("org-tab-matrix").click();
+  await expect(page.getByTestId("progress-matrix")).toBeVisible();
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByTestId("matrix-export").click(),
+  ]);
+  // ファイル名は ASCII だけ。日本語を入れると保存名ごと失われるブラウザがある
+  expect(download.suggestedFilename()).toMatch(/^[\u0020-\u007E]+\.csv$/);
+  expect(download.suggestedFilename()).toContain("ladder-dojo-progress-");
+
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+  const text = Buffer.concat(chunks).toString("utf8");
+
+  // Excel が日本語を読めるように BOM が付いている
+  expect(text.charCodeAt(0)).toBe(0xfeff);
+  expect(text).toContain("氏名,権限,段階,モード,問題,状態,失敗回数");
+  // クリアした行が入っている
+  expect(text).toContain("接点とコイルだけの回路");
+  expect(text).toContain("クリア");
+  // 数式として実行されないよう先頭に ' が付いている
+  expect(text).toContain("'=1+1");
+  expect(text).not.toMatch(/(^|\r\n)=1\+1,/);
+  // メールアドレスは出さない
+  expect(text).not.toContain("@example.test");
 });

@@ -1,10 +1,13 @@
 import type { MatrixCellDto, MatrixDto } from "@ladder-dojo/api/dto";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api.js";
-import { STAGE_LABELS, STAGE_ORDER, sortedProblems } from "../problems/index.js";
+import { downloadCsv, safeFilePart } from "../lib/csv.js";
+import { MODE_LABELS, STAGE_LABELS, STAGE_ORDER, sortedProblems } from "../problems/index.js";
 
 export type ProgressMatrixProps = {
   orgId: string;
+  /** 書き出すファイル名に使う */
+  orgName: string;
 };
 
 type CellState = "cleared" | "stuck" | "untouched";
@@ -17,7 +20,7 @@ type CellState = "cleared" | "stuck" | "untouched";
  * 色だけに頼らない。マスには記号(○ / △ / 空)も入れて、
  * 色が見分けにくい人にも読めるようにしている。
  */
-export function ProgressMatrix({ orgId }: ProgressMatrixProps) {
+export function ProgressMatrix({ orgId, orgName }: ProgressMatrixProps) {
   const [data, setData] = useState<MatrixDto | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
 
@@ -51,11 +54,50 @@ export function ProgressMatrix({ orgId }: ProgressMatrixProps) {
   }
   if (!data) return <p className="text-sm text-slate-500">読み込み中…</p>;
 
+  /**
+   * CSV に落とす(改善候補 10)。
+   *
+   * 出すのは**氏名と学習状況だけ**。メールアドレスは入れない(S-014)。
+   * 画面に出している表をそのまま縦持ちにするので、サーバーへの問い合わせは増えない。
+   */
+  const exportCsv = () => {
+    const rows: string[][] = [["氏名", "権限", "段階", "モード", "問題", "状態", "失敗回数"]];
+    for (const member of data.members) {
+      const row = byUser.get(member.userId);
+      for (const problem of problems) {
+        const cell = row?.get(problem.id);
+        rows.push([
+          member.name,
+          member.role === "admin" ? "管理者" : "メンバー",
+          STAGE_LABELS[problem.stage],
+          MODE_LABELS[problem.mode],
+          problem.title,
+          cell?.cleared ? "クリア" : cell ? "挑戦中" : "未着手",
+          String(cell?.failures ?? 0),
+        ]);
+      }
+    }
+    // ファイル名は ASCII だけにする。日本語を入れると保存名ごと失われる(csv.ts 参照)
+    const today = new Date().toISOString().slice(0, 10);
+    const org = safeFilePart(orgName);
+    downloadCsv(`${org ? `${org}-` : ""}ladder-dojo-progress-${today}.csv`, rows);
+  };
+
   return (
     <section className="flex flex-col gap-2" data-testid="progress-matrix">
-      <p className="text-xs text-slate-500">
-        ○ クリア ・ △ 挑戦したがまだ ・ 空欄 未着手。横に長いので、スクロールしてください。
-      </p>
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-xs text-slate-500">
+          ○ クリア ・ △ 挑戦したがまだ ・ 空欄 未着手。横に長いので、スクロールしてください。
+        </p>
+        <button
+          type="button"
+          data-testid="matrix-export"
+          onClick={exportCsv}
+          className="min-h-11 shrink-0 rounded-lg border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700"
+        >
+          CSV で保存
+        </button>
+      </div>
       {data.truncated && (
         <p data-testid="matrix-truncated" className="text-xs text-amber-800">
           人数が多いため、一部だけを表示しています。
