@@ -1,4 +1,11 @@
-import { type Circuit, diagnose, judge, problemSchema, runTestCase } from "@ladder-dojo/core";
+import {
+  type Circuit,
+  diagnose,
+  judge,
+  problemSchema,
+  replayScenario,
+  runTestCase,
+} from "@ladder-dojo/core";
 import { describe, expect, it } from "vitest";
 import { findProblem, MODE_ORDER, PROBLEMS, STAGE_ORDER, sortedProblems } from "./index.js";
 
@@ -7,6 +14,15 @@ import { findProblem, MODE_ORDER, PROBLEMS, STAGE_ORDER, sortedProblems } from "
  *
  * ここが落ちるということは、出題した問題が解けない・答えが間違っている、ということ。
  */
+
+/** 判定の期待値に使える出力だけ取り出す(入力 X は期待値にしない) */
+function pickOutputs(bits: Record<string, boolean>): Record<string, boolean> {
+  const out: Record<string, boolean> = {};
+  for (const [device, on] of Object.entries(bits)) {
+    if (!device.startsWith("X")) out[device] = on;
+  }
+  return out;
+}
 
 describe("公式問題", () => {
   it("フェーズ1 DoD: 各段階 × 各モードで 2 問以上、合計 30 問以上", () => {
@@ -112,6 +128,41 @@ describe("公式問題", () => {
     });
     expect(result.failure?.kind).not.toBe("unstable");
     expect(result.failure?.kind).not.toBe("limit");
+  });
+
+  describe("答え合わせの再生(S-022)", () => {
+    const readQuestions = PROBLEMS.filter((p) => p.read).flatMap((p) =>
+      (p.read?.questions ?? []).map((q) => [`${p.id}/${q.id}`, p, q] as const),
+    );
+
+    it.each(readQuestions)("%s は最後まで再生できる", (_id, problem, question) => {
+      // 途中で止まると、学習者には「状態が落ち着かないため途中で止めました」と出る。
+      // 公式問題でそれが出るのは、問題のほうがおかしい
+      const { frames, stopped } = replayScenario(problem.solution, question.scenario);
+      expect(stopped, "再生が途中で止まった").toBeUndefined();
+      // 操作前の 1 駒 + 操作のぶん(expect は駒にしない)
+      const operations = question.scenario.filter((step) => step.type !== "expect").length;
+      expect(frames).toHaveLength(operations + 1);
+    });
+
+    it.each(readQuestions)("%s の再生は判定と食い違わない", (_id, problem, question) => {
+      // 答え合わせで見せる動きと、判定の結果がずれていたら教材として成立しない
+      const { frames } = replayScenario(problem.solution, question.scenario);
+      const last = frames[frames.length - 1];
+      expect(last).toBeDefined();
+      if (!last) return;
+
+      const judged = runTestCase(problem.solution, {
+        id: question.id,
+        title: question.prompt.slice(0, 50),
+        steps: [
+          ...question.scenario,
+          // 再生の結果をそのまま期待値にして判定に通す。通れば両者は同じ
+          { type: "expect", outputs: pickOutputs(last.snapshot.bits) },
+        ],
+      });
+      expect(judged.passed, "再生の結果で判定が通らない").toBe(true);
+    });
   });
 
   describe("つまずき診断", () => {
