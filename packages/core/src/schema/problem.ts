@@ -51,7 +51,13 @@ export const problemSchema = z
     fix: z
       .object({
         initial: circuitSchema,
-        /** バグの個数(1〜2、§3.2)。ヒント表示用 */
+        /**
+         * **不具合の個数**(1〜2、§3.2)。ヒント表示用。
+         *
+         * 直すマスの数ではない。1 つの不具合を直すのに複数のマスを触ることがある
+         * (例: 自己保持の枝が無い → 接点と縦線の 2 マス)。画面で「か所」と
+         * 言わないこと(S-025)
+         */
         bugCount: z.number().int().min(1).max(2),
         hint: z.string().max(300).optional(),
       })

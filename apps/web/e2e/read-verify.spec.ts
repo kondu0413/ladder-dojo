@@ -96,3 +96,37 @@ test.describe("答え合わせの再生", () => {
     await expect(page.getByRole("img", { name: /無電圧/ }).first()).toBeVisible();
   });
 });
+
+/**
+ * 設問が切り替わったことが分かるか(S-024)。
+ *
+ * 「読む」は画面上部(題名・仕様文・ラダー図)が設問をまたいで変わらず、
+ * ページ全体が 1 画面に収まるのでスクロールも起きない。何も変わらないように
+ * 見えると、**押しても元に戻ったと受け取られる**(実際にそう報告された)。
+ */
+test.describe("設問が進んだことが分かる", () => {
+  test.use({ viewport: { width: 412, height: 915 } });
+
+  test("何問目かの印が実際に変わる", async ({ page }) => {
+    await page.goto("/problems/selfhold-read-1");
+    const steps = page.getByTestId("question-steps");
+    const first = await steps.getAttribute("data-current");
+    expect(first).toBeTruthy();
+
+    await page.getByTestId("choice-1").click();
+    await page.getByTestId("next-question").click();
+
+    await expect(steps).not.toHaveAttribute("data-current", first ?? "");
+    await expect(page.getByText(/設問 2 \/ 2/)).toBeVisible();
+  });
+
+  test("設問は独立した箱に入っていて、入れ替わったと分かる", async ({ page }) => {
+    await page.goto("/problems/selfhold-read-1");
+    const before = await page.getByTestId("question-steps").locator("xpath=../..").innerText();
+    await page.getByTestId("choice-1").click();
+    await page.getByTestId("next-question").click();
+    await page.waitForTimeout(400);
+    const after = await page.getByTestId("question-steps").locator("xpath=../..").innerText();
+    expect(after).not.toBe(before);
+  });
+});

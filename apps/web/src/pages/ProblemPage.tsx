@@ -6,7 +6,7 @@ import {
   type Problem,
   type ReadQuestion,
 } from "@ladder-dojo/core";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { AppShell } from "../components/AppShell.js";
 import { CommonMistakes } from "../components/CommonMistakes.js";
@@ -70,8 +70,18 @@ function ReadMode({ problem }: { problem: Problem }) {
   const question = questions[index];
   const labels = labelMap(problem.deviceLabels);
 
+  const questionRef = useRef<HTMLElement | null>(null);
   const answered = Object.keys(answers).length;
   const allAnswered = answered === questions.length && questions.length > 0;
+
+  useEffect(() => {
+    // 最初の表示では動かさない。設問を進めたときだけ運ぶ
+    if (index === 0) return;
+    questionRef.current?.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      block: "start",
+    });
+  }, [index]);
   const allCorrect = questions.every((q) => answers[q.id] === q.answerIndex);
 
   const choose = (questionId: string, choiceIndex: number) => {
@@ -97,7 +107,14 @@ function ReadMode({ problem }: { problem: Problem }) {
         <LadderView circuit={problem.solution} deviceLabels={labels} />
       </div>
 
+      {/*
+        設問が変わったら、そこまで画面を運ぶ(S-024)。
+        これが無いと、押しても画面上部(題名・仕様文・ラダー図)がまったく同じままで、
+        変わるのは小さな「設問 n / m」と設問文だけ。しかも押した直後に結果の箱と
+        ボタンが消えるので、**進んだのに「元に戻った」ように見える**
+      */}
       <ReadQuestionView
+        ref={questionRef}
         key={question.id}
         problem={problem}
         question={question}
@@ -106,6 +123,7 @@ function ReadMode({ problem }: { problem: Problem }) {
         onChoose={(i) => choose(question.id, i)}
         onNext={() => setIndex((i) => Math.min(i + 1, questions.length - 1))}
         position={`${index + 1} / ${questions.length}`}
+        questionIds={questions.map((q) => q.id)}
       />
 
       {allAnswered && (
@@ -134,6 +152,7 @@ function ReadMode({ problem }: { problem: Problem }) {
 }
 
 function ReadQuestionView({
+  ref,
   problem,
   question,
   chosen,
@@ -141,7 +160,10 @@ function ReadQuestionView({
   onChoose,
   onNext,
   position,
+  questionIds,
 }: {
+  /** 設問を進めたときに、ここまで画面を運ぶ(S-024) */
+  ref?: React.Ref<HTMLElement>;
   problem: Problem;
   question: ReadQuestion;
   chosen: number | undefined;
@@ -149,15 +171,39 @@ function ReadQuestionView({
   onChoose: (index: number) => void;
   onNext: () => void;
   position: string;
+  /** 丸の並び用。設問の並び順 */
+  questionIds: string[];
 }) {
   const [verifying, setVerifying] = useState(false);
   const answered = chosen !== undefined;
   const correct = chosen === question.answerIndex;
 
   return (
-    <section className="flex flex-col gap-3">
-      <p className="text-xs text-slate-500">設問 {position}</p>
-      <p className="text-sm font-medium text-slate-800">{question.prompt}</p>
+    // key が変わると作り直されるので、入場の動きがそのたびに再生される
+    <section
+      ref={ref}
+      className="question-enter flex scroll-mt-20 flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+    >
+      <div className="flex items-center gap-2">
+        {/* 丸の並びで「何問目か」を形でも示す。数字だけだと変化に気づけない */}
+        <span
+          className="flex gap-1"
+          aria-hidden="true"
+          data-testid="question-steps"
+          data-current={question.id}
+        >
+          {questionIds.map((id) => (
+            <span
+              key={id}
+              className={`h-2 w-2 rounded-full ${
+                id === question.id ? "bg-blue-600" : "bg-slate-200"
+              }`}
+            />
+          ))}
+        </span>
+        <p className="text-xs font-semibold text-blue-700">設問 {position}</p>
+      </div>
+      <p className="text-base font-medium leading-relaxed text-slate-800">{question.prompt}</p>
 
       <ul className="flex flex-col gap-2">
         {question.choices.map((choice, i) => {
@@ -370,8 +416,17 @@ function BuildMode({ problem }: { problem: Problem }) {
   return (
     <div className="flex flex-col gap-4">
       {problem.fix && (
-        <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          この回路には間違いが {problem.fix.bugCount} か所あります。
+        // 「か所」と言わない(S-025)。bugCount は**不具合の個数**であって、
+        // 直すマスの数ではない。9 問中 5 問は 1 つの不具合を直すのに 2〜4 マス
+        // 触る必要がある。「1 か所」と言うと、1 マス直せば通ると読めてしまい、
+        // 通らなかった学習者を「1 か所と言ったのに」で止めてしまう
+        <p
+          data-testid="fix-hint"
+          className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900"
+        >
+          {problem.fix.bugCount === 1
+            ? "この回路には直すべきところが 1 つあります。直すマスは 1 つとは限りません。"
+            : `この回路には直すべきところが ${problem.fix.bugCount} つあります。`}
         </p>
       )}
 
