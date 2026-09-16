@@ -15,9 +15,10 @@ import { DiagnosisPanel } from "../components/DiagnosisPanel.js";
 import { JudgeResultView } from "../components/JudgeResultView.js";
 import { LadderEditor } from "../components/LadderEditor.js";
 import { LadderView } from "../components/LadderView.js";
+import { ScenarioReplay } from "../components/ScenarioReplay.js";
 import { SimulatorControls } from "../components/SimulatorControls.js";
 import { SolutionCompare } from "../components/SolutionCompare.js";
-import { Badge, Card, PageHeader } from "../components/ui.js";
+import { Badge, buttonClass, Card, PageHeader } from "../components/ui.js";
 import { useDiagnosis } from "../hooks/useDiagnosis.js";
 import { useSimulator } from "../hooks/useSimulator.js";
 import { labelMap } from "../lib/describe.js";
@@ -208,7 +209,7 @@ function ReadQuestionView({
             onClick={() => setVerifying((v) => !v)}
             className="min-h-11 rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700"
           >
-            {verifying ? "シミュレータを閉じる" : "実際に動かして確かめる"}
+            {verifying ? "閉じる" : "実際に動かして確かめる"}
           </button>
           {!isLast && (
             <button
@@ -223,17 +224,68 @@ function ReadQuestionView({
         </div>
       )}
 
-      {verifying && <VerifyPanel problem={problem} />}
+      {verifying && <VerifyPanel problem={problem} question={question} />}
     </section>
   );
 }
 
-/** 答え合わせ用のシミュレータ。自分で操作して確かめてもらう */
-function VerifyPanel({ problem }: { problem: Problem }) {
+/**
+ * 答え合わせ(SPEC.md §3.2 (1) / S-022)。
+ *
+ * **設問と同じ操作を再生する**のが既定。予測して選んだあと、そのとおりになるのを
+ * 目で見るところまでが 1 つの学習で、そこが「読む」の狙い。
+ * 以前は自由操作のシミュレータだけだったので、学習者が設問と同じ操作を
+ * 自分で組み立て直す必要があった。
+ *
+ * 自由に触りたいときのために、切り替えて自分で動かすこともできる。
+ */
+function VerifyPanel({ problem, question }: { problem: Problem; question: ReadQuestion }) {
+  const [mode, setMode] = useState<"replay" | "free">("replay");
+  const labels = labelMap(problem.deviceLabels);
+
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <fieldset className="flex gap-2 border-0 p-0">
+        <legend className="sr-only">確かめ方</legend>
+        <button
+          type="button"
+          data-testid="verify-mode-replay"
+          aria-pressed={mode === "replay"}
+          onClick={() => setMode("replay")}
+          className={buttonClass(mode === "replay" ? "primary" : "secondary", "px-3 text-xs")}
+        >
+          この設問の操作を再生
+        </button>
+        <button
+          type="button"
+          data-testid="verify-mode-free"
+          aria-pressed={mode === "free"}
+          onClick={() => setMode("free")}
+          className={buttonClass(mode === "free" ? "primary" : "secondary", "px-3 text-xs")}
+        >
+          自分で動かす
+        </button>
+      </fieldset>
+
+      {mode === "replay" ? (
+        <ScenarioReplay
+          circuit={problem.solution}
+          steps={question.scenario}
+          deviceLabels={labels}
+        />
+      ) : (
+        <FreePlay problem={problem} />
+      )}
+    </div>
+  );
+}
+
+/** 自由に触るシミュレータ */
+function FreePlay({ problem }: { problem: Problem }) {
   const sim = useSimulator(problem.solution);
   const labels = labelMap(problem.deviceLabels);
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+    <div className="flex flex-col gap-3">
       <p className="text-xs text-slate-500">
         入力をタップして、予想どおりに動くか確かめてください。
       </p>

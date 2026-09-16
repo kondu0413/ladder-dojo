@@ -11,6 +11,7 @@ export * from "./edit.js";
 export * from "./fingerprint.js";
 export * from "./judge/judge.js";
 export * from "./metrics.js";
+export * from "./replay.js";
 export * from "./schema/index.js";
 export * from "./sim/simulator.js";
 

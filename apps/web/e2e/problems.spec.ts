@@ -27,8 +27,10 @@ test.describe("読む", () => {
     await expect(page.getByTestId("read-result")).toHaveAttribute("data-correct", "true");
     await expect(page.getByTestId("read-result")).toContainText("点灯が保持されます");
 
-    // シミュレータで答え合わせできる
+    // シミュレータで答え合わせできる。
+    // 既定は設問と同じ操作の再生(S-022)。ここでは自分で動かすほうを確かめる
     await page.getByTestId("verify-with-simulator").click();
+    await page.getByTestId("verify-mode-free").click();
     const y0 = page.getByTestId("device-Y0");
     await expect(y0).toHaveAttribute("data-on", "false");
     await page.getByRole("button", { name: /^X0/ }).click();
