@@ -351,6 +351,178 @@ describe("一覧と取得", () => {
     ).toContain(id);
   });
 
+  describe("全文検索(改善候補 12 / S-016)", () => {
+    /** 検索して ID の一覧を返す */
+    async function search(q: string, user?: TestUser): Promise<string[]> {
+      const res = await app.request(
+        `/api/problems?q=${encodeURIComponent(q)}`,
+        user ? { headers: authHeaders(user) } : {},
+        env,
+      );
+      expect(res.status, await res.clone().text()).toBe(200);
+      return ((await res.json()) as { problems: Array<{ id: string }> }).problems.map((p) => p.id);
+    }
+
+    it("3 文字以上の日本語で、題名からも説明からも見つかる", async () => {
+      const author = await signUp();
+      const byTitle = await publishedId(author, { title: "インタロックの練習" });
+      const bySpec = await publishedId(author, {
+        title: "まったく関係のない題名",
+        spec: "ここにインタロックの話を書く",
+      });
+
+      const hits = await search("インタロック");
+      expect(hits).toContain(byTitle);
+      expect(hits).toContain(bySpec);
+    });
+
+    it("**2 文字の語でも見つかる**(索引に当たらないぶんは全表走査で拾う)", async () => {
+      // trigram は 3 文字ずつの並びを索引にするので、2 文字には当たらない。
+      // 日本語では「保持」「接点」「出力」のような 2 文字の語がごく普通に出てくる。
+      // ここが 0 件になるなら、短い語を instr() に落とす分岐が壊れている
+      const author = await signUp();
+      const id = await publishedId(author, { title: "ランプの点灯を保持する" });
+      expect(await search("保持")).toContain(id);
+    });
+
+    it("1 文字の語でも見つかる", async () => {
+      const author = await signUp();
+      const id = await publishedId(author, { title: "現在値をリセットする" });
+      expect(await search("値")).toContain(id);
+    });
+
+    it("当たらない語は 0 件のまま", async () => {
+      const author = await signUp();
+      await publishedId(author, { title: "ふつうの問題" });
+      expect(await search("存在しない語句zzz")).toEqual([]);
+    });
+
+    describe("検索語を検索の文法として解釈しない", () => {
+      // 引用符で囲まずに FTS5 へ渡すと、これらは演算子や記号として読まれる。
+      // 意図しない結果になるか、文法エラーで 500 になる
+      it.each(["AND", "OR", "NOT", "NEAR", "検索 AND 語", "*", "^abc", "col:value", "a*b"])(
+        "%s で 500 にならない",
+        async (q) => {
+          const res = await app.request(`/api/problems?q=${encodeURIComponent(q)}`, {}, env);
+          expect(res.status, await res.clone().text()).toBe(200);
+        },
+      );
+
+      it("引用符を含む検索語でも落ちない", async () => {
+        const author = await signUp();
+        const id = await publishedId(author, { title: 'ここで "停止" と言う' });
+        const res = await app.request(`/api/problems?q=${encodeURIComponent('"停止"')}`, {}, env);
+        expect(res.status, await res.clone().text()).toBe(200);
+        expect(
+          ((await res.json()) as { problems: Array<{ id: string }> }).problems.map((p) => p.id),
+        ).toContain(id);
+      });
+
+      it("AND を語として探す(演算子として解釈しない)", async () => {
+        const author = await signUp();
+        const id = await publishedId(author, { title: "AND 回路の練習" });
+        await publishedId(author, { title: "まったく別の問題" });
+        const hits = await search("AND 回路");
+        expect(hits).toContain(id);
+        // 演算子として読まれていたら「回路」を含む別の問題まで出る余地がある
+        expect(hits).toHaveLength(1);
+      });
+    });
+
+    it("3 文字以上の検索は、本当に索引を引いている", async () => {
+      // 索引を引かずに全表走査に戻っていないかを確かめる。
+      // 索引の行だけを直接消して、それでも見つかるなら索引を使っていない
+      const author = await signUp();
+      const id = await publishedId(author, { title: "索引を確かめるためのコンベア問題" });
+      expect(await search("コンベア")).toContain(id);
+
+      await env.DB.prepare("DELETE FROM posted_problems_fts WHERE problem_id = ?").bind(id).run();
+
+      expect(await search("コンベア")).not.toContain(id);
+      // 一方、索引を使わない 1〜2 文字の経路では今も見つかる
+      expect(await search("索引")).toContain(id);
+    });
+
+    it("索引を作る前からあった問題も、あとから拾える(移行の埋め戻し)", async () => {
+      // 本番には既に投稿がある。移行で埋め戻しを忘れると、
+      // **今ある問題だけ検索に出なくなる**。テストは空の DB から始まるので、
+      // 何もしないとこの経路は一度も通らない。索引の行を消して、
+      // 移行と同じ埋め戻しでちゃんと戻ることを確かめる
+      const author = await signUp();
+      const id = await publishedId(author, { title: "移行前からあるエンコーダの問題" });
+      await env.DB.prepare("DELETE FROM posted_problems_fts WHERE problem_id = ?").bind(id).run();
+      expect(await search("エンコーダ")).not.toContain(id);
+
+      // 0004_posted_problems_fts.sql の埋め戻しと同じ文
+      await env.DB.prepare(
+        "INSERT INTO posted_problems_fts (problem_id, title, spec) SELECT id, title, spec FROM posted_problems",
+      ).run();
+
+      expect(await search("エンコーダ")).toContain(id);
+    });
+
+    it("題名を直すと索引も直る。いいねの数え上げでは索引を書き直さない", async () => {
+      const author = await signUp();
+      const id = await publishedId(author, { title: "書き換え前のロボットの問題" });
+
+      // 索引の行を消しておく。トリガが動けば入れ直されるので、動いたか分かる
+      await env.DB.prepare("DELETE FROM posted_problems_fts WHERE problem_id = ?").bind(id).run();
+
+      // いいねの数え上げ。検索の中身と関係が無く、投稿の更新よりずっと回数が多い。
+      // ここで索引を書き直すと、D1 の書き込み(10万 行/日)を無駄に使う
+      await env.DB.prepare("UPDATE posted_problems SET likes_count = likes_count + 1 WHERE id = ?")
+        .bind(id)
+        .run();
+      expect(await search("ロボット")).not.toContain(id);
+
+      // 題名を直したときは書き直す
+      await env.DB.prepare("UPDATE posted_problems SET title = ? WHERE id = ?")
+        .bind("書き換え後のマニピュレータの問題", id)
+        .run();
+      expect(await search("マニピュレータ")).toContain(id);
+      expect(await search("ロボット")).not.toContain(id);
+    });
+
+    it("消した問題は検索に出なくなる(索引が本体に追従する)", async () => {
+      const author = await signUp();
+      const id = await publishedId(author, { title: "あとで消すインバータの問題" });
+      expect(await search("インバータ")).toContain(id);
+
+      const del = await app.request(
+        `/api/problems/${id}`,
+        { method: "DELETE", headers: authHeaders(author) },
+        env,
+      );
+      expect(del.status).toBe(200);
+      expect(await search("インバータ")).not.toContain(id);
+    });
+
+    it("非公開の問題は、検索でも他人に漏れない", async () => {
+      const author = await signUp();
+      const other = await signUp();
+      const id = await publishedId(author, {
+        title: "誰にも見せないシーケンサの問題",
+        visibility: "private",
+      });
+
+      // 索引は本体と別の表なので、絞り込みが索引側に流れると漏れる
+      expect(await search("シーケンサ", other)).not.toContain(id);
+      expect(await search("シーケンサ")).not.toContain(id);
+      // 非公開は一覧そのものに出ない(本人でも)。本人が見るのは mine=true のとき
+      expect(await search("シーケンサ", author)).not.toContain(id);
+
+      const mine = await app.request(
+        `/api/problems?mine=true&q=${encodeURIComponent("シーケンサ")}`,
+        { headers: authHeaders(author) },
+        env,
+      );
+      expect(mine.status).toBe(200);
+      expect(
+        ((await mine.json()) as { problems: Array<{ id: string }> }).problems.map((p) => p.id),
+      ).toContain(id);
+    });
+  });
+
   it("不正な並び順は 400", async () => {
     expect((await app.request("/api/problems?sort=random", {}, env)).status).toBe(400);
   });
