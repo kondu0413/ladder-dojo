@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router";
+import { AppShell } from "../components/AppShell.js";
 import { AuthBar } from "../components/AuthBar.js";
+import { PageHeader } from "../components/ui.js";
 import { api, isAborted, type PostedProblemSummary } from "../lib/api.js";
 import { useProgress } from "../lib/progress-context.jsx";
 
@@ -80,24 +82,14 @@ export function CommunityListPage() {
   }, [sort, q, tag, difficulty, mine]);
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-screen-sm flex-col gap-4 px-4 py-6">
-      <header className="flex flex-col gap-2">
-        <div className="flex items-baseline justify-between gap-2">
-          <h1 className="text-xl font-bold text-slate-900">みんなの問題</h1>
-          <div className="flex gap-3 text-sm text-slate-500">
-            <Link to="/" className="underline">
-              公式問題
-            </Link>
-            <Link to="/sandbox" className="underline">
-              サンドボックス
-            </Link>
-          </div>
-        </div>
-        <p className="text-sm text-slate-600">
-          ほかの人が投稿した問題を解けます。サンドボックスで作った回路は、テストを付けて投稿できます。
-        </p>
+    <AppShell width="wide">
+      <PageHeader
+        title="みんなの問題"
+        lead="ほかの人が投稿した問題を解けます。サンドボックスで作った回路は、テストを付けて投稿できます。"
+      />
+      <div className="mb-6">
         <AuthBar />
-      </header>
+      </div>
 
       <section className="flex flex-col gap-2">
         <input
@@ -180,17 +172,17 @@ export function CommunityListPage() {
         </p>
       )}
 
-      <ul className="flex flex-col gap-2" data-testid="posted-list">
+      <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" data-testid="posted-list">
         {problems.map((p) => (
           <li key={p.id}>
             <Link
               to={`/community/${p.id}`}
               data-testid={`posted-${p.id}`}
-              className="flex flex-col gap-1 rounded-xl border border-slate-200 bg-white px-3 py-3"
+              className="flex h-full flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md"
             >
-              <span className="text-sm font-medium text-slate-800">{p.title}</span>
-              <span className="line-clamp-2 text-xs text-slate-500">{p.spec}</span>
-              <span className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              <span className="text-sm font-semibold leading-snug text-slate-900">{p.title}</span>
+              <span className="line-clamp-2 text-xs leading-relaxed text-slate-500">{p.spec}</span>
+              <span className="mt-auto flex flex-wrap items-center gap-2 pt-1 text-xs text-slate-500">
                 <span>難易度 {p.votedDifficulty ?? p.difficulty}</span>
                 <span>♥ {p.likes}</span>
                 <span data-testid={`clear-rate-${p.id}`}>
@@ -208,7 +200,7 @@ export function CommunityListPage() {
                   {p.tags.map((t) => (
                     <span
                       key={t}
-                      className="rounded bg-slate-100 px-1.5 text-[11px] text-slate-600"
+                      className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600"
                     >
                       {t}
                     </span>
@@ -231,6 +223,6 @@ export function CommunityListPage() {
           もっと読む
         </button>
       )}
-    </main>
+    </AppShell>
   );
 }

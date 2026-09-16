@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router";
+import { AppShell } from "../components/AppShell.js";
 import { DevicePanel } from "../components/DevicePanel.js";
 import { LadderView } from "../components/LadderView.js";
 import { SimulatorControls } from "../components/SimulatorControls.js";
@@ -15,11 +16,11 @@ export function SimulatorDemoPage() {
   const sim = useSimulator(sample.circuit);
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-screen-sm flex-col gap-4 px-4 py-6">
+    <AppShell width="narrow">
       <header className="flex flex-col gap-1">
         <div className="flex items-baseline justify-between gap-2">
           <h1 className="text-xl font-bold text-slate-900">ラダー図トレーニング</h1>
-          <Link to="/" className="text-sm text-slate-500 underline">
+          <Link to="/problems" className="text-sm text-slate-500 underline">
             問題一覧
           </Link>
         </div>
@@ -78,6 +79,6 @@ export function SimulatorDemoPage() {
       <p className="mt-auto pt-4 text-[11px] text-slate-400" data-testid="schema-version">
         schema v1
       </p>
-    </main>
+    </AppShell>
   );
 }

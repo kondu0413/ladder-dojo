@@ -1,6 +1,7 @@
 import { circuitSchema } from "@ladder-dojo/core";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
+import { AppShell } from "../components/AppShell.js";
 import { AuthBar } from "../components/AuthBar.js";
 import { LadderView } from "../components/LadderView.js";
 import { ProgressMatrix } from "../components/ProgressMatrix.js";
@@ -172,10 +173,10 @@ export function OrgDetailPage() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <main className="mx-auto flex min-h-dvh max-w-screen-sm flex-col gap-4 px-4 py-6">
+    <AppShell width="wide">
       <AuthBar />
       {children}
-    </main>
+    </AppShell>
   );
 }
 

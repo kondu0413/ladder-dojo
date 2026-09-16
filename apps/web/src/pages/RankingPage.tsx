@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router";
+import { AppShell } from "../components/AppShell.js";
 import { AuthBar } from "../components/AuthBar.js";
+import { PageHeader } from "../components/ui.js";
 import {
   api,
   isAborted,
@@ -69,24 +70,14 @@ export function RankingPage() {
   const isStreak = metric === "streak";
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-screen-sm flex-col gap-4 px-4 py-6">
-      <header className="flex flex-col gap-2">
-        <div className="flex items-baseline justify-between gap-2">
-          <h1 className="text-xl font-bold text-slate-900">ランキング</h1>
-          <div className="flex gap-3 text-sm text-slate-500">
-            <Link to="/" className="underline">
-              公式問題
-            </Link>
-            <Link to="/orgs" className="underline">
-              組織
-            </Link>
-          </div>
-        </div>
-        <p className="text-sm text-slate-600">
-          速さは競いません。解いた数・作った問題への反応・続けた日数で並びます。
-        </p>
+    <AppShell width="wide">
+      <PageHeader
+        title="ランキング"
+        lead="速さは競いません。解いた数・作った問題への反応・続けた日数で並びます。"
+      />
+      <div className="mb-6">
         <AuthBar />
-      </header>
+      </div>
 
       <section className="flex flex-col gap-2">
         <div className="flex flex-wrap gap-2">
@@ -197,6 +188,6 @@ export function RankingPage() {
             : `${new Date(data.computedAt).toLocaleString("ja-JP")} 時点。全体ランキングは 1 日 1 回更新されます。`}
         </p>
       )}
-    </main>
+    </AppShell>
   );
 }

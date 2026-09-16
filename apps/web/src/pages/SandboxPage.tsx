@@ -11,6 +11,7 @@ import {
 } from "@ladder-dojo/core";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
+import { AppShell } from "../components/AppShell.js";
 import { AuthBar } from "../components/AuthBar.js";
 import { DevicePanel } from "../components/DevicePanel.js";
 import { JudgeResultView } from "../components/JudgeResultView.js";
@@ -125,12 +126,12 @@ export function SandboxPage() {
   };
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-screen-sm flex-col gap-4 px-4 py-6">
+    <AppShell width="wide">
       <header className="flex flex-col gap-2">
         <div className="flex items-baseline justify-between gap-2">
           <h1 className="text-xl font-bold text-slate-900">サンドボックス</h1>
           <div className="flex gap-3 text-sm text-slate-500">
-            <Link to="/" className="underline">
+            <Link to="/problems" className="underline">
               公式問題
             </Link>
             <Link to="/community" className="underline">
@@ -279,7 +280,7 @@ export function SandboxPage() {
           {result && <JudgeResultView result={result} problem={asProblem(circuit, testCases)} />}
         </div>
       )}
-    </main>
+    </AppShell>
   );
 }
 

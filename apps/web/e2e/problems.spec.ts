@@ -56,12 +56,12 @@ test.describe("読む", () => {
     await page.getByTestId("choice-0").click();
     await expect(page.getByTestId("read-complete")).toHaveAttribute("data-cleared", "true");
 
-    await page.goto("/");
+    await page.goto("/problems");
     await expect(page.getByTestId("problem-selfhold-read-1")).toHaveAttribute(
       "data-cleared",
       "true",
     );
-    await expect(page.getByTestId("cleared-count")).toContainText(/クリア: 1 \/ \d+ 問/);
+    await expect(page.getByTestId("cleared-count")).toContainText(/1 \/ \d+ 問クリア/);
   });
 });
 
@@ -128,7 +128,7 @@ test.describe("書く", () => {
     await expect(page.getByTestId("solution-compare")).toBeVisible();
 
     // 一覧でクリア済みになる
-    await page.goto("/");
+    await page.goto("/problems");
     await expect(page.getByTestId("problem-selfhold-write-1")).toHaveAttribute(
       "data-cleared",
       "true",
@@ -273,7 +273,7 @@ test.describe("みんながつまずくところ", () => {
 test.describe("復習の提案", () => {
   /** localStorage に「昔クリアした」進捗を直接置く(未ログインの進捗、S-002) */
   async function seedOldClear(page: Page, problemId: string, daysAgo: number) {
-    await page.goto("/");
+    await page.goto("/problems");
     await page.evaluate(
       ([id, days]) => {
         const at = new Date(Date.now() - Number(days) * 24 * 60 * 60 * 1000).toISOString();
@@ -324,7 +324,7 @@ test.describe("復習の提案", () => {
     await page.getByTestId("choice-0").click();
     await expect(page.getByTestId("read-complete")).toHaveAttribute("data-cleared", "true");
 
-    await page.goto("/");
+    await page.goto("/problems");
     await expect(page.getByTestId("review-suggestions")).toHaveCount(0);
   });
 });

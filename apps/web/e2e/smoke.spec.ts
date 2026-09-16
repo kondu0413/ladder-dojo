@@ -1,15 +1,15 @@
 import { expect, test } from "@playwright/test";
 
 test("トップページに公式問題の一覧が出る", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.getByRole("heading", { name: "ラダー図トレーニング" })).toBeVisible();
-  await expect(page.getByTestId("cleared-count")).toContainText(/クリア: 0 \/ \d+ 問/);
+  await page.goto("/problems");
+  await expect(page.getByRole("heading", { name: "公式問題" })).toBeVisible();
+  await expect(page.getByTestId("cleared-count")).toContainText(/0 \/ \d+ 問クリア/);
   await expect(page.getByTestId("problem-selfhold-read-1")).toBeVisible();
 });
 
 test("SPA フォールバック: 未知のパスでもトップが出る", async ({ page }) => {
   await page.goto("/some/unknown/path");
-  await expect(page.getByRole("heading", { name: "ラダー図トレーニング" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "公式問題" })).toBeVisible();
 });
 
 test("API が E2E 環境で応答する", async ({ request }) => {

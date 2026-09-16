@@ -167,7 +167,9 @@ test.describe("保存とテストケース(§3.4)", () => {
     await page.getByTestId("sandbox-new").click();
     await expect(page.getByTestId("cell-text-0-0")).toHaveCount(0);
 
-    await page.getByRole("button", { name: "開く" }).click();
+    // 「開く」だけで引くと、ヘッダーの「メニューを開く」と当たる。
+    // 保存した回路の「開く」を名指しする(保存したのは 1 件)
+    await page.locator('[data-testid^="load-"]').first().click();
     await expect(page.getByTestId("sandbox-title")).toHaveValue("保存テスト回路");
     await expect(page.getByTestId("cell-text-0-0")).toHaveText("X0");
     await expect(page.getByTestId("mode-test")).toContainText("テスト (1)");
