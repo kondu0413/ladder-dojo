@@ -293,6 +293,10 @@ test("ランキングが指標と期間で切り替わる", async ({ page }) => 
   await expect(page.getByTestId("metric-solved")).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByTestId("ranking-computed-at")).toBeVisible();
 
+  // 順位表は 1 日 1 回しか更新されないので、クリアしたぶんは「あなたのいま」で見せる(S-026)
+  await expect(page.getByTestId("ranking-me")).toContainText("あなたのいま");
+  await expect(page.getByTestId("ranking-me-value")).toHaveText("1問");
+
   // 連続学習日数に切り替えると、期間の切り替えが無効になる
   await page.getByTestId("metric-streak").click();
   await expect(page.getByTestId("period-weekly")).toBeDisabled();
@@ -317,6 +321,7 @@ test("未ログインでは全体ランキングは見られ、組織にはロ�
   await page.goto("/rankings");
   await expect(page.getByRole("heading", { name: "ランキング" })).toBeVisible();
   await expect(page.getByTestId("ranking-scope")).toHaveCount(0);
+  await expect(page.getByTestId("ranking-me")).toHaveCount(0);
 
   await page.goto("/orgs");
   await expect(page.getByText("組織を使うにはログインしてください")).toBeVisible();

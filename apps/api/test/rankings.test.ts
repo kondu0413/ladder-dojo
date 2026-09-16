@@ -102,6 +102,43 @@ describe("全体ランキング", () => {
     expect(body.entries.map((e) => e.userId)).not.toContain(user.id);
   });
 
+  /**
+   * スナップショットは 1 日 1 回しか作られない(D-010)。クリア直後は一覧に載らないので、
+   * 「記録されていない」と思われないように本人の値だけ別に返す(S-026)
+   */
+  it("クリア直後、一覧はまだ古くても自分の値はいまの値が返る", async () => {
+    const user = await signUp("live-me");
+    await computeGlobalRankings(env);
+
+    // スナップショットを作ったあとにクリアする
+    await clearOfficial(user, "selfhold-write-1");
+
+    const res = await ranking("solved", "all", user);
+    const body = (await res.json()) as {
+      entries: Entry[];
+      me: { userId: string; value: number } | null;
+    };
+    // 一覧(スナップショット)にはまだ載っていない
+    expect(body.entries.map((e) => e.userId)).not.toContain(user.id);
+    // 本人の値はいま数え直したもの
+    expect(body.me?.userId).toBe(user.id);
+    expect(body.me?.value).toBe(1);
+  });
+
+  it("未ログインなら自分の値は返さない", async () => {
+    const res = await ranking("solved", "all");
+    const body = (await res.json()) as { me: unknown };
+    expect(body.me).toBeNull();
+  });
+
+  it("何もしていない人の値は 0", async () => {
+    const user = await signUp("zero-me");
+    await computeGlobalRankings(env);
+    const res = await ranking("solved", "all", user);
+    const body = (await res.json()) as { me: { value: number } | null };
+    expect(body.me?.value).toBe(0);
+  });
+
   it("不正な指標は 400", async () => {
     const res = await app.request("/api/rankings?metric=speed", {}, env);
     expect(res.status).toBe(400);

@@ -276,6 +276,26 @@ export async function readGlobalRanking(
 }
 
 /** 組織内ランキング。対象が少ないのでその場で計算する */
+/**
+ * **自分 1 人ぶんの、いまの値**を計算する(S-026)。
+ *
+ * 全体ランキングは Cron で 1 日 1 回しか更新しない(D-010)。そのため、問題を
+ * クリアした直後に見ると**自分が一覧に載っていない**。記録されていないように
+ * 見えるので、「あなたのいま」は別に出す。
+ *
+ * 対象が 1 人なので読み取り行数は自分のぶんだけ。全体集計とは費用がまるで違う。
+ */
+export async function computeUserValue(
+  env: Env,
+  userId: string,
+  metric: Metric,
+  period: Period,
+  now = new Date(),
+): Promise<number> {
+  const rows = await aggregate(drizzle(env.DB), metric, period, now, [userId]);
+  return rows.find((r) => r.userId === userId)?.value ?? 0;
+}
+
 export async function computeOrgRanking(
   env: Env,
   memberIds: string[],
