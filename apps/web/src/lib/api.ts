@@ -1,6 +1,7 @@
 import type {
   ApiErrorDto,
   AssignmentListDto,
+  MatrixDto,
   MeDto,
   MistakeListDto,
   OrgDetailDto,
@@ -209,6 +210,9 @@ export const api = {
 
   memberSubmissions: (orgId: string, userId: string) =>
     request<SubmissionListDto>(`/orgs/${orgId}/members/${userId}/submissions`),
+
+  /** クラス全体の進捗(管理者のみ) */
+  orgMatrix: (orgId: string) => request<MatrixDto>(`/orgs/${orgId}/matrix`),
 
   orgStuck: (orgId: string) => request<StuckDto>(`/orgs/${orgId}/stuck`),
 

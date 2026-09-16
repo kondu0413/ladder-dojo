@@ -279,3 +279,77 @@ test("未ログインでは全体ランキングは見られ、組織にはロ�
   await page.goto("/orgs");
   await expect(page.getByText("組織を使うにはログインしてください")).toBeVisible();
 });
+
+test("管理者はクラス全体の進捗を表で一望できる", async ({ page, browser }) => {
+  await signUp(page, "admin");
+  const orgName = unique("一覧表テスト");
+  const code = await createOrgWithInvite(page, orgName);
+
+  const ctx = await browser.newContext({ baseURL: BASE_URL });
+  const member = await ctx.newPage();
+  await signUp(member, "shiro");
+  await member.goto("/orgs");
+  await member.getByTestId("org-code").fill(code);
+  await member.getByTestId("org-join").click();
+  await expect(member.getByTestId("org-message")).toContainText("参加しました");
+
+  // 1 問クリアし、別の 1 問で詰まる
+  await member.goto("/problems/selfhold-read-1");
+  await member.getByTestId("choice-1").click();
+  await member.getByTestId("next-question").click();
+  const cleared = waitForPost(member, ATTEMPTS);
+  await member.getByTestId("choice-0").click();
+  await expect(member.getByTestId("read-complete")).toHaveAttribute("data-cleared", "true");
+  await cleared;
+
+  await member.goto("/problems/selfhold-fix-1");
+  const attempted = waitForPost(member, ATTEMPTS);
+  const submitted = waitForPost(member, SUBMISSIONS);
+  await member.getByTestId("check-answer").click();
+  await expect(member.getByTestId("judge-result")).toHaveAttribute("data-passed", "false");
+  await Promise.all([attempted, submitted]);
+  await ctx.close();
+
+  await page.reload();
+  await page.getByTestId("org-tab-matrix").click();
+  const matrix = page.getByTestId("progress-matrix");
+  await expect(matrix).toBeVisible();
+  await expect(matrix).toContainText("shiro");
+
+  // クリアした問題は ○、詰まっている問題は △、触っていない問題は空欄
+  const row = matrix.locator('[data-testid^="matrix-row-"]').filter({ hasText: "shiro" });
+  await expect(row.locator('[data-testid$="-selfhold-read-1"]')).toHaveAttribute(
+    "data-state",
+    "cleared",
+  );
+  await expect(row.locator('[data-testid$="-selfhold-fix-1"]')).toHaveAttribute(
+    "data-state",
+    "stuck",
+  );
+  await expect(row.locator('[data-testid$="-combo-write-2"]')).toHaveAttribute(
+    "data-state",
+    "untouched",
+  );
+  await expect(row).toContainText("1 / 35");
+});
+
+test("メンバーには一覧表のタブが出ない", async ({ page, browser }) => {
+  await signUp(page, "admin");
+  const code = await createOrgWithInvite(page, unique("一覧表の権限テスト"));
+
+  const ctx = await browser.newContext({ baseURL: BASE_URL });
+  const member = await ctx.newPage();
+  await signUp(member, "goro");
+  await member.goto("/orgs");
+  await member.getByTestId("org-code").fill(code);
+  await member.getByTestId("org-join").click();
+  await expect(member.getByTestId("org-message")).toContainText("参加しました");
+  await member
+    .getByTestId("org-list")
+    .getByText(/一覧表の権限テスト/)
+    .click();
+
+  await expect(member.getByTestId("org-tab-assignments")).toBeVisible();
+  await expect(member.getByTestId("org-tab-matrix")).toHaveCount(0);
+  await ctx.close();
+});

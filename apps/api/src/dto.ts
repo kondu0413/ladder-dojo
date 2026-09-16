@@ -137,6 +137,27 @@ export type SolutionFailedDto = {
 
 export type OrgRole = "admin" | "member";
 
+/** クラス全体の進捗(§3.8)。メンバー × 問題の表を描くための素 */
+export type MatrixMemberDto = {
+  userId: string;
+  name: string;
+  role: OrgRole;
+};
+
+export type MatrixCellDto = {
+  userId: string;
+  problemId: string;
+  cleared: boolean;
+  failures: number;
+};
+
+export type MatrixDto = {
+  members: MatrixMemberDto[];
+  cells: MatrixCellDto[];
+  /** 上限に当たって一部しか返していない */
+  truncated: boolean;
+};
+
 export type OrgSummaryDto = {
   id: string;
   name: string;
