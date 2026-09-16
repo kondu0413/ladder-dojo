@@ -5,7 +5,7 @@ import {
   type TestCase,
   testCasesSchema,
 } from "@ladder-dojo/core";
-import { and, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, or, type SQL, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -29,6 +29,44 @@ const MAX_TEST_CASES = 20;
 /** サーバー側の再検証で許すスキャン数(同上) */
 const MAX_SCANS_PER_CASE = 3000;
 const PAGE_SIZE = 20;
+
+/**
+ * 検索語の最小の長さ(改善候補 12 / S-016)。
+ *
+ * trigram は 3 文字ずつの並びを索引にするので、これより短い語には当たらない。
+ * 日本語では「保持」「接点」「出力」のような 2 文字の語がごく普通に出てくるので、
+ * 短い語は索引を使わず、これまでどおり instr() で拾う。
+ */
+const FTS_MIN_CHARS = 3;
+
+/**
+ * 検索語を FTS5 の「この並びをそのまま含む」1 語にする。
+ *
+ * **必ず引用符で囲む**。囲まないと `AND` `OR` `NOT` `NEAR` や `*` `^` `:` が
+ * 検索の文法として解釈され、書いた人の意図と違う結果になったり、
+ * 文法エラーで 500 になったりする。中の引用符は 2 つ重ねて打ち消す。
+ */
+function ftsPhrase(q: string): string {
+  return `"${q.replaceAll('"', '""')}"`;
+}
+
+/**
+ * 題名と説明から探す条件を作る。
+ *
+ * 3 文字以上なら全文検索の索引を引く(全表走査をしない)。
+ * 1〜2 文字は索引に当たらないので、これまでどおり全表走査で拾う。
+ * **短い語で「0 件」になるより、遅くても当たるほうがよい**。
+ */
+function searchCondition(q: string): SQL | undefined {
+  const needle = q.trim().toLowerCase();
+  if (needle.length === 0) return undefined;
+  if ([...needle].length >= FTS_MIN_CHARS) {
+    return sql`${postedProblems.id} in (
+      select problem_id from posted_problems_fts where posted_problems_fts match ${ftsPhrase(needle)}
+    )`;
+  }
+  return sql`(instr(lower(${postedProblems.title}), ${needle}) > 0 or instr(lower(${postedProblems.spec}), ${needle}) > 0)`;
+}
 
 const publishSchema = z.object({
   title: z.string().min(1).max(100),
@@ -96,10 +134,8 @@ export const problemRoutes = new Hono<AppBindings>()
     // instr() は上限もワイルドカードも無い単純な部分一致なので、こちらを使う。
     if (tag) conditions.push(sql`instr(${postedProblems.tagsJson}, ${`"${tag}"`}) > 0`);
     if (q) {
-      const needle = q.toLowerCase();
-      conditions.push(
-        sql`(instr(lower(${postedProblems.title}), ${needle}) > 0 or instr(lower(${postedProblems.spec}), ${needle}) > 0)`,
-      );
+      const condition = searchCondition(q);
+      if (condition) conditions.push(condition);
     }
     // 新着順のときだけ、created_at を使ったカーソルで続きを読む
     if (cursor && sort === "new") {
