@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import { AuthBar } from "../components/AuthBar.js";
 import { LadderView } from "../components/LadderView.js";
+import { ProgressMatrix } from "../components/ProgressMatrix.js";
 import {
   type Assignment,
   api,
@@ -13,7 +14,7 @@ import {
 import { useProgress } from "../lib/progress-context.jsx";
 import { findProblem, MODE_LABELS, STAGE_LABELS, sortedProblems } from "../problems/index.js";
 
-type Tab = "members" | "assignments" | "stuck";
+type Tab = "members" | "assignments" | "matrix" | "stuck";
 
 /** 組織の詳細。管理者ビュー(SPEC.md §3.8) */
 export function OrgDetailPage() {
@@ -126,7 +127,12 @@ export function OrgDetailPage() {
           [
             { value: "members", label: isAdmin ? "メンバー" : "この組織" },
             { value: "assignments", label: "課題" },
-            ...(isAdmin ? [{ value: "stuck" as const, label: "つまずき" }] : []),
+            ...(isAdmin
+              ? [
+                  { value: "matrix" as const, label: "一覧表" },
+                  { value: "stuck" as const, label: "つまずき" },
+                ]
+              : []),
           ] as Array<{ value: Tab; label: string }>
         ).map((t) => (
           <button
@@ -156,6 +162,8 @@ export function OrgDetailPage() {
       {tab === "assignments" && (
         <AssignmentsPanel orgId={id} isAdmin={isAdmin} members={detail.members} />
       )}
+
+      {tab === "matrix" && isAdmin && <ProgressMatrix orgId={id} />}
 
       {tab === "stuck" && isAdmin && <StuckPanel orgId={id} />}
     </Shell>

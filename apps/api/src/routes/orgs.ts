@@ -13,6 +13,7 @@ import {
   submissions,
   user,
 } from "../db/schema.js";
+import type { MatrixDto } from "../dto.js";
 import type { AppBindings } from "../env.js";
 import { newId } from "../lib/util.js";
 import { requireUser } from "../middleware/auth.js";
@@ -43,6 +44,14 @@ const assignSchema = z.object({
  * 管理者が見られるのは「自分が管理者である組織のメンバー」のデータだけ(方針 6)。
  * 組織横断の一覧 API は作らない。
  */
+/**
+ * 表に出すメンバーの上限。1 回の表示で読む D1 の行数を抑えるため(COST.md §1.2)。
+ * これを超える規模の組織は、そもそも 1 枚の表では読めない
+ */
+const MAX_MATRIX_MEMBERS = 50;
+/** 1 回の表示で読む進捗の行数の上限 */
+const MAX_MATRIX_CELLS = 2000;
+
 export const orgRoutes = new Hono<AppBindings>()
   .use("*", requireUser)
   /** 自分が所属する組織 */
@@ -281,6 +290,47 @@ export const orgRoutes = new Hono<AppBindings>()
       .sort((a, b) => b.stuckUsers - a.stuckUsers || b.failures - a.failures)
       .slice(0, 50);
     return c.json({ stuck, memberCount: memberIds.length });
+  })
+  /**
+   * クラス全体の進捗(管理者のみ、§3.8)。
+   *
+   * メンバー × 問題の表を作るための素。1 人ずつ開かなくても一望できる。
+   * 返すのは「クリアしたか / 挑戦したか / 失敗回数」だけ。回路や日時は出さない
+   * (一望するのに要らないし、行が重くなる)。
+   *
+   * D1 の読み取り行数に注意(COST.md §1.2)。メンバー数 × 触った問題数だけ読むので、
+   * 人数に上限を設けて、1 回の表示で読む行数が青天井にならないようにしている。
+   */
+  .get("/:orgId/matrix", requireOrgAdmin, async (c) => {
+    const db = drizzle(c.env.DB);
+    const members = (await listMembers(db, c.var.membership.orgId)).slice(0, MAX_MATRIX_MEMBERS);
+    if (members.length === 0) {
+      return c.json({ members: [], cells: [], truncated: false } as MatrixDto);
+    }
+    const memberIds = members.map((m) => m.userId);
+
+    const rows = await db
+      .select({
+        userId: progress.userId,
+        problemId: progress.problemId,
+        clearedAt: progress.clearedAt,
+        failures: progress.failures,
+      })
+      .from(progress)
+      .where(inArray(progress.userId, memberIds))
+      .limit(MAX_MATRIX_CELLS);
+
+    const dto: MatrixDto = {
+      members: members.map((m) => ({ userId: m.userId, name: m.name, role: m.role })),
+      cells: rows.map((r) => ({
+        userId: r.userId,
+        problemId: r.problemId,
+        cleared: r.clearedAt !== null,
+        failures: r.failures,
+      })),
+      truncated: rows.length >= MAX_MATRIX_CELLS,
+    };
+    return c.json(dto);
   })
   /** 課題を割り当てる(管理者のみ、§3.8) */
   .post("/:orgId/assignments", requireOrgAdmin, async (c) => {
