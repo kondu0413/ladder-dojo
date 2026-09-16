@@ -10,7 +10,7 @@ import {
   type TestCase,
 } from "@ladder-dojo/core";
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { useNavigate } from "react-router";
 import { AppShell } from "../components/AppShell.js";
 import { AuthBar } from "../components/AuthBar.js";
 import { DevicePanel } from "../components/DevicePanel.js";
@@ -20,6 +20,7 @@ import { LadderView } from "../components/LadderView.js";
 import { PublishDialog } from "../components/PublishDialog.js";
 import { SimulatorControls } from "../components/SimulatorControls.js";
 import { TestCaseEditor } from "../components/TestCaseEditor.js";
+import { PageHeader } from "../components/ui.js";
 import { useSimulator } from "../hooks/useSimulator.js";
 import { ApiError, api, type SandboxSummary } from "../lib/api.js";
 import { useProgress } from "../lib/progress-context.jsx";
@@ -126,21 +127,14 @@ export function SandboxPage() {
   };
 
   return (
-    <AppShell width="wide">
-      <header className="flex flex-col gap-2">
-        <div className="flex items-baseline justify-between gap-2">
-          <h1 className="text-xl font-bold text-slate-900">サンドボックス</h1>
-          <div className="flex gap-3 text-sm text-slate-500">
-            <Link to="/problems" className="underline">
-              公式問題
-            </Link>
-            <Link to="/community" className="underline">
-              みんなの問題
-            </Link>
-          </div>
-        </div>
+    <AppShell width="narrow">
+      <PageHeader
+        title="サンドボックス"
+        lead="自由に回路を組んで、その場で動かせます。テストを付ければ問題として投稿できます。"
+      />
+      <div className="mb-5">
         <AuthBar />
-      </header>
+      </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <input
