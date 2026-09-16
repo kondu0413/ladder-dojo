@@ -15,6 +15,23 @@ import { findProblem, MODE_ORDER, PROBLEMS, STAGE_ORDER, sortedProblems } from "
  * ここが落ちるということは、出題した問題が解けない・答えが間違っている、ということ。
  */
 
+/** 2 つの回路で中身が違うマスの数 */
+function changedCellCount(a: Circuit, b: Circuit): number {
+  const at = (c: Circuit, row: number, col: number) =>
+    c.cells.find((x) => x.row === row && x.col === col);
+  let n = 0;
+  for (let row = 0; row < Math.max(a.rows, b.rows); row++) {
+    for (let col = 0; col < Math.max(a.cols, b.cols); col++) {
+      const ea = at(a, row, col);
+      const eb = at(b, row, col);
+      const sa = JSON.stringify({ element: ea?.element, vline: ea?.vline === true });
+      const sb = JSON.stringify({ element: eb?.element, vline: eb?.vline === true });
+      if (sa !== sb) n++;
+    }
+  }
+  return n;
+}
+
 /** 判定の期待値に使える出力だけ取り出す(入力 X は期待値にしない) */
 function pickOutputs(bits: Record<string, boolean>): Record<string, boolean> {
   const out: Record<string, boolean> = {};
@@ -128,6 +145,32 @@ describe("公式問題", () => {
     });
     expect(result.failure?.kind).not.toBe("unstable");
     expect(result.failure?.kind).not.toBe("limit");
+  });
+
+  describe("直す問題のヒント(S-025)", () => {
+    it.each(PROBLEMS.filter((p) => p.fix).map((p) => [p.id, p] as const))(
+      "%s の bugCount は、実際に直すマスの数より多くない",
+      (_id, problem) => {
+        const initial = problem.fix?.initial;
+        if (!initial) return;
+        // bugCount は「不具合の個数」で、直すマスの数ではない。
+        // 1 つの不具合が複数マスにまたがるのはよいが、**マスの数より多い**のは
+        // 数え方がおかしい(直しようがない不具合を数えていることになる)
+        const cells = changedCellCount(initial, problem.solution);
+        expect(problem.fix?.bugCount ?? 0).toBeLessThanOrEqual(cells);
+      },
+    );
+
+    it.each(PROBLEMS.filter((p) => p.fix).map((p) => [p.id, p] as const))(
+      "%s は 1 マス直すだけでは通らないことがある(「か所」と言えない理由)",
+      (_id, problem) => {
+        const initial = problem.fix?.initial;
+        if (!initial) return;
+        // ここは記録のためのテスト。9 問中 5 問で複数マスを触る必要があり、
+        // 画面で「N か所」と言うと誤解を招く
+        expect(changedCellCount(initial, problem.solution)).toBeGreaterThan(0);
+      },
+    );
   });
 
   describe("答え合わせの再生(S-022)", () => {

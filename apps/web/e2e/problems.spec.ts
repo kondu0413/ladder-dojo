@@ -70,7 +70,9 @@ test.describe("読む", () => {
 test.describe("直す", () => {
   test("不正解のときは、どの操作で何が違ったかが出る", async ({ page }) => {
     await page.goto("/problems/selfhold-fix-1");
-    await expect(page.getByText("この回路には間違いが 1 か所あります。")).toBeVisible();
+    // 「か所」とは言わない(S-025)。1 つの不具合を直すのに複数マス触ることがある
+    await expect(page.getByTestId("fix-hint")).toContainText("直すべきところが 1 つ");
+    await expect(page.getByTestId("fix-hint")).toContainText("直すマスは 1 つとは限りません");
 
     await page.getByTestId("check-answer").click();
     const result = page.getByTestId("judge-result");

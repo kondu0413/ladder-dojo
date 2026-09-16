@@ -15,3 +15,31 @@ html,
 body {
   overflow-x: clip;
 }
+
+/*
+ * 設問が切り替わったことを見せる(S-024)。
+ *
+ * 「読む」は画面上部(題名・仕様文・ラダー図)が設問をまたいで変わらない。
+ * ページ全体が 1 画面に収まるので、スクロールで気づかせることもできない。
+ * 切り替わった側だけを短く動かして、「進んだ」ことを伝える。
+ */
+@keyframes question-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.question-enter {
+  animation: question-enter 220ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .question-enter {
+    animation: none;
+  }
+}
