@@ -190,6 +190,21 @@ export type AssignmentDto = {
   note: string | null;
   dueAt: string | null;
   createdAt: string;
+  /**
+   * 達成状況(改善候補 9)。**管理者にだけ入る。**
+   * メンバーには自分の課題しか見えないので、何人できたかを見せても意味がなく、
+   * 他人の状況が透けてしまう
+   */
+  stats?: AssignmentStatsDto;
+};
+
+export type AssignmentStatsDto = {
+  /** 対象の人数。個人宛なら 1、全員宛なら組織のメンバー数 */
+  total: number;
+  cleared: number;
+  /** 挑戦したがまだクリアしていない */
+  attempting: number;
+  untouched: number;
 };
 export type AssignmentListDto = { assignments: AssignmentDto[] };
 

@@ -372,6 +372,65 @@ function MembersPanel({
   );
 }
 
+/**
+ * 課題の期限(改善候補 9)。
+ *
+ * 過ぎているかどうかが一目で分かるようにする。色だけに頼らず、文言でも言う。
+ */
+function DueBadge({ dueAt, assignmentId }: { dueAt: string | null; assignmentId: string }) {
+  if (!dueAt) return null;
+  const due = new Date(dueAt);
+  if (Number.isNaN(due.getTime())) return null;
+
+  const days = Math.ceil((due.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+  const overdue = days < 0;
+  const soon = !overdue && days <= 3;
+  const label = overdue ? `期限切れ(${-days} 日前)` : days === 0 ? "今日まで" : `あと ${days} 日`;
+
+  return (
+    <span
+      data-testid={`due-${assignmentId}`}
+      data-overdue={overdue || undefined}
+      className={`mt-0.5 inline-block rounded px-1.5 py-0.5 text-[11px] ${
+        overdue
+          ? "bg-red-100 text-red-800"
+          : soon
+            ? "bg-amber-100 text-amber-900"
+            : "bg-slate-100 text-slate-600"
+      }`}
+    >
+      {due.toLocaleDateString("ja-JP")} まで ・ {label}
+    </span>
+  );
+}
+
+/**
+ * 課題の達成率(改善候補 9)。管理者にだけ入る。
+ *
+ * 帯は色分けするが、数字も必ず出す。色が見分けにくい人にも読めるように
+ */
+function AchievementBar({
+  stats,
+  assignmentId,
+}: {
+  stats: { total: number; cleared: number; attempting: number; untouched: number };
+  assignmentId: string;
+}) {
+  const pct = (n: number) => (stats.total === 0 ? 0 : (n / stats.total) * 100);
+  return (
+    <span className="mt-1 block" data-testid={`achievement-${assignmentId}`}>
+      <span className="flex h-1.5 overflow-hidden rounded bg-slate-200">
+        <span className="bg-emerald-500" style={{ width: `${pct(stats.cleared)}%` }} />
+        <span className="bg-amber-300" style={{ width: `${pct(stats.attempting)}%` }} />
+      </span>
+      <span className="mt-0.5 block text-[11px] text-slate-500">
+        クリア {stats.cleared} ・ 挑戦中 {stats.attempting} ・ 未着手 {stats.untouched} / 全{" "}
+        {stats.total} 人
+      </span>
+    </span>
+  );
+}
+
 function AssignmentsPanel({
   orgId,
   isAdmin,
@@ -384,6 +443,7 @@ function AssignmentsPanel({
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [problemRef, setProblemRef] = useState(sortedProblems()[0]?.id ?? "");
   const [target, setTarget] = useState("");
+  const [dueAt, setDueAt] = useState("");
   const [note, setNote] = useState("");
   const [message, setMessage] = useState<string | undefined>(undefined);
 
@@ -405,9 +465,12 @@ function AssignmentsPanel({
         kind: "official",
         problemRef,
         ...(target ? { userId: target } : {}),
+        // <input type="date"> は "2026-12-31"。その日の終わりを期限とする
+        ...(dueAt ? { dueAt: new Date(`${dueAt}T23:59:59`).toISOString() } : {}),
         ...(note ? { note } : {}),
       });
       setNote("");
+      setDueAt("");
       await reload();
       setMessage("課題を割り当てました。");
     } catch {
@@ -452,6 +515,8 @@ function AssignmentsPanel({
                   {a.userId ? `${assignee?.name ?? "メンバー"} に` : "全員に"}
                   {a.note ? ` ・ ${a.note}` : ""}
                 </span>
+                <DueBadge dueAt={a.dueAt} assignmentId={a.id} />
+                {a.stats && <AchievementBar stats={a.stats} assignmentId={a.id} />}
               </span>
               {isAdmin && (
                 <button
@@ -508,6 +573,16 @@ function AssignmentsPanel({
               </option>
             ))}
           </select>
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            <span className="shrink-0">期限(任意)</span>
+            <input
+              type="date"
+              value={dueAt}
+              onChange={(e) => setDueAt(e.target.value)}
+              data-testid="assign-due"
+              className="min-h-11 flex-1 rounded-lg border border-slate-300 px-2 text-sm"
+            />
+          </label>
           <input
             value={note}
             onChange={(e) => setNote(e.target.value.slice(0, 200))}

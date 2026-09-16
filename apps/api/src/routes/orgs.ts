@@ -13,7 +13,7 @@ import {
   submissions,
   user,
 } from "../db/schema.js";
-import type { MatrixDto } from "../dto.js";
+import type { AssignmentDto, MatrixDto } from "../dto.js";
 import type { AppBindings } from "../env.js";
 import { newId } from "../lib/util.js";
 import { requireUser } from "../middleware/auth.js";
@@ -44,6 +44,9 @@ const assignSchema = z.object({
  * 管理者が見られるのは「自分が管理者である組織のメンバー」のデータだけ(方針 6)。
  * 組織横断の一覧 API は作らない。
  */
+/** 一度に返す課題の数。達成率の集計で読む行数を抑えるため */
+const MAX_ASSIGNMENTS = 100;
+
 /**
  * 表に出すメンバーの上限。1 回の表示で読む D1 の行数を抑えるため(COST.md §1.2)。
  * これを超える規模の組織は、そもそも 1 枚の表では読めない
@@ -368,14 +371,22 @@ export const orgRoutes = new Hono<AppBindings>()
       eq(assignments.orgId, orgId),
       or(isNull(assignments.userId), eq(assignments.userId, c.var.user.id)),
     );
-    const where = c.var.membership.role === "admin" ? eq(assignments.orgId, orgId) : mineOnly;
+    const isAdmin = c.var.membership.role === "admin";
+    const where = isAdmin ? eq(assignments.orgId, orgId) : mineOnly;
     const rows = await db
       .select()
       .from(assignments)
       .where(where)
       .orderBy(desc(assignments.createdAt))
-      .limit(200);
-    return c.json({ assignments: rows.map(toAssignment) });
+      .limit(MAX_ASSIGNMENTS);
+
+    const dtos = rows.map(toAssignment);
+    // 達成率は管理者だけに出す。メンバーには自分の課題しか見えないので、
+    // 「何人できたか」を見せても意味がないうえ、他人の状況が透けてしまう
+    if (isAdmin && dtos.length > 0) {
+      await attachProgress(db, orgId, dtos);
+    }
+    return c.json({ assignments: dtos });
   })
   .delete("/:orgId/assignments/:assignmentId", requireOrgAdmin, async (c) => {
     const db = drizzle(c.env.DB);
@@ -450,6 +461,61 @@ async function hasOtherAdmin(db: Db, orgId: string, targetId: string): Promise<b
     .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.role, "admin")))
     .limit(5);
   return rows.some((r) => r.userId !== targetId);
+}
+
+/**
+ * 課題ごとの達成状況(改善候補 9)を詰める。
+ *
+ * 1 件ずつ数えると課題の数だけクエリが飛ぶ(D1 は 1 リクエスト 50 クエリまで、
+ * COST.md §1.2)ので、メンバーと問題をまとめて 1 回で読んでから JS で数える。
+ * 読む行数は メンバー数 × 課題に出てくる問題数 が上限。
+ */
+async function attachProgress(
+  db: ReturnType<typeof drizzle>,
+  orgId: string,
+  dtos: AssignmentDto[],
+): Promise<void> {
+  const members = await listMembers(db, orgId);
+  const memberIds = members.map((m) => m.userId);
+  const problemIds = [...new Set(dtos.map((a) => a.problemRef))];
+  if (memberIds.length === 0 || problemIds.length === 0) return;
+
+  const rows = await db
+    .select({
+      userId: progress.userId,
+      problemId: progress.problemId,
+      clearedAt: progress.clearedAt,
+    })
+    .from(progress)
+    .where(and(inArray(progress.userId, memberIds), inArray(progress.problemId, problemIds)))
+    .limit(MAX_MATRIX_CELLS);
+
+  /** 問題 ID → (ユーザー ID → クリアしたか) */
+  const byProblem = new Map<string, Map<string, boolean>>();
+  for (const row of rows) {
+    const m = byProblem.get(row.problemId) ?? new Map<string, boolean>();
+    m.set(row.userId, row.clearedAt !== null);
+    byProblem.set(row.problemId, m);
+  }
+
+  for (const dto of dtos) {
+    // 個人宛ならその 1 人、全員宛なら組織のメンバー全員が対象
+    const targets = dto.userId ? [dto.userId] : memberIds;
+    const seen = byProblem.get(dto.problemRef);
+    let cleared = 0;
+    let attempting = 0;
+    for (const userId of targets) {
+      const state = seen?.get(userId);
+      if (state === true) cleared += 1;
+      else if (state === false) attempting += 1;
+    }
+    dto.stats = {
+      total: targets.length,
+      cleared,
+      attempting,
+      untouched: targets.length - cleared - attempting,
+    };
+  }
 }
 
 function toAssignment(row: typeof assignments.$inferSelect) {
