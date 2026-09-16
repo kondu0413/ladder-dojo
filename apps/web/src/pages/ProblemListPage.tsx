@@ -2,6 +2,7 @@ import type { Problem } from "@ladder-dojo/core";
 import { useMemo } from "react";
 import { Link } from "react-router";
 import { AuthBar } from "../components/AuthBar.js";
+import { ReviewSuggestions } from "../components/ReviewSuggestions.js";
 import { useProgress } from "../lib/progress-context.jsx";
 import { MODE_LABELS, STAGE_LABELS, STAGE_ORDER, sortedProblems } from "../problems/index.js";
 
@@ -46,6 +47,8 @@ export function ProblemListPage() {
         </p>
         <AuthBar />
       </header>
+
+      <ReviewSuggestions problems={problems} />
 
       {STAGE_ORDER.map((stage) => {
         const list = byStage.get(stage) ?? [];
