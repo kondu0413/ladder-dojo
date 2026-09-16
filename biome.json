@@ -64,6 +64,16 @@
       }
     },
     {
+      "includes": ["apps/web/scripts/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
+    },
+    {
       "includes": ["apps/web/**"],
       "linter": {
         "rules": {
