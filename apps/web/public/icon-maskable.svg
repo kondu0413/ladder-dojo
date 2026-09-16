@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="ラダー図トレーニング">
+  <title>ラダー図トレーニング</title>
+  <rect width="512" height="512" fill="#0f172a"/>
+  <!-- maskable は端が削られる。中央 60% の安全域に縮めて置く -->
+  <g transform="translate(102.4 102.4) scale(0.6)">
+    <line x1="96" y1="112" x2="96" y2="400" stroke="#e2e8f0" stroke-width="20" stroke-linecap="round"/>
+    <line x1="416" y1="112" x2="416" y2="400" stroke="#e2e8f0" stroke-width="20" stroke-linecap="round"/>
+    <line x1="96" y1="184" x2="188" y2="184" stroke="#f59e0b" stroke-width="16" stroke-linecap="round"/>
+    <line x1="188" y1="152" x2="188" y2="216" stroke="#f59e0b" stroke-width="16" stroke-linecap="round"/>
+    <line x1="232" y1="152" x2="232" y2="216" stroke="#f59e0b" stroke-width="16" stroke-linecap="round"/>
+    <line x1="232" y1="184" x2="312" y2="184" stroke="#f59e0b" stroke-width="16" stroke-linecap="round"/>
+    <circle cx="360" cy="184" r="40" fill="none" stroke="#f59e0b" stroke-width="16"/>
+    <line x1="400" y1="184" x2="416" y2="184" stroke="#f59e0b" stroke-width="16" stroke-linecap="round"/>
+    <line x1="96" y1="320" x2="188" y2="320" stroke="#94a3b8" stroke-width="16" stroke-linecap="round"/>
+    <line x1="188" y1="288" x2="188" y2="352" stroke="#94a3b8" stroke-width="16" stroke-linecap="round"/>
+    <line x1="232" y1="288" x2="232" y2="352" stroke="#94a3b8" stroke-width="16" stroke-linecap="round"/>
+    <line x1="232" y1="320" x2="312" y2="320" stroke="#94a3b8" stroke-width="16" stroke-linecap="round"/>
+    <line x1="312" y1="184" x2="312" y2="320" stroke="#94a3b8" stroke-width="16" stroke-linecap="round"/>
+  </g>
+</svg>
