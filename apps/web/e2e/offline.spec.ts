@@ -10,6 +10,9 @@ import { expect, type Page, test } from "@playwright/test";
  * どのテストもまず 1 回オンラインで開いてから、オフラインにしている。
  */
 
+// 並列実行だと dev サーバーが遅くなり、分けた JS が貯まるまで時間がかかる
+test.describe.configure({ timeout: 90_000 });
+
 /**
  * Service Worker が画面を受け持つところまで持っていく。
  *
@@ -24,6 +27,34 @@ async function activateServiceWorker(page: Page, path: string) {
     timeout: 15_000,
   });
   await page.goto(path);
+  await waitForRoutePrefetch(page);
+}
+
+/**
+ * 画面ごとに分けた JS(改善候補 11)が貯まるまで待つ。
+ *
+ * 分けたぶんは開くまで読まれないので、裏で取りに行っている(App.tsx の prefetchRoutes)。
+ * 取り終わる前にオフラインにすると、まだ開いていない画面が出せない。
+ * 待たずにテストすると、速いときだけ通る不安定なテストになる。
+ */
+async function waitForRoutePrefetch(page: Page) {
+  await expect
+    .poll(async () => cachedPaths(page), { timeout: 30_000 })
+    .toEqual(
+      expect.arrayContaining(
+        ["ProblemPage", "SandboxPage", "OrgDetailPage", "RankingPage"].map((name) =>
+          expect.stringContaining(`/assets/${name}-`),
+        ),
+      ),
+    );
+}
+
+/** Service Worker のキャッシュに入っているパス */
+async function cachedPaths(page: Page): Promise<string[]> {
+  return page.evaluate(async () => {
+    const cache = await caches.open("ladder-dojo-v1");
+    return (await cache.keys()).map((r) => new URL(r.url).pathname);
+  });
 }
 
 test("マニフェストとアイコンを配信している", async ({ page }) => {
@@ -78,6 +109,20 @@ test("オフラインだと一覧に案内が出て、つながると消える",
     await context.setOffline(false);
   }
   await expect(page.getByTestId("offline-notice")).toHaveCount(0);
+});
+
+test("画面ごとに分けた JS は、裏で取りに行って貯まる(分割してもオフラインで動く)", async ({
+  page,
+}) => {
+  await activateServiceWorker(page, "/");
+  // 一度も開いていない画面のぶんも貯まっている。
+  // 読み取りごと繰り返す(1 回読んだ結果を後から確かめると、取り込み途中を掴むことがある)
+  await expect
+    .poll(async () => cachedPaths(page), { timeout: 30_000 })
+    .toEqual(expect.arrayContaining([expect.stringContaining("/assets/SandboxPage-")]));
+  await expect
+    .poll(async () => cachedPaths(page), { timeout: 30_000 })
+    .toEqual(expect.arrayContaining([expect.stringContaining("/assets/OrgDetailPage-")]));
 });
 
 test("一度も開いていない画面も、オフラインで開ける", async ({ page, context }) => {
