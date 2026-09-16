@@ -31,7 +31,7 @@ SPA の静的ファイルと Hono API を 1 つの Worker `ladder-dojo` で配�
 | 環境変数 / シークレット | 64 個 / Worker、1 つ 5 KB | 3 個(BETTER_AUTH_SECRET / GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET) | |
 | Cron Triggers | 利用可(アカウントあたり 5 個、要確認) | フェーズ3 のランキング集計で 1〜2 個 | |
 | `workers.dev` サブドメイン | 無料、1 アカウント 1 つ | `https://ladder-dojo.<サブドメイン>.workers.dev` を本番 URL にする(独自ドメインは 0円制約外) | |
-| 静的アセット | 20,000 ファイル / Worker、1 ファイル 25 MiB | 数百ファイル、最大でも JS バンドル 1〜2 MB | |
+| 静的アセット | 20,000 ファイル / Worker、1 ファイル 25 MiB | 20 ファイル前後。画面ごとに分けた JS を合わせても 600 KB 未満(最大は共通部分の 425.77 kB / gzip 126.31)。**分割してもここは無料・無制限なので費用は変わらない**(S-015) | 2026-09-16 |
 | Workers Logs | 20万 イベント / 日、保持 3 日 | エラー時のみログ出力する | |
 | 商用利用 | 制限なし | 将来の企業導入を塞がない | |
 
