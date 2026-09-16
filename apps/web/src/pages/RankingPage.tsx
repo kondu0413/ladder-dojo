@@ -143,6 +143,31 @@ export function RankingPage() {
         )}
       </section>
 
+      {data?.me && (
+        <section
+          data-testid="ranking-me"
+          className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3"
+        >
+          <p className="text-sm font-semibold text-sky-900">あなたのいま</p>
+          <p className="font-mono text-2xl font-bold text-sky-900" data-testid="ranking-me-value">
+            {data.me.value}
+            <span className="ml-1 font-sans text-sm font-normal text-sky-800">{unit}</span>
+          </p>
+          <p className="w-full text-xs text-sky-800">
+            クリアした記録はすぐ残っています。下の順位表への反映は 1 日 1
+            回なので、いまの値はここで確かめてください。
+          </p>
+        </section>
+      )}
+
+      {data && (
+        <p className="text-xs text-slate-500" data-testid="ranking-computed-at">
+          {data.live
+            ? "この順位はいま計算した結果です。"
+            : `下の順位は ${new Date(data.computedAt).toLocaleString("ja-JP")} 時点のものです。全体ランキングは 1 日 1 回更新されます。`}
+        </p>
+      )}
+
       {error && (
         <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
@@ -154,7 +179,9 @@ export function RankingPage() {
           data-testid="ranking-empty"
           className="rounded-lg bg-slate-100 px-3 py-3 text-sm text-slate-600"
         >
-          まだ記録がありません。
+          {data.live
+            ? "まだ記録がありません。"
+            : "まだ順位表ができていません。全体ランキングは 1 日 1 回作られます。"}
         </p>
       )}
 
@@ -179,14 +206,6 @@ export function RankingPage() {
             </li>
           ))}
         </ol>
-      )}
-
-      {data && (
-        <p className="text-xs text-slate-400" data-testid="ranking-computed-at">
-          {data.live
-            ? "この順位はいま計算した結果です。"
-            : `${new Date(data.computedAt).toLocaleString("ja-JP")} 時点。全体ランキングは 1 日 1 回更新されます。`}
-        </p>
       )}
     </AppShell>
   );

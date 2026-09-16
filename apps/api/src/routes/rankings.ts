@@ -7,6 +7,7 @@ import type { AppBindings } from "../env.js";
 import { optionalUser } from "../middleware/auth.js";
 import {
   computeOrgRanking,
+  computeUserValue,
   METRICS,
   type Metric,
   PERIODS,
@@ -35,6 +36,12 @@ export const rankingRoutes = new Hono<AppBindings>().get("/", optionalUser, asyn
 
   if (!orgId) {
     const result = await readGlobalRanking(c.env, metric as Metric, effectivePeriod);
+    const signedIn = c.get("user");
+    // ログインしていれば「あなたのいま」を別に出す。スナップショットは 1 日 1 回なので、
+    // クリア直後は自分が一覧に載らず、記録されていないように見える(S-026)
+    const mine = signedIn
+      ? await computeUserValue(c.env, signedIn.id, metric as Metric, effectivePeriod)
+      : null;
     return c.json({
       period: effectivePeriod,
       metric,
@@ -43,6 +50,7 @@ export const rankingRoutes = new Hono<AppBindings>().get("/", optionalUser, asyn
       computedAt: result.computedAt,
       // 全体ランキングは Cron で 1 日 1 回計算する(D-010)
       live: false,
+      me: signedIn ? { userId: signedIn.id, userName: signedIn.name, value: mine ?? 0 } : null,
     });
   }
 

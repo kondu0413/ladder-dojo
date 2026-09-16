@@ -225,4 +225,11 @@ export type RankingDto = {
   computedAt: string;
   /** true = その場で計算(組織内)、false = 1 日 1 回のスナップショット(全体) */
   live: boolean;
+  /**
+   * ログイン中の本人の**いまの値**(全体ランキングのときだけ。未ログインなら null)。
+   *
+   * スナップショットは 1 日 1 回なので、クリア直後は一覧に載らない。
+   * 記録されていないように見えるのを防ぐために別に返す(S-026)
+   */
+  me?: { userId: string; userName: string; value: number } | null;
 };
