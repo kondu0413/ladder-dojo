@@ -12,6 +12,9 @@ import { authHeaders, jsonHeaders, signUp, type TestUser } from "./helpers.js";
 const selfHold = ladder(5).row(no("X0"), nc("X1"), out("Y0")).row(no("Y0")).v(0, 0).build();
 const broken = ladder(5).row(no("X0"), nc("X1"), out("Y0")).build();
 
+/** API 側の 1 ページの件数と揃える */
+const PAGE_SIZE = 20;
+
 const goodCases = [
   {
     id: "start",
@@ -150,7 +153,13 @@ describe("投稿(§3.6: 模範解答の自動チェック)", () => {
     expect(res.status).toBe(201);
   });
 
-  it("待ち時間が長すぎる問題は打ち切られ、その旨が返る", async () => {
+  /**
+   * 長いタイマの問題(S-030)。
+   *
+   * 以前は 30 秒ぶんしか確かめられず、**手元の答え合わせは通るのに投稿だけ 422** になった。
+   * 判定を軽くしたぶん上限を広げ、実用的な長さは通るようにした
+   */
+  it("90 秒待つ問題は投稿できる", async () => {
     const user = await signUp();
     const slow = ladder(4).row(no("X0"), timer("T0", 90_000)).build();
     const res = await publish(user, {
@@ -166,6 +175,51 @@ describe("投稿(§3.6: 模範解答の自動チェック)", () => {
           ],
         },
       ],
+    });
+    expect(res.status).toBe(201);
+  });
+
+  /**
+   * **スキーマが許す長さは、必ず検証しきれること**(S-030)。
+   *
+   * テストケースの待ち時間の合計はスキーマが 120 秒までに制限している。
+   * 再検証の上限がそれより短いと、**スキーマ上は正しいのに投稿だけできない**
+   * 問題ができてしまう(以前は 30 秒ぶんしか見ていなかった)
+   */
+  it("スキーマ上限いっぱい(120 秒)のテストでも投稿できる", async () => {
+    const user = await signUp();
+    const slow = ladder(4).row(no("X0"), timer("T0", 119_000)).build();
+    const res = await publish(user, {
+      circuit: slow,
+      testCases: [
+        {
+          id: "slow",
+          title: "120 秒待つ",
+          steps: [
+            { type: "set", inputs: { X0: true } },
+            { type: "wait", ms: 120_000 },
+            { type: "expect", outputs: { T0: true } },
+          ],
+        },
+      ],
+    });
+    expect(res.status).toBe(201);
+  });
+
+  it("1 ケースずつは短くても、積み上げが重すぎれば打ち切られる(CPU 保護)", async () => {
+    const user = await signUp();
+    const slow = ladder(4).row(no("X0"), timer("T0", 200_000)).build();
+    const res = await publish(user, {
+      circuit: slow,
+      testCases: Array.from({ length: 10 }, (_, i) => ({
+        id: `slow${i}`,
+        title: `30 秒待つ ${i}`,
+        steps: [
+          { type: "set" as const, inputs: { X0: true } },
+          { type: "wait" as const, ms: 30_000 },
+          { type: "expect" as const, outputs: { T0: false } },
+        ],
+      })),
     });
     expect(res.status).toBe(422);
     expect(((await res.json()) as { failures: Array<{ kind: string }> }).failures[0]?.kind).toBe(
@@ -797,4 +851,64 @@ describe("削除", () => {
       .first<{ n: number }>();
     expect(row?.n).toBe(1);
   });
+});
+
+/**
+ * 続きを読む(S-033)。
+ *
+ * 以前はカーソルが新着順にしか付かず、**いいね順・難易度順では 21 件目から先を
+ * 見る手段が無かった**。しかも画面には「もっと読む」が出ないので、
+ * まだあることすら分からなかった
+ */
+describe("一覧のページング", () => {
+  /** 21 件投稿して、いいね数と難易度をばらけさせる */
+  async function seed(): Promise<number> {
+    const author = await signUp("pager");
+    const total = PAGE_SIZE + 1;
+    for (let i = 0; i < total; i++) {
+      const id = await publishedId(author, {
+        title: `ページング ${i}`,
+        difficulty: (i % 5) + 1,
+      });
+      // いいね数をばらけさせる(自分以外の人が押す)
+      if (i % 3 === 0) {
+        const fan = await signUp(`fan-${i}`);
+        await app.request(
+          `/api/problems/${id}/like`,
+          { method: "POST", headers: authHeaders(fan) },
+          env,
+        );
+      }
+    }
+    return total;
+  }
+
+  async function page(sort: string, cursor?: string) {
+    const qs = new URLSearchParams({ sort });
+    if (cursor) qs.set("cursor", cursor);
+    const res = await app.request(`/api/problems?${qs.toString()}`, {}, env);
+    expect(res.status).toBe(200);
+    return (await res.json()) as {
+      problems: Array<{ id: string }>;
+      nextCursor: string | null;
+    };
+  }
+
+  for (const sort of ["new", "likes", "difficulty"] as const) {
+    it(`${sort} 順でも 2 ページ目が読める`, async () => {
+      const total = await seed();
+
+      const first = await page(sort);
+      expect(first.problems).toHaveLength(PAGE_SIZE);
+      expect(first.nextCursor).not.toBeNull();
+
+      const second = await page(sort, first.nextCursor ?? undefined);
+      expect(second.problems.length).toBeGreaterThan(0);
+
+      // 1 ページ目と 2 ページ目で同じ問題が二度出ない / 取りこぼさない
+      const ids = [...first.problems, ...second.problems].map((p) => p.id);
+      expect(new Set(ids).size).toBe(ids.length);
+      expect(ids.length).toBeGreaterThanOrEqual(total);
+    });
+  }
 });

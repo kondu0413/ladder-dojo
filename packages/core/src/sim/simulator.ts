@@ -46,6 +46,15 @@ export type PowerMap = {
 export type SimulatorOptions = {
   /** タイマの進め方。instant は通電した瞬間に設定値到達 */
   timerMode?: "realtime" | "instant";
+  /**
+   * 通電マップを組み立てるか(既定 true)。
+   *
+   * **判定は通電マップを見ない**。見るのは画面だけ。1 スキャンごとに
+   * 行 × 列の配列を 3 枚作り直すのは、何万スキャンも回す判定では丸ごと無駄で、
+   * ここが判定の所要時間の大半を占める。Workers の CPU 10ms/リクエスト
+   * (COST.md §1.1)に収めるため、判定側では切る(S-030)
+   */
+  trackPower?: boolean;
 };
 
 type Rung = { rows: number[] };
@@ -53,26 +62,60 @@ type Rung = { rows: number[] };
 export class Simulator {
   readonly circuit: Circuit;
   private readonly cells: Map<string, Cell>;
+  /**
+   * 行 × 列で引けるセルの表(S-030)。
+   *
+   * 1 スキャンごとに `"1,2"` のような文字列キーを作って Map を引くと、
+   * 何万スキャンも回す判定では文字列の生成だけで時間を食う。
+   * セルの配置はスキャン中に変わらないので、最初に表にしておく
+   */
+  private readonly grid: Array<Array<Cell | undefined>>;
   private readonly rungs: Rung[];
-  private readonly timerMode: "realtime" | "instant";
+  /**
+   * タイマの進め方。**あとから変えられる**(S-029)。
+   * 作り直すとデバイスの状態が全部消えるので、速度を変えるだけで
+   * 数えた回数やランプが初期化されてしまう
+   */
+  private timerMode: "realtime" | "instant";
+  private readonly trackPower: boolean;
 
   private bits = new Map<DeviceId, boolean>();
   private timers = new Map<DeviceId, TimerState>();
   private counters = new Map<DeviceId, CounterState>();
   /** 次のスキャンで反映する入力 */
   private pendingInputs = new Map<DeviceId, boolean>();
-  /** セルごとの前回値(立ち上がり検出用) */
-  private prevByCell = new Map<string, boolean>();
   private lastPower: PowerMap;
   private scanCount = 0;
+  /** 使い回す作業用バッファ(S-030)。毎スキャン作り直さない */
+  private readonly nodesBuf: boolean[][];
+  private readonly conductsBuf: boolean[][];
+  /** セルごとの前回値(立ち上がり検出用)。今回ぶんと入れ替えて使う */
+  private prevCell: boolean[][];
+  private nextCell: boolean[][];
+  /** 幅優先探索の待ち行列(行・列を別々に持って、確保し直さない) */
+  private readonly queueRow: number[] = [];
+  private readonly queueCol: number[] = [];
 
   constructor(circuit: Circuit, options: SimulatorOptions = {}) {
     this.circuit = circuitSchema.parse(circuit);
     this.timerMode = options.timerMode ?? "realtime";
+    this.trackPower = options.trackPower ?? true;
     this.cells = new Map();
-    for (const cell of this.circuit.cells) this.cells.set(cellKey(cell.row, cell.col), cell);
+    const { rows, cols } = this.circuit;
+    this.grid = Array.from({ length: rows }, () =>
+      new Array<Cell | undefined>(cols).fill(undefined),
+    );
+    for (const cell of this.circuit.cells) {
+      this.cells.set(cellKey(cell.row, cell.col), cell);
+      const row = this.grid[cell.row];
+      if (row && cell.col < cols) row[cell.col] = cell;
+    }
     this.rungs = splitRungs(this.circuit);
     this.lastPower = emptyPower(this.circuit);
+    this.nodesBuf = Array.from({ length: rows }, () => new Array<boolean>(cols + 1).fill(false));
+    this.conductsBuf = Array.from({ length: rows }, () => new Array<boolean>(cols).fill(false));
+    this.prevCell = Array.from({ length: rows }, () => new Array<boolean>(cols).fill(false));
+    this.nextCell = Array.from({ length: rows }, () => new Array<boolean>(cols).fill(false));
     this.initDevices();
   }
 
@@ -102,13 +145,19 @@ export class Simulator {
     }
   }
 
+  /** タイマの進め方を変える。デバイスの状態はそのまま(S-029) */
+  setTimerMode(mode: "realtime" | "instant"): void {
+    this.timerMode = mode;
+  }
+
   /** 全デバイスを初期状態に戻す(回路はそのまま) */
   reset(): void {
     this.bits.clear();
     this.timers.clear();
     this.counters.clear();
     this.pendingInputs.clear();
-    this.prevByCell.clear();
+    for (const row of this.prevCell) row.fill(false);
+    for (const row of this.nextCell) row.fill(false);
     this.lastPower = emptyPower(this.circuit);
     this.scanCount = 0;
     this.initDevices();
@@ -172,101 +221,114 @@ export class Simulator {
     this.pendingInputs.clear();
 
     const { cols } = this.circuit;
-    const power = emptyPower(this.circuit);
-    const nextPrev = new Map<string, boolean>();
+    const power = this.trackPower ? emptyPower(this.circuit) : this.lastPower;
+    const next = this.nextCell;
+    for (const row of next) row.fill(false);
 
     for (const rung of this.rungs) {
-      const { nodes, conducts } = this.evaluateRung(rung, nextPrev);
-      // 通電マップに書き込み
-      for (const r of rung.rows) {
-        const rowNodes = nodes.get(r);
-        if (!rowNodes) continue;
-        const prow = power.nodes[r];
-        const crow = power.cells[r];
-        const drow = power.conducts[r];
-        if (!prow || !crow || !drow) continue;
-        for (let c = 0; c <= cols; c++) prow[c] = rowNodes[c] ?? false;
-        for (let c = 0; c < cols; c++) {
-          const el = this.cells.get(cellKey(r, c))?.element;
-          if (!el) continue;
-          if (el.type === "coil") {
-            const energized = rowNodes[c] ?? false;
-            crow[c] = energized;
-            drow[c] = energized;
-          } else {
-            const closed = conducts.get(cellKey(r, c)) ?? false;
-            drow[c] = closed;
-            crow[c] = closed && (rowNodes[c] ?? false);
+      this.evaluateRung(rung);
+      if (this.trackPower) {
+        for (const r of rung.rows) {
+          const rowNodes = this.nodesBuf[r];
+          const rowConducts = this.conductsBuf[r];
+          const gridRow = this.grid[r];
+          const prow = power.nodes[r];
+          const crow = power.cells[r];
+          const drow = power.conducts[r];
+          if (!rowNodes || !rowConducts || !gridRow || !prow || !crow || !drow) continue;
+          for (let c = 0; c <= cols; c++) prow[c] = rowNodes[c] ?? false;
+          for (let c = 0; c < cols; c++) {
+            const el = gridRow[c]?.element;
+            if (!el) continue;
+            if (el.type === "coil") {
+              const energized = rowNodes[c] ?? false;
+              crow[c] = energized;
+              drow[c] = energized;
+            } else {
+              const closed = rowConducts[c] ?? false;
+              drow[c] = closed;
+              crow[c] = closed && (rowNodes[c] ?? false);
+            }
           }
         }
       }
       // コイルの書き込み(このラングの評価結果を即時反映)
       for (const r of rung.rows) {
-        const cell = this.cells.get(cellKey(r, cols - 1));
+        const cell = this.grid[r]?.[cols - 1];
         const el = cell?.element;
         if (!cell || el?.type !== "coil") continue;
-        const energized = nodes.get(r)?.[cols - 1] ?? false;
-        this.applyCoil(cell, el, energized, dtMs, nextPrev);
+        const energized = this.nodesBuf[r]?.[cols - 1] ?? false;
+        this.applyCoil(r, cols - 1, el, energized, dtMs, next);
       }
     }
-    this.prevByCell = nextPrev;
+    // 今回値を次の前回値にする(配列は入れ替えるだけで作り直さない)
+    this.nextCell = this.prevCell;
+    this.prevCell = next;
     this.lastPower = power;
     this.scanCount++;
     return power;
   }
 
   /**
-   * ラング内の各ノードの通電を幅優先で求める。
-   * nodes: row → 各ノード(cols+1 個)の通電、conducts: セルキー → 要素が導通しているか
+   * ラング内の各ノードの通電を幅優先で求め、`nodesBuf` / `conductsBuf` に書く。
+   * バッファは使い回すので、対象の行だけ先に消す
    */
-  private evaluateRung(
-    rung: Rung,
-    nextPrev: Map<string, boolean>,
-  ): { nodes: Map<number, boolean[]>; conducts: Map<string, boolean> } {
+  private evaluateRung(rung: Rung): void {
     const { cols } = this.circuit;
-    const nodes = new Map<number, boolean[]>();
-    for (const r of rung.rows) nodes.set(r, new Array<boolean>(cols + 1).fill(false));
+    const next = this.nextCell;
 
-    // 接点の導通は、このスキャンの評価時点のデバイス値で固定する
-    const conducts = new Map<string, boolean>();
     for (const r of rung.rows) {
+      this.nodesBuf[r]?.fill(false);
+      const rowConducts = this.conductsBuf[r];
+      const gridRow = this.grid[r];
+      if (!rowConducts || !gridRow) continue;
+      // 接点の導通は、このスキャンの評価時点のデバイス値で固定する
       for (let c = 0; c < cols; c++) {
-        const key = cellKey(r, c);
-        const el = this.cells.get(key)?.element;
-        if (!el) continue;
-        if (el.type === "wire") conducts.set(key, true);
-        else if (el.type === "contact") conducts.set(key, this.contactConducts(key, el, nextPrev));
+        const el = gridRow[c]?.element;
+        if (!el) {
+          rowConducts[c] = false;
+        } else if (el.type === "wire") {
+          rowConducts[c] = true;
+        } else if (el.type === "contact") {
+          rowConducts[c] = this.contactConducts(r, c, el, next);
+        } else {
+          rowConducts[c] = false;
+        }
       }
     }
 
-    const queue: Array<[number, number]> = [];
+    const queueRow = this.queueRow;
+    const queueCol = this.queueCol;
+    queueRow.length = 0;
+    queueCol.length = 0;
     const mark = (r: number, c: number) => {
-      const row = nodes.get(r);
-      if (!row || row[c]) return;
+      const row = this.nodesBuf[r];
+      // ラングに含まれない行は nodesBuf を消していないので、ここで弾く
+      if (!row || !rung.rows.includes(r) || row[c]) return;
       row[c] = true;
-      queue.push([r, c]);
+      queueRow.push(r);
+      queueCol.push(c);
     };
     for (const r of rung.rows) mark(r, 0); // 左母線
 
-    while (queue.length > 0) {
-      const item = queue.shift();
-      if (!item) break;
-      const [r, c] = item;
+    for (let head = 0; head < queueRow.length; head++) {
+      const r = queueRow[head] as number;
+      const c = queueCol[head] as number;
       // 右へ: セル (r, c) の要素が導通していれば (r, c+1)
-      if (c < cols && conducts.get(cellKey(r, c))) mark(r, c + 1);
+      if (c < cols && this.conductsBuf[r]?.[c]) mark(r, c + 1);
       // 縦線: セル (r, c-1) の右端 = ノード (r, c) と (r+1, c)、およびその逆
       if (c > 0) {
-        if (this.cells.get(cellKey(r, c - 1))?.vline) mark(r + 1, c);
-        if (this.cells.get(cellKey(r - 1, c - 1))?.vline) mark(r - 1, c);
+        if (this.grid[r]?.[c - 1]?.vline) mark(r + 1, c);
+        if (this.grid[r - 1]?.[c - 1]?.vline) mark(r - 1, c);
       }
     }
-    return { nodes, conducts };
   }
 
   private contactConducts(
-    key: string,
+    row: number,
+    col: number,
     el: ContactElement,
-    nextPrev: Map<string, boolean>,
+    next: boolean[][],
   ): boolean {
     const value = this.readInternal(el.device);
     switch (el.kind) {
@@ -275,8 +337,9 @@ export class Simulator {
       case "nc":
         return !value;
       case "rise": {
-        const prev = this.prevByCell.get(key) ?? false;
-        nextPrev.set(key, value);
+        const prev = this.prevCell[row]?.[col] ?? false;
+        const nextRow = next[row];
+        if (nextRow) nextRow[col] = value;
         return value && !prev;
       }
     }
@@ -290,21 +353,22 @@ export class Simulator {
   }
 
   private applyCoil(
-    cell: Cell,
+    row: number,
+    col: number,
     el: CoilElement,
     energized: boolean,
     dtMs: number,
-    nextPrev: Map<string, boolean>,
+    next: boolean[][],
   ): void {
-    const key = cellKey(cell.row, cell.col);
+    const prevCell = this.prevCell[row]?.[col] ?? false;
+    const nextRow = next[row];
     switch (el.kind) {
       case "out":
         this.bits.set(el.device, energized);
         break;
       case "pulse": {
-        const prev = this.prevByCell.get(key) ?? false;
-        nextPrev.set(key, energized);
-        this.bits.set(el.device, energized && !prev);
+        if (nextRow) nextRow[col] = energized;
+        this.bits.set(el.device, energized && !prevCell);
         break;
       }
       case "timer": {
@@ -319,10 +383,9 @@ export class Simulator {
         break;
       }
       case "counter": {
-        const prev = this.prevByCell.get(key) ?? false;
-        nextPrev.set(key, energized);
+        if (nextRow) nextRow[col] = energized;
         const st = this.counters.get(el.device) ?? { count: 0, done: false };
-        if (energized && !prev && st.count < el.preset) {
+        if (energized && !prevCell && st.count < el.preset) {
           const count = st.count + 1;
           this.counters.set(el.device, { count, done: count >= el.preset });
         } else {

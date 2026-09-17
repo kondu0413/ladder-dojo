@@ -54,10 +54,14 @@ export function useSimulator(circuit: Circuit): SimulatorState {
   const [held, setHeld] = useState<DeviceId[]>([]);
   const [, forceRender] = useReducer((n: number) => n + 1, 0);
 
-  const sim = useMemo(
-    () => new Simulator(circuit, { timerMode: speed === "instant" ? "instant" : "realtime" }),
-    [circuit, speed],
-  );
+  /**
+   * **速度を変えてもシミュレータは作り直さない**(S-029)。
+   * 作り直すと、数えた回数や点いているランプが全部消える
+   */
+  const sim = useMemo(() => new Simulator(circuit), [circuit]);
+  useEffect(() => {
+    sim.setTimerMode(speed === "instant" ? "instant" : "realtime");
+  }, [sim, speed]);
   const speedRef = useRef(speed);
   speedRef.current = speed;
   const heldRef = useRef(held);

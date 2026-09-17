@@ -69,9 +69,20 @@ async function aggregate(
             where cleared_at is not null and cleared_at >= ${since}${memberFilter}
             group by user_id
             union all
-            select user_id, count(*) as c from posted_attempts
-            where cleared_at is not null and cleared_at >= ${since}${memberFilter}
-            group by user_id
+            -- 非表示(通報済み)になった投稿のクリアは数えない。
+            -- 作った側の指標(authored_*)は hidden を外しているので、解いた側だけ
+            -- 残るのは辻褄が合わない(S-031)
+            select a.user_id, count(*) as c from posted_attempts a
+            join posted_problems p on p.id = a.problem_id and p.hidden = 0
+            where a.cleared_at is not null and a.cleared_at >= ${since}${
+              memberIds
+                ? sql` and a.user_id in (${sql.join(
+                    memberIds.map((id) => sql`${id}`),
+                    sql`, `,
+                  )})`
+                : sql``
+            }
+            group by a.user_id
           ) t
           join user u on u.id = t.user_id
           group by u.id, u.name

@@ -139,6 +139,76 @@ describe("全体ランキング", () => {
     expect(body.me?.value).toBe(0);
   });
 
+  /**
+   * 通報で非表示になった問題のクリア(S-031)。
+   *
+   * 作った側の指標は hidden を外しているのに、解いた側だけ数え続けていた。
+   * 消された問題でいつまでも順位が付くのはおかしい
+   */
+  it("非表示になった投稿のクリアは数えない", async () => {
+    const author = await signUp("hidden-author");
+    const solver = await signUp("hidden-solver");
+    const circuit = {
+      schemaVersion: 1,
+      cols: 3,
+      rows: 1,
+      cells: [
+        { row: 0, col: 0, element: { type: "contact", kind: "no", device: "X0" } },
+        { row: 0, col: 1, element: { type: "wire" } },
+        { row: 0, col: 2, element: { type: "coil", kind: "out", device: "Y0" } },
+      ],
+    };
+    const published = await app.request(
+      "/api/problems",
+      {
+        method: "POST",
+        headers: jsonHeaders(author),
+        body: JSON.stringify({
+          title: "通報される問題",
+          spec: "説明",
+          circuit,
+          testCases: [
+            {
+              id: "t1",
+              title: "押すと点く",
+              steps: [
+                { type: "set", inputs: { X0: true } },
+                { type: "expect", outputs: { Y0: true } },
+              ],
+            },
+          ],
+          difficulty: 1,
+        }),
+      },
+      env,
+    );
+    const id = ((await published.json()) as { problem: { id: string } }).problem.id;
+    await app.request(
+      `/api/problems/${id}/attempts`,
+      { method: "POST", headers: jsonHeaders(solver), body: JSON.stringify({ passed: true }) },
+      env,
+    );
+
+    // 非表示になる前は数える
+    await computeGlobalRankings(env);
+    const before = await ranking("solved", "all");
+    const beforeBody = (await before.json()) as { entries: Entry[] };
+    expect(beforeBody.entries.find((e) => e.userId === solver.id)?.value).toBe(1);
+
+    // 通報 3 件で非表示になったのと同じ状態にする
+    await env.DB.prepare("update posted_problems set hidden = 1 where id = ?").bind(id).run();
+
+    await computeGlobalRankings(env);
+    const after = await ranking("solved", "all");
+    const afterBody = (await after.json()) as { entries: Entry[] };
+    expect(afterBody.entries.map((e) => e.userId)).not.toContain(solver.id);
+
+    // 「あなたのいま」(S-026)も同じ勘定にする
+    const mine = await ranking("solved", "all", solver);
+    const mineBody = (await mine.json()) as { me: { value: number } | null };
+    expect(mineBody.me?.value).toBe(0);
+  });
+
   it("不正な指標は 400", async () => {
     const res = await app.request("/api/rankings?metric=speed", {}, env);
     expect(res.status).toBe(400);

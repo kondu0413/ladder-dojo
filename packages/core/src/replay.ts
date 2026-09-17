@@ -48,6 +48,8 @@ export function replayScenario(
     recordTimeline: false,
     maxSettleScans: 100,
     maxScansPerCase: 200_000,
+    // 再生は 1 つの操作列しか流さないので、合計の上限は使わない
+    maxScansTotal: Number.POSITIVE_INFINITY,
     ...options,
   });
 

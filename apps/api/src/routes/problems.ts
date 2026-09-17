@@ -2,6 +2,7 @@ import {
   type Circuit,
   circuitSchema,
   judge,
+  PUBLISH_LIMITS,
   type TestCase,
   testCasesSchema,
 } from "@ladder-dojo/core";
@@ -24,10 +25,11 @@ import { optionalUser, requireUser } from "../middleware/auth.js";
 
 /** これだけ通報されたら自動で非表示にする(§3.6: 自動チェック + 通報の事後対応) */
 const AUTO_HIDE_REPORTS = 3;
-/** 1 投稿あたりのテストケース数の上限(COST.md §1.1: CPU 10 ms/リクエスト) */
-const MAX_TEST_CASES = 20;
-/** サーバー側の再検証で許すスキャン数(同上) */
-const MAX_SCANS_PER_CASE = 3000;
+/**
+ * 投稿時の再検証の上限。**core の PUBLISH_LIMITS をそのまま使う**(S-030)。
+ * ブラウザ側の事前チェックと同じ値でないと、手元では通るのに投稿だけ弾かれる
+ */
+const MAX_TEST_CASES = PUBLISH_LIMITS.maxTestCases;
 const PAGE_SIZE = 20;
 
 /**
@@ -137,18 +139,23 @@ export const problemRoutes = new Hono<AppBindings>()
       const condition = searchCondition(q);
       if (condition) conditions.push(condition);
     }
-    // 新着順のときだけ、created_at を使ったカーソルで続きを読む
-    if (cursor && sort === "new") {
-      const ms = Number(cursor);
-      if (Number.isFinite(ms)) conditions.push(lt(postedProblems.createdAt, new Date(ms)));
+    // 続きを読むカーソル。**どの並び順でも効く**(S-033)
+    const from = parseCursor(cursor);
+    if (from) {
+      const keyed = cursorCondition(sort, from);
+      if (keyed) conditions.push(keyed);
     }
 
     const order =
       sort === "likes"
-        ? [desc(postedProblems.likesCount), desc(postedProblems.createdAt)]
+        ? [desc(postedProblems.likesCount), desc(postedProblems.createdAt), desc(postedProblems.id)]
         : sort === "difficulty"
-          ? [desc(postedProblems.difficulty), desc(postedProblems.createdAt)]
-          : [desc(postedProblems.createdAt)];
+          ? [
+              desc(postedProblems.difficulty),
+              desc(postedProblems.createdAt),
+              desc(postedProblems.id),
+            ]
+          : [desc(postedProblems.createdAt), desc(postedProblems.id)];
 
     const rows = await db
       .select()
@@ -160,10 +167,7 @@ export const problemRoutes = new Hono<AppBindings>()
     const last = rows[rows.length - 1];
     return c.json({
       problems: rows.map(toSummary),
-      nextCursor:
-        sort === "new" && rows.length === PAGE_SIZE && last
-          ? String(last.createdAt.getTime())
-          : null,
+      nextCursor: rows.length === PAGE_SIZE && last ? makeCursor(sort, last) : null,
     });
   })
   .get("/:id", optionalUser, async (c) => {
@@ -518,7 +522,10 @@ export function verifySolution(
   circuit: Circuit,
   testCases: TestCase[],
 ): { ok: true } | { ok: false; failures: VerifyFailure[] } {
-  const result = judge(circuit, testCases, { maxScansPerCase: MAX_SCANS_PER_CASE });
+  const result = judge(circuit, testCases, {
+    maxScansPerCase: PUBLISH_LIMITS.maxScansPerCase,
+    maxScansTotal: PUBLISH_LIMITS.maxScansTotal,
+  });
   if (result.passed) return { ok: true };
   return {
     ok: false,
@@ -530,6 +537,45 @@ export function verifySolution(
         kind: x.failure?.kind ?? "mismatch",
       })),
   };
+}
+
+/**
+ * 続きを読むためのカーソル(S-033)。
+ *
+ * 以前は新着順にしか付いていなかったので、**いいね順や難易度順では 21 件目から先を
+ * 見る手段が無かった**(「もっと読む」が出ない)。並び順のキーと作成時刻と id を
+ * 持たせて、どの並びでも続きから読めるようにする。
+ * id まで入れるのは、同じミリ秒に作られた 2 件が境目に来ると 1 件飛ぶため
+ */
+type Cursor = { key: number; createdAt: number; id: string };
+
+function makeCursor(sort: "new" | "likes" | "difficulty", row: typeof postedProblems.$inferSelect) {
+  const key = sort === "likes" ? row.likesCount : sort === "difficulty" ? row.difficulty : 0;
+  return `${key}.${row.createdAt.getTime()}.${row.id}`;
+}
+
+function parseCursor(cursor: string | undefined): Cursor | undefined {
+  if (!cursor) return undefined;
+  const dot = cursor.indexOf(".");
+  const dot2 = cursor.indexOf(".", dot + 1);
+  if (dot < 0 || dot2 < 0) return undefined;
+  const key = Number(cursor.slice(0, dot));
+  const createdAt = Number(cursor.slice(dot + 1, dot2));
+  const id = cursor.slice(dot2 + 1);
+  if (!Number.isFinite(key) || !Number.isFinite(createdAt) || !id) return undefined;
+  return { key, createdAt, id };
+}
+
+/** その並び順で「カーソルより後ろ」を表す条件 */
+function cursorCondition(sort: "new" | "likes" | "difficulty", from: Cursor): SQL | undefined {
+  const createdAt = new Date(from.createdAt);
+  const afterCreatedAt = or(
+    lt(postedProblems.createdAt, createdAt),
+    and(eq(postedProblems.createdAt, createdAt), lt(postedProblems.id, from.id)),
+  );
+  if (sort === "new") return afterCreatedAt;
+  const column = sort === "likes" ? postedProblems.likesCount : postedProblems.difficulty;
+  return or(lt(column, from.key), and(eq(column, from.key), afterCreatedAt));
 }
 
 function toSummary(row: typeof postedProblems.$inferSelect): PostedProblemSummaryDto {

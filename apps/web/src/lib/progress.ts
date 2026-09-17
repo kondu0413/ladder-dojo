@@ -63,3 +63,16 @@ function save(map: ProgressMap): void {
     // 保存できなくても学習は続けられる
   }
 }
+
+/**
+ * まとめて送るために分割する(S-032)。
+ *
+ * 1 回のマージで送れる件数には上限がある(D1 の 1 リクエスト 50 クエリ)。
+ * **入り切らない分を捨てない**ために、分けて全部送る
+ */
+export function chunkEntries<T>(items: readonly T[], size: number): T[][] {
+  if (size < 1) throw new Error(`分割数が不正: ${size}`);
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
