@@ -1,4 +1,4 @@
-import { ladder, nc, no, out, type Problem, SCHEMA_VERSION } from "@ladder-dojo/core";
+import { ladder, nc, no, out, type Problem, SCHEMA_VERSION, wire } from "@ladder-dojo/core";
 
 const LABELS = {
   X0: "正転ボタン",
@@ -224,6 +224,51 @@ const limitCases = [
   },
 ];
 
+/** 両手押し。左右のボタンを両方押している間だけ出力する(直列 = AND) */
+const twoHand = ladder(4).row(no("X0"), no("X1"), out("Y0")).build();
+
+const twoHandCases = [
+  {
+    id: "initial",
+    title: "何も押していなければ動かない",
+    steps: [{ type: "expect" as const, outputs: { Y0: false } }],
+  },
+  {
+    id: "left-only",
+    title: "左だけ押しても動かない",
+    steps: [
+      { type: "set" as const, inputs: { X0: true } },
+      { type: "expect" as const, outputs: { Y0: false } },
+    ],
+  },
+  {
+    id: "right-only",
+    title: "右だけ押しても動かない",
+    steps: [
+      { type: "set" as const, inputs: { X1: true } },
+      { type: "expect" as const, outputs: { Y0: false } },
+    ],
+  },
+  {
+    id: "both",
+    title: "両方押している間だけ動く",
+    steps: [
+      { type: "set" as const, inputs: { X0: true, X1: true } },
+      { type: "expect" as const, outputs: { Y0: true } },
+    ],
+  },
+  {
+    id: "release-one",
+    title: "片方を離すと止まる",
+    steps: [
+      { type: "set" as const, inputs: { X0: true, X1: true } },
+      { type: "expect" as const, outputs: { Y0: true } },
+      { type: "set" as const, inputs: { X1: false } },
+      { type: "expect" as const, outputs: { Y0: false }, note: "手を離したら止まるのが安全側" },
+    ],
+  },
+];
+
 export const interlockProblems: Problem[] = [
   {
     schemaVersion: SCHEMA_VERSION,
@@ -434,6 +479,69 @@ export const interlockProblems: Problem[] = [
     testCases: limitCases,
     write: {
       hint: "リミットの b 接点は、止めたい方向のラングにだけ入れます。両方に入れると逃げられなくなります。",
+    },
+  },
+  {
+    schemaVersion: SCHEMA_VERSION,
+    id: "interlock-read-3",
+    title: "両手で押さないと動かない",
+    mode: "read",
+    stage: "interlock",
+    difficulty: 2,
+    tags: ["インターロック", "直列"],
+    spec: "左ボタン X0 と右ボタン X1 の両方を押している間だけ、プレス出力 Y0 が動く回路です(両手押し)。片手が空いていると危ないので、現場ではこう組みます。",
+    deviceLabels: { X0: "左ボタン", X1: "右ボタン", Y0: "プレス出力" },
+    solution: twoHand,
+    testCases: twoHandCases,
+    read: {
+      questions: [
+        {
+          id: "q1",
+          prompt: "左ボタン X0 だけを押しました。プレス出力 Y0 はどうなりますか?",
+          scenario: [{ type: "set", inputs: { X0: true } }],
+          choices: ["動く", "動かない", "しばらくしてから動く"],
+          answerIndex: 1,
+          explanation:
+            "接点が横に並んでいる(直列)ときは、**全部通らないと右まで電気が届きません**。片方だけでは途中で切れています。",
+        },
+        {
+          id: "q2",
+          prompt: "左を押したまま、右ボタン X1 も押しました。プレス出力 Y0 は?",
+          scenario: [
+            { type: "set", inputs: { X0: true } },
+            { type: "set", inputs: { X1: true } },
+          ],
+          choices: ["動く", "動かない", "一瞬だけ動く"],
+          answerIndex: 0,
+          explanation:
+            "両方の接点が通って、左の母線から右の母線まで道がつながります。どちらかを離すと切れて止まります。自己保持を入れていないのは、手を離したら止まってほしいからです。",
+        },
+      ],
+    },
+  },
+  {
+    schemaVersion: SCHEMA_VERSION,
+    id: "interlock-fix-3",
+    title: "運転中に反対のボタンを押すと切り替わってしまう",
+    mode: "fix",
+    stage: "interlock",
+    difficulty: 3,
+    tags: ["インターロック"],
+    spec: "正転 X0・逆転 X1 で動き、X2 で止まる回路です。正転中に逆転ボタンを押しても切り替わらないはずですが、いまは逆転に切り替わってしまいます。直してください。",
+    deviceLabels: LABELS,
+    solution: basic,
+    testCases: basicCases,
+    fix: {
+      initial: ladder(6)
+        .row(no("X0"), nc("Y1"), nc("X2"), out("Y0"))
+        .row(no("Y0"))
+        .row(no("X1"), wire, nc("X2"), out("Y1"))
+        .row(no("Y1"))
+        .v(0, 0)
+        .v(2, 0)
+        .build(),
+      bugCount: 1,
+      hint: "インターロックは**お互いに**掛け合うものです。片側からしか見ていないところがあります。",
     },
   },
 ];

@@ -248,6 +248,106 @@ const alternateCases = [
   },
 ];
 
+/**
+ * 順序起動。1 号機 Y0 が動いていないと 2 号機 Y1 を起動できない。
+ * 2 号機の枝は「起動ボタン or 自己保持」の**あとに** 1 号機の a 接点が入るので、
+ * 1 号機が止まれば 2 号機も止まる
+ */
+const sequence = ladder(6)
+  .row(no("X0"), nc("X2"), out("Y0"))
+  .row(no("Y0"))
+  .v(0, 0)
+  .row(no("X1"), no("Y0"), nc("X2"), out("Y1"))
+  .row(no("Y1"))
+  .v(2, 0)
+  .build();
+
+const sequenceCases = [
+  {
+    id: "initial",
+    title: "最初はどちらも止まっている",
+    steps: [{ type: "expect" as const, outputs: { Y0: false, Y1: false } }],
+  },
+  {
+    id: "second-alone",
+    title: "1 号機が止まっているときは 2 号機を起動できない",
+    steps: [
+      { type: "press" as const, device: "X1" as const },
+      { type: "expect" as const, outputs: { Y0: false, Y1: false } },
+    ],
+  },
+  {
+    id: "in-order",
+    title: "1 号機を起動してからなら 2 号機も起動できる",
+    steps: [
+      { type: "press" as const, device: "X0" as const },
+      { type: "expect" as const, outputs: { Y0: true, Y1: false } },
+      { type: "press" as const, device: "X1" as const },
+      { type: "expect" as const, outputs: { Y0: true, Y1: true } },
+    ],
+  },
+  {
+    id: "stop-both",
+    title: "停止で両方止まる",
+    steps: [
+      { type: "press" as const, device: "X0" as const },
+      { type: "press" as const, device: "X1" as const },
+      { type: "press" as const, device: "X2" as const },
+      { type: "expect" as const, outputs: { Y0: false, Y1: false } },
+    ],
+  },
+];
+
+/** 運転中だけ警告灯が 1 秒ごとに点滅する */
+const runningFlicker = ladder(6)
+  .row(no("X0"), nc("X1"), out("Y0"))
+  .row(no("Y0"))
+  .v(0, 0)
+  .row(no("Y0"), nc("T1"), timer("T0", 1000))
+  .row(no("T0"), timer("T1", 1000))
+  .row(no("T0"), out("Y1"))
+  .build();
+
+const runningFlickerCases = [
+  {
+    id: "initial",
+    title: "止まっているときは警告灯も消えている",
+    steps: [{ type: "expect" as const, outputs: { Y0: false, Y1: false } }],
+  },
+  {
+    id: "running",
+    title: "起動して 1 秒で警告灯が点く",
+    steps: [
+      { type: "press" as const, device: "X0" as const },
+      { type: "expect" as const, outputs: { Y0: true, Y1: false } },
+      { type: "wait" as const, ms: 1100 },
+      { type: "expect" as const, outputs: { Y1: true } },
+    ],
+  },
+  {
+    id: "blink",
+    title: "さらに 1 秒で消える(点滅する)",
+    steps: [
+      { type: "press" as const, device: "X0" as const },
+      { type: "wait" as const, ms: 1100 },
+      { type: "wait" as const, ms: 1000 },
+      { type: "expect" as const, outputs: { Y0: true, Y1: false } },
+    ],
+  },
+  {
+    id: "stop",
+    title: "止めたら警告灯も消え、タイマも 0 に戻る",
+    steps: [
+      { type: "press" as const, device: "X0" as const },
+      { type: "wait" as const, ms: 1100 },
+      { type: "press" as const, device: "X1" as const },
+      { type: "expect" as const, outputs: { Y0: false, Y1: false, T0: false } },
+      { type: "wait" as const, ms: 1500 },
+      { type: "expect" as const, outputs: { Y1: false }, note: "止まっている間は点滅しない" },
+    ],
+  },
+];
+
 export const comboProblems: Problem[] = [
   {
     schemaVersion: SCHEMA_VERSION,
@@ -451,6 +551,73 @@ export const comboProblems: Problem[] = [
     testCases: countTimeoutCases,
     write: {
       hint: "カウンタの a 接点で Y0 とタイマを動かし、タイマの a 接点でカウンタの RST を動かします。",
+    },
+  },
+  {
+    schemaVersion: SCHEMA_VERSION,
+    id: "combo-read-3",
+    title: "順番を守らないと動かない",
+    mode: "read",
+    stage: "combo",
+    difficulty: 3,
+    tags: ["組み合わせ", "インターロック", "自己保持"],
+    spec: "コンベアが 2 台あります。1 号機 Y0 が動いていないと 2 号機 Y1 を起動できない回路です(順序起動)。停止 X2 で両方止まります。",
+    deviceLabels: {
+      X0: "1 号機 起動",
+      X1: "2 号機 起動",
+      X2: "停止",
+      Y0: "1 号機",
+      Y1: "2 号機",
+    },
+    solution: sequence,
+    testCases: sequenceCases,
+    read: {
+      questions: [
+        {
+          id: "q1",
+          prompt: "1 号機を動かさないまま、2 号機の起動ボタン X1 を押して離しました。2 号機 Y1 は?",
+          scenario: [{ type: "press", device: "X1" }],
+          choices: ["動く", "動かない", "1 号機も一緒に動く"],
+          answerIndex: 1,
+          explanation:
+            "2 号機の行には 1 号機 Y0 の a 接点が直列に入っています。1 号機が止まっていると、そこで道が切れるので起動できません。自己保持の枝も同じ接点の手前にあるので、保持もされません。",
+        },
+        {
+          id: "q2",
+          prompt: "1 号機を起動してから X1 を押して離すと、2 号機 Y1 はどうなりますか?",
+          scenario: [
+            { type: "press", device: "X0" },
+            { type: "press", device: "X1" },
+          ],
+          choices: ["押している間だけ動く", "動いたままになる", "やはり動かない"],
+          answerIndex: 1,
+          explanation:
+            "1 号機の a 接点が通っているので起動でき、2 号機自身の a 接点で自己保持されます。なお 1 号機を止めると、直列の接点が切れて 2 号機も止まります。",
+        },
+      ],
+    },
+  },
+  {
+    schemaVersion: SCHEMA_VERSION,
+    id: "combo-write-3",
+    title: "運転中だけ警告灯が点滅する回路",
+    mode: "write",
+    stage: "combo",
+    difficulty: 5,
+    tags: ["組み合わせ", "タイマ", "点滅", "自己保持"],
+    spec: "起動ボタン X0 で運転出力 Y0 が入り、離しても運転を続ける。停止ボタン X1 で止まる。運転している間、警告灯 Y1 が 1 秒ごとに点滅する。止めたら警告灯も消え、次に起動したときは消灯から始まる。",
+    deviceLabels: {
+      X0: "起動",
+      X1: "停止",
+      Y0: "運転出力",
+      Y1: "警告灯",
+      T0: "消灯タイマ",
+      T1: "点灯タイマ",
+    },
+    solution: runningFlicker,
+    testCases: runningFlickerCases,
+    write: {
+      hint: "自己保持で運転を作り、その a 接点を点滅回路の先頭に置きます。点滅はタイマ 2 つで、消灯タイマの a 接点で警告灯と点灯タイマを動かし、点灯タイマの b 接点で消灯タイマを切ります。",
     },
   },
 ];

@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { PROBLEMS } from "../src/problems/index.js";
 import { ATTEMPTS, SUBMISSIONS, waitForPost } from "./sync.js";
 
 /**
@@ -377,7 +378,8 @@ test("管理者はクラス全体の進捗を表で一望できる", async ({ pa
     "data-state",
     "untouched",
   );
-  await expect(row).toContainText("1 / 35");
+  // 問題数は増えるので直書きしない(公式問題の実数と突き合わせる)
+  await expect(row).toContainText(`1 / ${PROBLEMS.length}`);
 });
 
 test("メンバーには一覧表のタブが出ない", async ({ page, browser }) => {

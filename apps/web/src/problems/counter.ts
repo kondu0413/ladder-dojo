@@ -1,6 +1,7 @@
 import {
   counter,
   ladder,
+  nc,
   no,
   out,
   type Problem,
@@ -168,6 +169,52 @@ const forceCases = [
       { type: "press" as const, device: "X1" as const },
       { type: "expect" as const, outputs: { Y0: false } },
     ],
+  },
+];
+
+/**
+ * ロット数え。5 個で 1 箱、3 箱で完了。
+ * 上から「個数 → 箱数 → 個数のリセット」の順に並べるのが肝。
+ * リセットを先に置くと、箱数が数える前に個数が 0 に戻ってしまう
+ */
+const lot = ladder(4)
+  .row(no("X0"), counter("C0", 5))
+  .row(no("C0"), counter("C1", 3))
+  .row(no("C0"), reset("C0"))
+  .row(no("C1"), out("Y0"))
+  .build();
+
+const pressSensor = (times: number) =>
+  Array.from({ length: times }, () => ({ type: "press" as const, device: "X0" as const }));
+
+const lotCases = [
+  {
+    id: "initial",
+    title: "最初は消えている",
+    steps: [{ type: "expect" as const, outputs: { Y0: false, C1: false } }],
+  },
+  {
+    id: "one-box",
+    title: "5 個で 1 箱ぶん数えるが、まだ完了しない",
+    steps: [
+      ...pressSensor(5),
+      { type: "expect" as const, outputs: { Y0: false, C0: false }, note: "個数は 0 に戻る" },
+    ],
+  },
+  {
+    id: "fourteen",
+    title: "14 個では点かない",
+    steps: [...pressSensor(14), { type: "expect" as const, outputs: { Y0: false } }],
+  },
+  {
+    id: "fifteen",
+    title: "15 個(3 箱)で点く",
+    steps: [...pressSensor(15), { type: "expect" as const, outputs: { Y0: true, C1: true } }],
+  },
+  {
+    id: "keeps",
+    title: "そのあとも点いたまま",
+    steps: [...pressSensor(17), { type: "expect" as const, outputs: { Y0: true } }],
   },
 ];
 
@@ -348,5 +395,43 @@ export const counterProblems: Problem[] = [
     solution: count5OrForce,
     testCases: forceCases,
     write: { hint: "カウンタの a 接点と X2 の a 接点を並列(縦線でつなぐ)にします。" },
+  },
+  {
+    schemaVersion: SCHEMA_VERSION,
+    id: "counter-fix-3",
+    title: "いくら押しても数が増えない",
+    mode: "fix",
+    stage: "counter",
+    difficulty: 3,
+    tags: ["カウンタ", "リセット", "a接点とb接点"],
+    spec: "X0 を 5 回押すと完了ランプ Y0 が点灯し、X1 でリセットするはずの回路です。いくら押しても点きません。直してください。",
+    deviceLabels: LABELS,
+    solution: count5,
+    testCases: count5Cases,
+    fix: {
+      initial: ladder(4)
+        .row(no("X0"), counter("C0", 5))
+        .row(nc("X1"), reset("C0"))
+        .row(no("C0"), out("Y0"))
+        .build(),
+      bugCount: 1,
+      hint: "リセットは「通電している間ずっと」効きます。いまリセットに電気が来ているのは、ボタンを押しているときでしょうか、押していないときでしょうか。",
+    },
+  },
+  {
+    schemaVersion: SCHEMA_VERSION,
+    id: "counter-write-3",
+    title: "5 個ずつ 3 箱で完了する回路",
+    mode: "write",
+    stage: "counter",
+    difficulty: 4,
+    tags: ["カウンタ", "リセット"],
+    spec: "センサ X0 が 5 回入力されると 1 箱ぶんとして数え、個数のカウンタは 0 に戻って次の 5 個を数え始める。3 箱ぶん(合計 15 回)数えると完了ランプ Y0 が点灯する。",
+    deviceLabels: { X0: "センサ", C0: "個数", C1: "箱数", Y0: "完了ランプ" },
+    solution: lot,
+    testCases: lotCases,
+    write: {
+      hint: "カウンタを 2 つ使います。個数の a 接点で箱数を 1 つ進め、同じ a 接点で個数をリセットします。**並べる順番が大事**で、リセットを箱数より上に置くと、箱数が数える前に 0 に戻ってしまいます。",
+    },
   },
 ];

@@ -154,6 +154,118 @@ const onDelayCases = [
   },
 ];
 
+/**
+ * 点滅(フリッカ)。入力が要らない。
+ * T0 が消灯の 1 秒、T1 が点灯の 1 秒を数え、T1 が上がると T0 が切れて振り出しに戻る
+ */
+const flicker = ladder(4)
+  .row(nc("T1"), timer("T0", 1000))
+  .row(no("T0"), timer("T1", 1000))
+  .row(no("T0"), out("Y0"))
+  .build();
+
+const flickerCases = [
+  {
+    id: "initial",
+    title: "電源を入れた直後は消えている",
+    steps: [{ type: "expect" as const, outputs: { Y0: false } }],
+  },
+  {
+    id: "on",
+    title: "1 秒たつと点く",
+    steps: [
+      { type: "wait" as const, ms: 1100 },
+      { type: "expect" as const, outputs: { Y0: true } },
+    ],
+  },
+  {
+    id: "off-again",
+    title: "さらに 1 秒たつと消える",
+    steps: [
+      { type: "wait" as const, ms: 1100 },
+      { type: "wait" as const, ms: 1000 },
+      {
+        type: "expect" as const,
+        outputs: { Y0: false },
+        note: "点灯タイマが上がって振り出しに戻る",
+      },
+    ],
+  },
+  {
+    id: "on-again",
+    title: "また 1 秒たつと点く(繰り返す)",
+    steps: [
+      { type: "wait" as const, ms: 1100 },
+      { type: "wait" as const, ms: 1000 },
+      { type: "wait" as const, ms: 1000 },
+      { type: "expect" as const, outputs: { Y0: true } },
+    ],
+  },
+];
+
+/**
+ * オフディレイ。停止ボタンを押してから 3 秒たって止まる。
+ * 停止指令 M0 を自己保持してタイマを動かし、タイマの b 接点で運転と M0 の両方を切る
+ */
+const offDelay = ladder(6)
+  .row(no("X0"), nc("T0"), out("Y0"))
+  .row(no("Y0"))
+  .v(0, 0)
+  .row(no("X1"), nc("T0"), out("M0"))
+  .row(no("M0"))
+  .v(2, 0)
+  .row(no("M0"), timer("T0", 3000))
+  .build();
+
+const offDelayCases = [
+  {
+    id: "initial",
+    title: "最初は止まっている",
+    steps: [{ type: "expect" as const, outputs: { Y0: false } }],
+  },
+  {
+    id: "start",
+    title: "起動ボタンを押して離しても動き続ける",
+    steps: [
+      { type: "press" as const, device: "X0" as const },
+      { type: "expect" as const, outputs: { Y0: true } },
+    ],
+  },
+  {
+    id: "not-yet",
+    title: "停止ボタンを押しても、すぐには止まらない",
+    steps: [
+      { type: "press" as const, device: "X0" as const },
+      { type: "press" as const, device: "X1" as const },
+      { type: "expect" as const, outputs: { Y0: true } },
+      { type: "wait" as const, ms: 2000 },
+      { type: "expect" as const, outputs: { Y0: true }, note: "2 秒ではまだ動いている" },
+    ],
+  },
+  {
+    id: "stops",
+    title: "3 秒たつと止まる",
+    steps: [
+      { type: "press" as const, device: "X0" as const },
+      { type: "press" as const, device: "X1" as const },
+      { type: "wait" as const, ms: 3200 },
+      { type: "expect" as const, outputs: { Y0: false, M0: false } },
+    ],
+  },
+  {
+    id: "restart",
+    title: "止まったあと、また起動できる",
+    steps: [
+      { type: "press" as const, device: "X0" as const },
+      { type: "press" as const, device: "X1" as const },
+      { type: "wait" as const, ms: 3200 },
+      { type: "expect" as const, outputs: { Y0: false } },
+      { type: "press" as const, device: "X0" as const },
+      { type: "expect" as const, outputs: { Y0: true }, note: "タイマも停止指令も 0 に戻っている" },
+    ],
+  },
+];
+
 export const timerProblems: Problem[] = [
   {
     schemaVersion: SCHEMA_VERSION,
@@ -362,5 +474,59 @@ export const timerProblems: Problem[] = [
     solution: onDelay,
     testCases: onDelayCases,
     write: { hint: "X0 でタイマを動かし、タイマの a 接点で Y0 を点けます。" },
+  },
+  {
+    schemaVersion: SCHEMA_VERSION,
+    id: "timer-read-3",
+    title: "入力が無いのに動く回路",
+    mode: "read",
+    stage: "timer",
+    difficulty: 3,
+    tags: ["タイマ", "点滅"],
+    spec: "押しボタンがありません。電源を入れると、ランプ Y0 が 1 秒ごとに点いたり消えたりします(点滅回路)。2 つのタイマが交互に動いています。",
+    deviceLabels: { Y0: "ランプ", T0: "消灯タイマ", T1: "点灯タイマ" },
+    solution: flicker,
+    testCases: flickerCases,
+    read: {
+      questions: [
+        {
+          id: "q1",
+          prompt: "電源を入れて 1 秒たちました。ランプ Y0 はどうなっていますか?",
+          scenario: [{ type: "wait", ms: 1100 }],
+          choices: ["消えたまま", "点いている", "1 秒ごとに点滅し始めるのは 2 秒後から"],
+          answerIndex: 1,
+          explanation:
+            "消灯タイマ T0 が 1 秒を数え終わると、その a 接点でランプが点きます。同時に点灯タイマ T1 が数え始めます。",
+        },
+        {
+          id: "q2",
+          prompt: "そこからさらに 1 秒たつと、ランプ Y0 はどうなりますか?",
+          scenario: [
+            { type: "wait", ms: 1100 },
+            { type: "wait", ms: 1000 },
+          ],
+          choices: ["点いたまま", "消える", "点いたまま変わらなくなる"],
+          answerIndex: 1,
+          explanation:
+            "点灯タイマ T1 が上がると、その b 接点が切れて消灯タイマ T0 が 0 に戻ります。T0 が落ちるとランプが消え、T1 も 0 に戻って振り出しへ。これを繰り返すので点滅します。",
+        },
+      ],
+    },
+  },
+  {
+    schemaVersion: SCHEMA_VERSION,
+    id: "timer-write-3",
+    title: "停止してから 3 秒後に止まる回路",
+    mode: "write",
+    stage: "timer",
+    difficulty: 3,
+    tags: ["タイマ", "オフディレイ", "内部リレー"],
+    spec: "起動ボタン X0 で運転出力 Y0 が入り、離しても運転を続ける。停止ボタン X1 を押しても**すぐには止まらず**、3 秒たってから止まる。止まったあとは、また起動ボタンで動かせる。",
+    deviceLabels: { X0: "起動", X1: "停止", Y0: "運転出力", M0: "停止指令", T0: "タイマ" },
+    solution: offDelay,
+    testCases: offDelayCases,
+    write: {
+      hint: "停止ボタンで内部リレー M0 を自己保持してタイマを動かし、タイマの b 接点で運転と M0 の両方を切ります。M0 も切らないと、次に起動できません。",
+    },
   },
 ];
