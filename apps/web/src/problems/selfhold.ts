@@ -136,6 +136,37 @@ const emergencyCases = [
   },
 ];
 
+/** b 接点だけの回路。電源を入れた時点から通電していて、押すと切れる */
+const alwaysOn = ladder(3).row(nc("X1"), out("Y0")).build();
+
+const alwaysOnCases = [
+  {
+    id: "initial",
+    title: "電源を入れた時点で点いている",
+    steps: [
+      { type: "expect" as const, outputs: { Y0: true }, note: "b 接点は押していないとき通す" },
+    ],
+  },
+  {
+    id: "pressed",
+    title: "押している間は消える",
+    steps: [
+      { type: "set" as const, inputs: { X1: true } },
+      { type: "expect" as const, outputs: { Y0: false } },
+    ],
+  },
+  {
+    id: "released",
+    title: "離すとまた点く",
+    steps: [
+      { type: "set" as const, inputs: { X1: true } },
+      { type: "expect" as const, outputs: { Y0: false } },
+      { type: "set" as const, inputs: { X1: false } },
+      { type: "expect" as const, outputs: { Y0: true }, note: "覚えておく仕組みが無い" },
+    ],
+  },
+];
+
 export const selfholdProblems: Problem[] = [
   {
     schemaVersion: SCHEMA_VERSION,
@@ -321,5 +352,61 @@ export const selfholdProblems: Problem[] = [
     solution: withEmergency,
     testCases: emergencyCases,
     write: { hint: "非常停止も「押していないときに通す」接点として直列に入れます。" },
+  },
+  {
+    schemaVersion: SCHEMA_VERSION,
+    id: "selfhold-read-3",
+    title: "押していないのに点いている?",
+    mode: "read",
+    stage: "selfhold",
+    difficulty: 1,
+    tags: ["a接点とb接点"],
+    spec: "停止ボタン X1 の b 接点 1 つでランプ Y0 を動かす回路です。電源を入れた時点から点いています。",
+    deviceLabels: LABELS,
+    solution: alwaysOn,
+    testCases: alwaysOnCases,
+    read: {
+      questions: [
+        {
+          id: "q1",
+          prompt: "停止ボタン X1 を押している間、ランプ Y0 はどうなりますか?",
+          scenario: [{ type: "set", inputs: { X1: true } }],
+          choices: ["消える", "点いたまま", "点いたり消えたりする"],
+          answerIndex: 0,
+          explanation:
+            "b 接点は、そのデバイスが OFF のときに通し、ON になると切れます。a 接点とちょうど逆です。押していないときに通っているので、電源を入れただけで点いていました。",
+        },
+        {
+          id: "q2",
+          prompt: "そのあと X1 を離すと、ランプ Y0 はどうなりますか?",
+          scenario: [
+            { type: "set", inputs: { X1: true } },
+            { type: "set", inputs: { X1: false } },
+          ],
+          choices: ["消えたまま", "また点く", "しばらくしてから点く"],
+          answerIndex: 1,
+          explanation:
+            "離すと b 接点がまた通すので、すぐ点きます。コイルは「いま電気が流れているか」をそのまま映すだけで、覚えておく力はありません。押したことを覚えさせたいなら自己保持が要ります。",
+        },
+      ],
+    },
+  },
+  {
+    schemaVersion: SCHEMA_VERSION,
+    id: "selfhold-fix-3",
+    title: "起動ボタンを押しても動かない",
+    mode: "fix",
+    stage: "selfhold",
+    difficulty: 2,
+    tags: ["非常停止", "a接点とb接点"],
+    spec: "起動 X0・停止 X1 で自己保持し、非常停止 X2 でも止まるはずの回路です。いまは起動ボタンを押しても動きません。直してください。",
+    deviceLabels: LABELS,
+    solution: withEmergency,
+    testCases: emergencyCases,
+    fix: {
+      initial: ladder(6).row(no("X0"), nc("X1"), no("X2"), out("Y0")).row(no("Y0")).v(0, 0).build(),
+      bugCount: 1,
+      hint: "非常停止は「押したときに切れる」ものです。いまの接点は、押していないときに通っているか確かめてください。",
+    },
   },
 ];
