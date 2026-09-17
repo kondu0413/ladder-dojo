@@ -7,6 +7,7 @@ import {
 } from "@ladder-dojo/core";
 import { useMemo, useState } from "react";
 import { describeStep } from "../lib/describe.js";
+import { useNotation } from "../lib/notation-context.jsx";
 
 export type TestCaseEditorProps = {
   circuit: Circuit;
@@ -133,6 +134,7 @@ function StepList({
   observables: DeviceId[];
   testIdPrefix: string;
 }) {
+  const notation = useNotation();
   // ステップに ID は無いので、内容と「同じ内容の何番目か」から安定したキーを作る
   const rows = useMemo(() => {
     const seen = new Map<string, number>();
@@ -160,12 +162,12 @@ function StepList({
             className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-2 py-1 text-sm"
           >
             <span className="min-w-0 truncate">
-              {i + 1}. {describeStep(step)}
+              {i + 1}. {describeStep(step, undefined, notation.notation)}
               {step.type === "expect" && (
                 <span className="ml-1 text-slate-500">
                   (
                   {Object.entries(step.outputs)
-                    .map(([d, on]) => `${d}=${on ? "ON" : "OFF"}`)
+                    .map(([d, on]) => `${notation.device(d)}=${on ? "ON" : "OFF"}`)
                     .join(", ")}
                   )
                 </span>
@@ -195,7 +197,7 @@ function StepList({
           >
             {inputs.map((d) => (
               <option key={d} value={d}>
-                {d}
+                {notation.device(d)}
               </option>
             ))}
           </select>
@@ -259,7 +261,7 @@ function StepList({
           >
             {observables.map((d) => (
               <option key={d} value={d}>
-                {d}
+                {notation.device(d)}
               </option>
             ))}
           </select>

@@ -18,16 +18,19 @@ import { DiagnosisPanel } from "../components/DiagnosisPanel.js";
 import { JudgeResultView } from "../components/JudgeResultView.js";
 import { LadderEditor } from "../components/LadderEditor.js";
 import { LadderView } from "../components/LadderView.js";
+import { NotationTabs } from "../components/NotationTabs.js";
 import { SimulatorControls } from "../components/SimulatorControls.js";
 import { useDiagnosis } from "../hooks/useDiagnosis.js";
 import { useSimulator } from "../hooks/useSimulator.js";
 import { api, type PostedProblemDetail } from "../lib/api.js";
 import { circuitMetricsRows } from "../lib/metrics-view.js";
+import { useNotation } from "../lib/notation-context.jsx";
 import { useProgress } from "../lib/progress-context.jsx";
 
 /** 投稿問題を解く画面(SPEC.md §3.6) */
 export function CommunityProblemPage() {
   const { id } = useParams();
+  const notation = useNotation();
   const navigate = useNavigate();
   const { user, recordSubmission } = useProgress();
   const [problem, setProblem] = useState<PostedProblemDetail | undefined>(undefined);
@@ -192,8 +195,10 @@ export function CommunityProblemPage() {
       </header>
 
       <p className="whitespace-pre-wrap rounded-lg bg-slate-100 px-3 py-3 text-sm text-slate-700">
-        {problem.spec}
+        {notation.text(problem.spec)}
       </p>
+
+      <NotationTabs />
 
       {notice && (
         <p

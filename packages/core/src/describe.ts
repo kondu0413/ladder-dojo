@@ -1,4 +1,5 @@
-import type { Circuit, CoilElement, ContactElement } from "./schema/index.js";
+import { formatDevice, type Notation } from "./notation.js";
+import type { Circuit, CoilElement, ContactElement, DeviceId } from "./schema/index.js";
 import { cellKey, cellMap } from "./schema/index.js";
 import type { PowerMap } from "./sim/simulator.js";
 
@@ -35,13 +36,13 @@ const CONTACT_LABELS: Record<ContactElement["kind"], string> = {
 };
 
 /** 接点 1 つを読む。「X0 の a 接点」 */
-function describeContact(el: ContactElement, labels: Labels): string {
-  return ja(deviceWithLabel(el.device, labels), "の", CONTACT_LABELS[el.kind]);
+function describeContact(el: ContactElement, labels: Labels, notation: Notation): string {
+  return ja(deviceWithLabel(el.device, labels, notation), "の", CONTACT_LABELS[el.kind]);
 }
 
 /** コイル 1 つを読む。種類ごとに設定値も添える */
-function describeCoil(el: CoilElement, labels: Labels): string {
-  const device = deviceWithLabel(el.device, labels);
+function describeCoil(el: CoilElement, labels: Labels, notation: Notation): string {
+  const device = deviceWithLabel(el.device, labels, notation);
   switch (el.kind) {
     case "out":
       return ja(device, "の出力コイル");
@@ -64,9 +65,10 @@ function formatSeconds(ms: number): string {
 type Labels = Record<string, string> | undefined;
 
 /** 「X0(起動ボタン)」。説明が無ければデバイス名だけ */
-function deviceWithLabel(device: string, labels: Labels): string {
+function deviceWithLabel(device: string, labels: Labels, notation: Notation): string {
+  const name = formatDevice(device as DeviceId, notation);
   const label = labels?.[device];
-  return label ? `${device}(${label})` : device;
+  return label ? `${name}(${label})` : name;
 }
 
 export type DescribeOptions = {
@@ -74,6 +76,8 @@ export type DescribeOptions = {
   deviceLabels?: Record<string, string> | undefined;
   /** 動かしているときの通電状態。あれば各行に「通電中 / 無電圧」を添える */
   power?: PowerMap | undefined;
+  /** デバイス名の書き方(S-028)。既定は X0 / Y0 形式 */
+  notation?: Notation | undefined;
 };
 
 /**
@@ -83,14 +87,15 @@ export type DescribeOptions = {
  * 何行目の話をしているのか分からなくなる。
  */
 export function describeRow(circuit: Circuit, row: number, options: DescribeOptions = {}): string {
+  const notation = options.notation ?? "standard";
   const cells = cellMap(circuit);
   const parts: string[] = [];
 
   for (let col = 0; col < circuit.cols; col++) {
     const cell = cells.get(cellKey(row, col));
     const el = cell?.element;
-    if (el?.type === "contact") parts.push(describeContact(el, options.deviceLabels));
-    else if (el?.type === "coil") parts.push(describeCoil(el, options.deviceLabels));
+    if (el?.type === "contact") parts.push(describeContact(el, options.deviceLabels, notation));
+    else if (el?.type === "coil") parts.push(describeCoil(el, options.deviceLabels, notation));
     // 配線(wire)は読まない。「つながっている」ことは順番で分かるので、
     // 一つずつ読み上げると要素の間に「配線」が挟まって聞き取りにくくなる
 

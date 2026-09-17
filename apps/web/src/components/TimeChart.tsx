@@ -1,6 +1,7 @@
 import type { Timeline } from "@ladder-dojo/core";
 import { useMemo } from "react";
 import { describeStep } from "../lib/describe.js";
+import { useNotation } from "../lib/notation-context.jsx";
 
 export type TimeChartProps = {
   timeline: Timeline;
@@ -32,6 +33,7 @@ const HEAD_H = 18;
  * 押した瞬間の変化が潰れるので、変化が起きた時刻には必ず目盛りを出す。
  */
 export function TimeChart({ timeline, deviceLabels, mismatched }: TimeChartProps) {
+  const notation = useNotation();
   const { devices, samples, markers, durationMs } = timeline;
   const bad = useMemo(() => new Set(mismatched ?? []), [mismatched]);
 
@@ -83,9 +85,11 @@ export function TimeChart({ timeline, deviceLabels, mismatched }: TimeChartProps
                 fill={isBad ? "#b91c1c" : "#475569"}
                 fontWeight={isBad ? 700 : 400}
               >
-                {device}
+                {notation.device(device)}
               </text>
-              {deviceLabels?.[device] && <title>{`${device} ${deviceLabels[device]}`}</title>}
+              {deviceLabels?.[device] && (
+                <title>{`${notation.device(device)} ${deviceLabels[device]}`}</title>
+              )}
               <path
                 d={wavePath(samples, device, x, y, span)}
                 fill="none"
@@ -109,7 +113,7 @@ export function TimeChart({ timeline, deviceLabels, mismatched }: TimeChartProps
       <ol className="mt-1 flex flex-col gap-0.5">
         {markers.map((m) => (
           <li key={`step-${m.stepIndex}`} className="text-xs text-slate-500">
-            {formatMs(m.t)}: {describeStep(m.step, deviceLabels)}
+            {formatMs(m.t)}: {describeStep(m.step, deviceLabels, notation.notation)}
           </li>
         ))}
       </ol>

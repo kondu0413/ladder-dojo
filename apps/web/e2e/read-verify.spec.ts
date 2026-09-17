@@ -71,7 +71,7 @@ test.describe("答え合わせの再生", () => {
     await expect(page.getByTestId("scenario-replay")).toHaveCount(0);
 
     // 自由操作では入力を押せる
-    await page.getByRole("button", { name: /^X0/ }).click();
+    await page.getByTestId("input-X0").click();
     await expect(page.getByRole("img", { name: /通電中/ }).first()).toBeVisible();
 
     await page.getByTestId("verify-mode-replay").click();

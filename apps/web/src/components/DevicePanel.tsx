@@ -2,6 +2,7 @@ import type { Circuit, DeviceId, Snapshot } from "@ladder-dojo/core";
 import { devicePresets } from "@ladder-dojo/core";
 import { useMemo } from "react";
 import type { InputControl } from "../hooks/useSimulator.js";
+import { useNotation } from "../lib/notation-context.jsx";
 
 export type DevicePanelProps = {
   devices: DeviceId[];
@@ -27,6 +28,7 @@ export function DevicePanel({ devices, snapshot, circuit, deviceLabels, input }:
   const inputs = devices.filter((d) => d.startsWith("X"));
   const outputs = devices.filter((d) => !d.startsWith("X"));
   const presets = useMemo(() => (circuit ? devicePresets(circuit) : undefined), [circuit]);
+  const notation = useNotation();
 
   return (
     <div className="flex flex-col gap-3">
@@ -45,7 +47,7 @@ export function DevicePanel({ devices, snapshot, circuit, deviceLabels, input }:
               }`;
               const body = (
                 <>
-                  <span className="block font-mono">{d}</span>
+                  <span className="block font-mono">{notation.device(d)}</span>
                   {deviceLabels?.[d] && (
                     <span className="block text-[10px] font-normal opacity-70">
                       {deviceLabels[d]}
@@ -78,6 +80,7 @@ export function DevicePanel({ devices, snapshot, circuit, deviceLabels, input }:
               <DeviceChip
                 key={d}
                 device={d}
+                shown={notation.device(d)}
                 snapshot={snapshot}
                 presets={presets}
                 label={deviceLabels?.[d]}
@@ -154,11 +157,14 @@ function InputButton({
 
 function DeviceChip({
   device,
+  shown,
   snapshot,
   presets,
   label,
 }: {
   device: DeviceId;
+  /** 表記に合わせた表示名(S-028) */
+  shown: string;
   snapshot: Snapshot;
   presets?: { timers: Record<string, number>; counters: Record<string, number> } | undefined;
   label?: string | undefined;
@@ -187,7 +193,7 @@ function DeviceChip({
           : "border-slate-200 bg-slate-50 text-slate-500"
       }`}
     >
-      <span className="block font-mono font-medium">{device}</span>
+      <span className="block font-mono font-medium">{shown}</span>
       {detail && <span className="block text-[10px] opacity-70">{detail}</span>}
     </div>
   );

@@ -1,5 +1,6 @@
 import { type JudgeOptions, StepRunner } from "./judge/judge.js";
-import type { Circuit, Step } from "./schema/index.js";
+import { formatDevice, type Notation } from "./notation.js";
+import type { Circuit, DeviceId, Step } from "./schema/index.js";
 import { type PowerMap, Simulator, type Snapshot } from "./sim/simulator.js";
 
 /**
@@ -80,10 +81,15 @@ export function replayScenario(
 }
 
 /** 操作を日本語の一言にする(「X0 を押す」)。画面と読み上げの両方で使う */
-export function describeStep(step: Step, labels?: Record<string, string>): string {
+export function describeStep(
+  step: Step,
+  labels?: Record<string, string>,
+  notation: Notation = "standard",
+): string {
   const name = (device: string) => {
+    const shown = formatDevice(device as DeviceId, notation);
     const label = labels?.[device];
-    return label ? `${device}(${label})` : device;
+    return label ? `${shown}(${label})` : shown;
   };
   switch (step.type) {
     case "set": {
