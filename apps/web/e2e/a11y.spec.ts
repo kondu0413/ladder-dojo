@@ -30,7 +30,7 @@ test.describe("ラダー図の読み上げ", () => {
 
     await expect(page.getByRole("img", { name: /無電圧/ }).first()).toBeVisible();
 
-    await page.getByRole("button", { name: /^X0/ }).click();
+    await page.getByTestId("input-X0").click();
     await expect(page.getByTestId("device-Y0")).toHaveAttribute("data-on", "true");
 
     await expect(page.getByRole("img", { name: /通電中/ }).first()).toBeVisible();
@@ -45,8 +45,9 @@ test.describe("色だけに頼らない通電表示", () => {
     const lead = page.getByTestId("cell-0-0").locator("line").first();
     await expect(lead).toHaveAttribute("stroke-dasharray", "5 3");
 
-    // 押すと電流が流れる。流れている線は破線にしない(太い実線)
-    await page.getByRole("button", { name: /^X0/ }).click();
+    // 押している間は電流が流れる。流れている線は破線にしない(太い実線)。
+    // 入力は押しボタンなので、押したままにする「保持」で ON を続ける(S-027)
+    await page.getByTestId("hold-X0").click();
     await expect(page.getByTestId("device-Y0")).toHaveAttribute("data-on", "true");
     await expect(lead).not.toHaveAttribute("stroke-dasharray", "5 3");
   });

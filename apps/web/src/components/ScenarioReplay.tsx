@@ -84,7 +84,12 @@ export function ScenarioReplay({ circuit, steps, deviceLabels }: ScenarioReplayP
         <LadderView circuit={circuit} power={frame.power} deviceLabels={deviceLabels} />
       </div>
 
-      <DevicePanel devices={devices} snapshot={frame.snapshot} deviceLabels={deviceLabels} />
+      <DevicePanel
+        devices={devices}
+        snapshot={frame.snapshot}
+        circuit={circuit}
+        deviceLabels={deviceLabels}
+      />
 
       {stopped && (
         <p data-testid="replay-stopped" className="text-xs text-amber-800">

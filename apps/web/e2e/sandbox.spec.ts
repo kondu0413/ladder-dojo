@@ -47,12 +47,10 @@ test("回路を組み立てて、その場で動かせる", async ({ page }) => 
   const y0 = page.getByTestId("device-Y0");
   await expect(y0).toHaveAttribute("data-on", "false");
 
-  await page.getByRole("button", { name: /^X0/ }).click();
-  await expect(y0).toHaveAttribute("data-on", "true");
-  await page.getByRole("button", { name: /^X0/ }).click();
+  await page.getByTestId("input-X0").click(); // 押して離す
   await expect(y0).toHaveAttribute("data-on", "true"); // 離しても保持
 
-  await page.getByRole("button", { name: /^X1/ }).click();
+  await page.getByTestId("input-X1").click();
   await expect(y0).toHaveAttribute("data-on", "false"); // 停止で解除
 });
 

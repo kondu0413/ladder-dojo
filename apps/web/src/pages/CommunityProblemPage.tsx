@@ -373,7 +373,7 @@ function RunPanel({ circuit }: { circuit: Circuit }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-2">
-        <LadderView circuit={circuit} power={sim.power} onTapInput={sim.toggleInput} />
+        <LadderView circuit={circuit} power={sim.power} input={sim.input} />
       </div>
       <SimulatorControls
         speed={sim.speed}
@@ -390,7 +390,8 @@ function RunPanel({ circuit }: { circuit: Circuit }) {
         <DevicePanel
           devices={sim.devices}
           snapshot={sim.snapshot}
-          onToggleInput={sim.toggleInput}
+          circuit={circuit}
+          input={sim.input}
         />
       )}
     </div>

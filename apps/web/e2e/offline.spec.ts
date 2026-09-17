@@ -153,7 +153,8 @@ test("オフラインでもサンドボックスで回路を組んで動かせ�
     await page.getByTestId("mode-run").click();
     const y0 = page.getByTestId("device-Y0");
     await expect(y0).toHaveAttribute("data-on", "false");
-    await page.getByRole("button", { name: /^X0/ }).click();
+    // X0 直結の回路なので、押している間しか点かない。「保持」で ON のままにする(S-027)
+    await page.getByTestId("hold-X0").click();
     await expect(y0).toHaveAttribute("data-on", "true");
   } finally {
     await context.setOffline(false);

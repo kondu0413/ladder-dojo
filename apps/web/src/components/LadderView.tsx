@@ -1,13 +1,7 @@
-import type {
-  Cell,
-  Circuit,
-  CoilElement,
-  ContactElement,
-  DeviceId,
-  PowerMap,
-} from "@ladder-dojo/core";
+import type { Cell, Circuit, CoilElement, ContactElement, PowerMap } from "@ladder-dojo/core";
 import { cellKey, cellMap, describeCircuit } from "@ladder-dojo/core";
 import { useMemo } from "react";
+import type { InputControl } from "../hooks/useSimulator.js";
 import {
   CELL_H,
   CELL_W,
@@ -24,8 +18,8 @@ export type LadderViewProps = {
   power?: PowerMap | undefined;
   /** デバイス名の説明(例: X0 →「起動ボタン」) */
   deviceLabels?: Record<string, string> | undefined;
-  /** 入力接点をタップしたとき。指定すると X 接点が押せるようになる */
-  onTapInput?: ((device: DeviceId) => void) | undefined;
+  /** 入力の操作。指定すると X 接点が押せるようになる(押している間だけ ON、S-027) */
+  input?: InputControl | undefined;
   /** セルをタップしたとき(編集モード) */
   onTapCell?: ((row: number, col: number) => void) | undefined;
   /** 編集モードで選択中のセル */
@@ -53,7 +47,7 @@ export function LadderView({
   circuit,
   power,
   deviceLabels,
-  onTapInput,
+  input,
   onTapCell,
   selected,
   highlight,
@@ -103,7 +97,7 @@ export function LadderView({
             leftOn={power?.nodes[row]?.[col] ?? false}
             rightOn={power?.nodes[row]?.[col + 1] ?? false}
             deviceLabels={deviceLabels}
-            onTapInput={onTapInput}
+            input={input}
             onTapCell={onTapCell}
             isSelected={selected?.row === row && selected?.col === col}
             isHighlighted={highlighted.has(cellKey(row, col))}
@@ -122,7 +116,7 @@ type CellViewProps = {
   leftOn: boolean;
   rightOn: boolean;
   deviceLabels: Record<string, string> | undefined;
-  onTapInput: ((device: DeviceId) => void) | undefined;
+  input: InputControl | undefined;
   onTapCell: ((row: number, col: number) => void) | undefined;
   isSelected: boolean;
   isHighlighted: boolean;
@@ -153,7 +147,7 @@ function CellView({
   leftOn,
   rightOn,
   deviceLabels,
-  onTapInput,
+  input,
   onTapCell,
   isSelected,
   isHighlighted,
@@ -163,11 +157,16 @@ function CellView({
   const el = cell?.element;
   const label = el && "device" in el ? deviceLabels?.[el.device] : undefined;
   const isInput = el?.type === "contact" && el.device.startsWith("X");
-  const tappable = Boolean((isInput && onTapInput) || onTapCell);
+  const pressable = isInput && input && el?.type === "contact";
+  const tappable = Boolean(pressable || onTapCell);
 
-  const handleTap = () => {
-    if (isInput && onTapInput && el?.type === "contact") onTapInput(el.device);
+  // 接点は押しボタンとして扱う。押している間だけ ON(S-027)
+  const handleDown = () => {
+    if (pressable && el?.type === "contact") input.press(el.device);
     else if (onTapCell) onTapCell(row, col);
+  };
+  const handleUp = () => {
+    if (pressable && el?.type === "contact") input.release(el.device);
   };
 
   return (
@@ -253,7 +252,10 @@ function CellView({
           height={CELL_H}
           fill="transparent"
           className="cursor-pointer"
-          onPointerDown={handleTap}
+          onPointerDown={handleDown}
+          onPointerUp={handleUp}
+          onPointerLeave={handleUp}
+          onPointerCancel={handleUp}
         >
           <title>
             {el && "device" in el ? `${el.device}${label ? `(${label})` : ""}` : `${row},${col}`}

@@ -130,3 +130,44 @@ test.describe("設問が進んだことが分かる", () => {
     expect(after).not.toBe(before);
   });
 });
+
+/**
+ * 入力は押しボタン(S-027)。
+ *
+ * 「5 回押す」がそのまま 5 回数えられないと、カウンタの問題は**シミュレータが
+ * 壊れている**ようにしか見えない。ここが崩れたら「読む」の答え合わせが嘘になる。
+ */
+test.describe("自分で動かす(押しボタンとして扱う)", () => {
+  async function openFreePlay(page: import("@playwright/test").Page) {
+    await page.goto("/problems/counter-read-1");
+    await page.getByTestId("choice-0").click();
+    await page.getByTestId("verify-with-simulator").click();
+    await page.getByTestId("verify-mode-free").click();
+  }
+
+  test("X0 を 5 回押すと 5 回数えて完了ランプが点く", async ({ page }) => {
+    await openFreePlay(page);
+    const c0 = page.getByTestId("device-C0");
+    await expect(c0).toContainText("0 / 5");
+
+    for (let i = 0; i < 5; i++) {
+      await page.getByTestId("input-X0").click();
+      await page.waitForTimeout(60);
+    }
+    await expect(c0).toContainText("5 / 5");
+    await expect(page.getByTestId("device-Y0")).toHaveAttribute("data-on", "true");
+  });
+
+  test("「保持」で押しっぱなしにしても 1 回しか数えない", async ({ page }) => {
+    await openFreePlay(page);
+    await page.getByTestId("hold-X0").click();
+    await expect(page.getByTestId("hold-X0")).toHaveAttribute("aria-pressed", "true");
+    await page.waitForTimeout(400);
+    await expect(page.getByTestId("device-C0")).toContainText("1 / 5");
+    await expect(page.getByTestId("input-X0")).toHaveAttribute("data-on", "true");
+
+    // 保持を外すと OFF に戻る
+    await page.getByTestId("hold-X0").click();
+    await expect(page.getByTestId("input-X0")).toHaveAttribute("data-on", "false");
+  });
+});
