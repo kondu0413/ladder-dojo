@@ -16,6 +16,7 @@ import {
   setVline,
 } from "@ladder-dojo/core";
 import { useState } from "react";
+import { useNotation } from "../lib/notation-context.jsx";
 import { LadderView } from "./LadderView.js";
 
 /** パレットの部品。device が必要なものは選択中のデバイスを使う */
@@ -99,6 +100,7 @@ export function LadderEditor({ circuit, onChange }: LadderEditorProps) {
   const [error, setError] = useState<string | undefined>(undefined);
 
   const device = `${deviceType}${deviceNumber}` as DeviceId;
+  const notation = useNotation();
 
   const place = (part: Part) => {
     if (!selected) {
@@ -182,7 +184,7 @@ export function LadderEditor({ circuit, onChange }: LadderEditorProps) {
             className="rounded-lg bg-slate-100 px-3 py-2 font-mono text-sm"
             data-testid="current-device"
           >
-            {device}
+            {notation.device(device)}
           </span>
         </div>
       </section>

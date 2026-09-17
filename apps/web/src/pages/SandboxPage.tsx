@@ -17,6 +17,7 @@ import { DevicePanel } from "../components/DevicePanel.js";
 import { JudgeResultView } from "../components/JudgeResultView.js";
 import { LadderEditor } from "../components/LadderEditor.js";
 import { LadderView } from "../components/LadderView.js";
+import { NotationTabs } from "../components/NotationTabs.js";
 import { PublishDialog } from "../components/PublishDialog.js";
 import { SimulatorControls } from "../components/SimulatorControls.js";
 import { TestCaseEditor } from "../components/TestCaseEditor.js";
@@ -135,6 +136,8 @@ export function SandboxPage() {
       <div className="mb-5">
         <AuthBar />
       </div>
+
+      <NotationTabs />
 
       <div className="flex flex-wrap items-center gap-2">
         <input

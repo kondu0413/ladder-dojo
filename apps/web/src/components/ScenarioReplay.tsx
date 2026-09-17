@@ -6,6 +6,7 @@ import {
   type Step,
 } from "@ladder-dojo/core";
 import { useMemo, useState } from "react";
+import { useNotation } from "../lib/notation-context.jsx";
 import { DevicePanel } from "./DevicePanel.js";
 import { LadderView } from "./LadderView.js";
 import { buttonClass } from "./ui.js";
@@ -33,13 +34,16 @@ export function ScenarioReplay({ circuit, steps, deviceLabels }: ScenarioReplayP
   const { frames, stopped } = useMemo(() => replayScenario(circuit, steps), [circuit, steps]);
   // 自由操作のほうと同じ一覧にする。並びが変わると見比べにくい
   const devices = useMemo(() => listDevices(circuit), [circuit]);
+  const { notation } = useNotation();
   const [index, setIndex] = useState(0);
   const frame = frames[Math.min(index, frames.length - 1)];
   const last = index >= frames.length - 1;
 
   if (!frame) return null;
 
-  const caption = frame.step ? describeStep(frame.step, deviceLabels) : "何も操作していない状態";
+  const caption = frame.step
+    ? describeStep(frame.step, deviceLabels, notation)
+    : "何も操作していない状態";
 
   return (
     <div className="flex flex-col gap-3" data-testid="scenario-replay">

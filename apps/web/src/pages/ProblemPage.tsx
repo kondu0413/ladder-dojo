@@ -15,6 +15,7 @@ import { DiagnosisPanel } from "../components/DiagnosisPanel.js";
 import { JudgeResultView } from "../components/JudgeResultView.js";
 import { LadderEditor } from "../components/LadderEditor.js";
 import { LadderView } from "../components/LadderView.js";
+import { NotationTabs } from "../components/NotationTabs.js";
 import { ScenarioReplay } from "../components/ScenarioReplay.js";
 import { SimulatorControls } from "../components/SimulatorControls.js";
 import { SolutionCompare } from "../components/SolutionCompare.js";
@@ -22,11 +23,13 @@ import { Badge, buttonClass, Card, PageHeader } from "../components/ui.js";
 import { useDiagnosis } from "../hooks/useDiagnosis.js";
 import { useSimulator } from "../hooks/useSimulator.js";
 import { labelMap } from "../lib/describe.js";
+import { useNotation } from "../lib/notation-context.jsx";
 import { useProgress } from "../lib/progress-context.jsx";
 import { findProblem, MODE_LABELS, STAGE_LABELS } from "../problems/index.js";
 
 export function ProblemPage() {
   const { id } = useParams();
+  const notation = useNotation();
   const problem = id ? findProblem(id) : undefined;
 
   if (!problem) {
@@ -49,8 +52,14 @@ export function ProblemPage() {
         <Badge>難易度 {problem.difficulty}</Badge>
       </div>
 
-      <Card className="mb-5 p-5">
-        <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{problem.spec}</p>
+      <Card className="mb-5 flex flex-col gap-4 p-5">
+        <p
+          data-testid="problem-spec"
+          className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700"
+        >
+          {notation.text(problem.spec)}
+        </p>
+        <NotationTabs />
       </Card>
 
       {problem.mode === "read" ? <ReadMode problem={problem} /> : <BuildMode problem={problem} />}
@@ -175,6 +184,7 @@ function ReadQuestionView({
   questionIds: string[];
 }) {
   const [verifying, setVerifying] = useState(false);
+  const notation = useNotation();
   const answered = chosen !== undefined;
   const correct = chosen === question.answerIndex;
 
@@ -203,7 +213,9 @@ function ReadQuestionView({
         </span>
         <p className="text-xs font-semibold text-blue-700">設問 {position}</p>
       </div>
-      <p className="text-base font-medium leading-relaxed text-slate-800">{question.prompt}</p>
+      <p className="text-base font-medium leading-relaxed text-slate-800">
+        {notation.text(question.prompt)}
+      </p>
 
       <ul className="flex flex-col gap-2">
         {question.choices.map((choice, i) => {
@@ -225,7 +237,7 @@ function ReadQuestionView({
                       : "border-slate-200 bg-white text-slate-700"
                 }`}
               >
-                {choice}
+                {notation.text(choice)}
               </button>
             </li>
           );
@@ -243,7 +255,7 @@ function ReadQuestionView({
           }`}
         >
           <p className="font-bold">{correct ? "正解" : "残念、ちがいます"}</p>
-          {question.explanation && <p className="mt-1">{question.explanation}</p>}
+          {question.explanation && <p className="mt-1">{notation.text(question.explanation)}</p>}
         </div>
       )}
 
@@ -368,6 +380,7 @@ function FreePlay({ problem }: { problem: Problem }) {
 
 function BuildMode({ problem }: { problem: Problem }) {
   const { record, recordSubmission } = useProgress();
+  const notation = useNotation();
   const initial = useMemo<Circuit>(
     () => problem.fix?.initial ?? problem.write?.initial ?? emptyCircuit(6, 4),
     [problem],
@@ -486,7 +499,7 @@ function BuildMode({ problem }: { problem: Problem }) {
       {hint && (
         <details className="rounded-lg border border-slate-200 bg-white px-3 py-2">
           <summary className="cursor-pointer text-sm text-slate-600">ヒントを見る</summary>
-          <p className="mt-2 text-sm text-slate-700">{hint}</p>
+          <p className="mt-2 text-sm text-slate-700">{notation.text(hint)}</p>
         </details>
       )}
 

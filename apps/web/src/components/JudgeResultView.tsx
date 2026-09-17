@@ -2,6 +2,7 @@ import type { CaseResult, Circuit, JudgeResult, Problem } from "@ladder-dojo/cor
 import { runTestCase } from "@ladder-dojo/core";
 import { useMemo } from "react";
 import { describeStep, diffOutputs, labelMap, onOff } from "../lib/describe.js";
+import { useNotation } from "../lib/notation-context.jsx";
 import { TimeChart } from "./TimeChart.js";
 
 export type JudgeResultViewProps = {
@@ -61,6 +62,7 @@ function FailureDetail({
   circuit: Circuit | undefined;
 }) {
   const labels = labelMap(problem.deviceLabels);
+  const notation = useNotation();
   const failure = result.failure;
 
   // 通らなかったケースだけ、波形を記録しながらもう一度流す。
@@ -96,7 +98,7 @@ function FailureDetail({
   const operations = result.trace
     .slice(0, failure.stepIndex)
     .filter((t) => t.step.type !== "expect")
-    .map((t) => ({ key: t.index, text: describeStep(t.step, labels) }));
+    .map((t) => ({ key: t.index, text: describeStep(t.step, labels, notation.notation) }));
 
   return (
     <div className="flex flex-col gap-2 rounded-lg bg-white p-3">
@@ -133,7 +135,7 @@ function FailureDetail({
                 className="border-t border-slate-100"
               >
                 <td className="py-1 font-mono">
-                  {d.device}
+                  {notation.device(d.device)}
                   {labels[d.device] && (
                     <span className="ml-1 text-xs text-slate-400">{labels[d.device]}</span>
                   )}

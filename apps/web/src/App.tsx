@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect } from "react";
 import { Route, Routes } from "react-router";
+import { NotationProvider } from "./lib/notation-context.jsx";
 import { ProgressProvider, useProgress } from "./lib/progress-context.jsx";
 import { LandingPage } from "./pages/LandingPage.js";
 import { ProblemListPage } from "./pages/ProblemListPage.js";
@@ -66,21 +67,23 @@ export function App() {
 
   return (
     <ProgressProvider>
-      <Suspense fallback={<PageLoading />}>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/problems" element={<ProblemListPage />} />
-          <Route path="/problems/:id" element={<ProblemPage />} />
-          <Route path="/community" element={<CommunityListPage />} />
-          <Route path="/community/:id" element={<CommunityProblemPage />} />
-          <Route path="/orgs" element={<OrgListPage />} />
-          <Route path="/orgs/:id" element={<OrgDetailPage />} />
-          <Route path="/rankings" element={<RankingPage />} />
-          <Route path="/sandbox" element={<SandboxPage />} />
-          <Route path="/samples" element={<SimulatorDemoPage />} />
-          <Route path="*" element={<Home />} />
-        </Routes>
-      </Suspense>
+      <NotationProvider>
+        <Suspense fallback={<PageLoading />}>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/problems" element={<ProblemListPage />} />
+            <Route path="/problems/:id" element={<ProblemPage />} />
+            <Route path="/community" element={<CommunityListPage />} />
+            <Route path="/community/:id" element={<CommunityProblemPage />} />
+            <Route path="/orgs" element={<OrgListPage />} />
+            <Route path="/orgs/:id" element={<OrgDetailPage />} />
+            <Route path="/rankings" element={<RankingPage />} />
+            <Route path="/sandbox" element={<SandboxPage />} />
+            <Route path="/samples" element={<SimulatorDemoPage />} />
+            <Route path="*" element={<Home />} />
+          </Routes>
+        </Suspense>
+      </NotationProvider>
     </ProgressProvider>
   );
 }

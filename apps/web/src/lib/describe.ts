@@ -1,8 +1,21 @@
-import { DEFAULT_HOLD_MS, type Step } from "@ladder-dojo/core";
+import {
+  DEFAULT_HOLD_MS,
+  type DeviceId,
+  formatDevice,
+  type Notation,
+  type Step,
+} from "@ladder-dojo/core";
 
 /** テストケースの 1 ステップを日本語で説明する(不正解時の差分表示用、SPEC.md §3.3) */
-export function describeStep(step: Step, labels?: Record<string, string>): string {
-  const name = (device: string) => (labels?.[device] ? `${device}(${labels[device]})` : device);
+export function describeStep(
+  step: Step,
+  labels?: Record<string, string>,
+  notation: Notation = "standard",
+): string {
+  const name = (device: string) => {
+    const shown = formatDevice(device as DeviceId, notation);
+    return labels?.[device] ? `${shown}(${labels[device]})` : shown;
+  };
   switch (step.type) {
     case "set": {
       const parts = Object.entries(step.inputs).map(

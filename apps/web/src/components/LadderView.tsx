@@ -12,6 +12,7 @@ import {
   svgWidth,
   wireY,
 } from "../lib/geometry.js";
+import { type NotationContextValue, useNotation } from "../lib/notation-context.jsx";
 
 export type LadderViewProps = {
   circuit: Circuit;
@@ -52,6 +53,7 @@ export function LadderView({
   selected,
   highlight,
 }: LadderViewProps) {
+  const { notation } = useNotation();
   const cells = useMemo(() => cellMap(circuit), [circuit]);
   /**
    * 読み上げ用の文章(改善候補 14 / S-018)。
@@ -61,8 +63,8 @@ export function LadderView({
    * 行ごとの説明をここに載せる。動かしているときは通電状態も入る。
    */
   const description = useMemo(
-    () => describeCircuit(circuit, { deviceLabels, power }),
-    [circuit, deviceLabels, power],
+    () => describeCircuit(circuit, { deviceLabels, power, notation }),
+    [circuit, deviceLabels, power, notation],
   );
   const highlighted = useMemo(
     () => new Set((highlight ?? []).map((c) => cellKey(c.row, c.col))),
@@ -152,9 +154,11 @@ function CellView({
   isSelected,
   isHighlighted,
 }: CellViewProps) {
+  const notation = useNotation();
   const { x, y } = cellOrigin(row, col);
   const y0 = wireY(row);
   const el = cell?.element;
+  const cellText = !el || el.type === "wire" ? "" : cellLabel(el, notation);
   const label = el && "device" in el ? deviceLabels?.[el.device] : undefined;
   const isInput = el?.type === "contact" && el.device.startsWith("X");
   const pressable = isInput && input && el?.type === "contact";
@@ -205,7 +209,15 @@ function CellView({
         <line x1={x} y1={y0} x2={x + CELL_W} y2={y0} {...leadProps(leftOn, flowing)} />
       )}
       {el?.type === "contact" && (
-        <Contact x={x} y={y0} el={el} flowing={flowing} leftOn={leftOn} rightOn={rightOn} />
+        <Contact
+          x={x}
+          y={y0}
+          el={el}
+          flowing={flowing}
+          leftOn={leftOn}
+          rightOn={rightOn}
+          risingMark={notation.risingMark}
+        />
       )}
       {el?.type === "coil" && <Coil x={x} y={y0} el={el} flowing={flowing} leftOn={leftOn} />}
 
@@ -226,11 +238,11 @@ function CellView({
           y={y + 16}
           textAnchor="middle"
           data-testid={`cell-text-${row}-${col}`}
-          className="fill-slate-700 text-[13px] font-medium"
+          className={`fill-slate-700 font-medium ${
+            cellText.length > 8 ? "text-[10px]" : "text-[13px]"
+          }`}
         >
-          {el.device}
-          {el.type === "coil" && el.kind === "timer" ? ` ${(el.presetMs / 1000).toFixed(1)}s` : ""}
-          {el.type === "coil" && el.kind === "counter" ? ` ×${el.preset}` : ""}
+          {cellText}
         </text>
       )}
       {label && (
@@ -258,7 +270,9 @@ function CellView({
           onPointerCancel={handleUp}
         >
           <title>
-            {el && "device" in el ? `${el.device}${label ? `(${label})` : ""}` : `${row},${col}`}
+            {el && "device" in el
+              ? `${notation.device(el.device)}${label ? `(${label})` : ""}`
+              : `${row},${col}`}
           </title>
         </rect>
       )}
@@ -266,7 +280,19 @@ function CellView({
   );
 }
 
-/** 接点: 縦棒 2 本。b 接点は斜線、立ち上がりは上向きの山を添える */
+/**
+ * セルの上に出す文字。「C0 ×5」「C0000 #0005」のように、表記で長さが変わる(S-028)。
+ * 長くなった分はセル幅に収める側(呼び出し元)で小さくする
+ */
+function cellLabel(el: ContactElement | CoilElement, notation: NotationContextValue): string {
+  const name = notation.device(el.device);
+  if (el.type !== "coil") return name;
+  if (el.kind === "timer") return `${name} ${notation.timerPreset(el.presetMs)}`;
+  if (el.kind === "counter") return `${name} ${notation.counterPreset(el.preset)}`;
+  return name;
+}
+
+/** 接点: 縦棒 2 本。b 接点は斜線、立ち上がりは中に記号(↑ / P、S-028) */
 function Contact({
   x,
   y,
@@ -274,6 +300,7 @@ function Contact({
   flowing,
   leftOn,
   rightOn,
+  risingMark,
 }: {
   x: number;
   y: number;
@@ -281,6 +308,7 @@ function Contact({
   flowing: boolean;
   leftOn: boolean;
   rightOn: boolean;
+  risingMark: string;
 }) {
   const gap = 12;
   const half = CELL_W / 2;
@@ -320,12 +348,14 @@ function Contact({
         />
       )}
       {el.kind === "rise" && (
-        <path
-          d={`M ${x + half - 6} ${y + 7} L ${x + half} ${y - 3} L ${x + half + 6} ${y + 7}`}
-          fill="none"
-          stroke={body}
-          strokeWidth={w}
-        />
+        <text
+          x={x + half}
+          y={y + 5}
+          textAnchor="middle"
+          className="fill-slate-600 text-[12px] font-bold"
+        >
+          {risingMark}
+        </text>
       )}
     </g>
   );
