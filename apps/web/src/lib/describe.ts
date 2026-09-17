@@ -1,5 +1,6 @@
 import {
   DEFAULT_HOLD_MS,
+  DEFAULT_NOTATION,
   type DeviceId,
   formatDevice,
   type Notation,
@@ -10,7 +11,7 @@ import {
 export function describeStep(
   step: Step,
   labels?: Record<string, string>,
-  notation: Notation = "standard",
+  notation: Notation = DEFAULT_NOTATION,
 ): string {
   const name = (device: string) => {
     const shown = formatDevice(device as DeviceId, notation);
