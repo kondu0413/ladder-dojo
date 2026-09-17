@@ -1,4 +1,5 @@
 import type { Circuit, TestCase } from "@ladder-dojo/core";
+import { judge, PUBLISH_LIMITS } from "@ladder-dojo/core";
 import { useEffect, useState } from "react";
 import { ApiError, api, type OrgSummary, type SolutionFailure } from "../lib/api.js";
 
@@ -9,6 +10,18 @@ export type PublishDialogProps = {
   onPublished: (id: string) => void;
   onCancel: () => void;
 };
+
+/** 通らなかった理由の説明。打ち切りは原因が違うので、別の言い方にする */
+function failureMessage(hitLimit: boolean): string {
+  if (hitLimit) {
+    return `テストが重すぎて最後まで確認できませんでした。1 件あたりの待ち時間は ${
+      PUBLISH_LIMITS.maxScansPerCase / 100
+    } 秒まで、問題ぜんぶで ${
+      PUBLISH_LIMITS.maxScansTotal / 100
+    } 秒までです。待ち時間を減らすか、テストケースを減らしてください。`;
+  }
+  return "あなたの回路が、付けたテストを通りませんでした。投稿するには全て通す必要があります。";
+}
 
 /**
  * サンドボックスの回路を問題として投稿する(SPEC.md §3.6)。
@@ -48,6 +61,28 @@ export function PublishDialog({
     setError(undefined);
     setFailures([]);
     try {
+      /**
+       * **送る前に、サーバーと同じ条件で確かめる**(S-030)。
+       * 手元の答え合わせは上限が緩いので、そのまま送ると
+       * 「手元では通ったのに投稿だけ弾かれた」になる
+       */
+      const pre = judge(circuit, testCases, {
+        maxScansPerCase: PUBLISH_LIMITS.maxScansPerCase,
+        maxScansTotal: PUBLISH_LIMITS.maxScansTotal,
+      });
+      if (!pre.passed) {
+        setFailures(
+          pre.cases
+            .filter((c) => !c.passed)
+            .map((c) => ({
+              caseId: c.caseId,
+              title: c.title,
+              kind: c.failure?.kind ?? "mismatch",
+            })),
+        );
+        setError(failureMessage(pre.cases.some((c) => c.failure?.kind === "limit")));
+        return;
+      }
       const res = await api.publishProblem({
         title: title.trim(),
         spec: spec.trim(),
@@ -65,10 +100,9 @@ export function PublishDialog({
       onPublished(res.problem.id);
     } catch (err) {
       if (err instanceof ApiError && err.code === "solution_failed") {
-        setFailures(err.failures ?? []);
-        setError(
-          "あなたの回路が、付けたテストを通りませんでした。投稿するには全て通す必要があります。",
-        );
+        const list = err.failures ?? [];
+        setFailures(list);
+        setError(failureMessage(list.some((f) => f.kind === "limit")));
       } else if (err instanceof ApiError && err.code === "invalid_body") {
         setError(
           "入力に不足があります。タイトル・仕様文・テストケース(1 件以上)を確認してください。",
@@ -196,7 +230,7 @@ export function PublishDialog({
                 <li key={f.caseId}>
                   {f.title}
                   {f.kind === "unstable" && "(回路が発振しています)"}
-                  {f.kind === "limit" && "(待ち時間が長すぎて確認しきれませんでした)"}
+                  {f.kind === "limit" && "(ここで打ち切りました)"}
                 </li>
               ))}
             </ul>

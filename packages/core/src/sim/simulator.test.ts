@@ -453,3 +453,39 @@ describe("devicePresets", () => {
     expect(devicePresets(circuit).counters).toEqual({ C0: 2 });
   });
 });
+
+describe("タイマの進め方の切り替え(S-029)", () => {
+  const circuit = () => ladder(3).row(no("X0"), timer("T0", 3000)).build();
+
+  it("切り替えてもデバイスの状態は消えない", () => {
+    const sim = new Simulator(circuit());
+    sim.setInput("X0", true);
+    scans(sim, 3);
+    sim.scan(1000);
+    expect(sim.timer("T0")?.elapsedMs).toBe(1000);
+
+    // 速度を変えても、数えた分は残る
+    sim.setTimerMode("instant");
+    expect(sim.timer("T0")?.elapsedMs).toBe(1000);
+  });
+
+  it("instant にすると、次のスキャンで設定値に達する", () => {
+    const sim = new Simulator(circuit());
+    sim.setInput("X0", true);
+    sim.scan(0);
+    expect(sim.read("T0")).toBe(false);
+
+    sim.setTimerMode("instant");
+    sim.scan(0);
+    expect(sim.read("T0")).toBe(true);
+  });
+
+  it("realtime に戻せば、また実時間で進む", () => {
+    const sim = new Simulator(circuit(), { timerMode: "instant" });
+    sim.setTimerMode("realtime");
+    sim.setInput("X0", true);
+    sim.scan(0);
+    sim.scan(500);
+    expect(sim.timer("T0")).toEqual({ elapsedMs: 500, done: false });
+  });
+});

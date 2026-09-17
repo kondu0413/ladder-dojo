@@ -85,14 +85,20 @@ export function formatDevice(id: DeviceId, notation: Notation): string {
  */
 export function formatTimerPreset(presetMs: number, notation: Notation): string {
   const sec = presetMs / 1000;
-  const tenths = Math.round(presetMs / 100);
+  /**
+   * 0.1 秒を 1 として数えた値。**0 にはしない**(S-034)。
+   * スキーマはタイマを 1ms から許すので、素直に丸めると 0.05 秒が「K0」になり、
+   * 設定されていないように読めてしまう。0.1 秒未満は 1 に寄せる
+   */
+  const tenths = Math.max(1, Math.round(presetMs / 100));
   switch (notation) {
     case "mitsubishi":
       return `K${tenths}`;
     case "omron":
       return `#${String(tenths).padStart(4, "0")}`;
     case "iec":
-      return `PT ${sec.toFixed(1)}s`;
+      // IEC は秒で書くので丸めずに済む。0.1 秒未満はそのまま細かく出す
+      return `PT ${sec < 0.1 ? sec : sec.toFixed(1)}s`;
   }
 }
 

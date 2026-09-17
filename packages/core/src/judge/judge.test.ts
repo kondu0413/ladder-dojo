@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { counter, ladder, nc, no, out, reset, timer, wire } from "../builder.js";
 import type { TestCase } from "../schema/testcase.js";
-import { judge, runTestCase } from "./judge.js";
+import { judge, PUBLISH_LIMITS, runTestCase } from "./judge.js";
 
 /** 模範解答: X0 で起動、X1 で停止する自己保持 */
 const selfHold = ladder(4).row(no("X0"), nc("X1"), out("Y0")).row(no("Y0")).v(0, 0).build();
@@ -459,5 +459,52 @@ describe("タイムチャート(recordTimeline)", () => {
     );
     expect(r.failure?.kind).toBe("unstable");
     expect(r.timeline).toBeDefined();
+  });
+});
+
+describe("投稿時の上限(S-030)", () => {
+  const circuit = ladder(4).row(no("X0"), timer("T0", 600_000)).row(no("T0"), out("Y0")).build();
+  const waitCase = (id: string, ms: number) => ({
+    id,
+    title: `${ms} ms 待つ`,
+    steps: [
+      { type: "set" as const, inputs: { X0: true } },
+      { type: "wait" as const, ms },
+      { type: "expect" as const, outputs: { Y0: false } },
+    ],
+  });
+
+  it("1 ケースが長すぎると limit で落ちる", () => {
+    const result = judge(circuit, [waitCase("t1", 200_000)], {
+      maxScansPerCase: PUBLISH_LIMITS.maxScansPerCase,
+    });
+    expect(result.passed).toBe(false);
+    expect(result.cases[0]?.failure?.kind).toBe("limit");
+  });
+
+  it("60 秒のタイマ問題は投稿の上限に収まる", () => {
+    const result = judge(circuit, [waitCase("t1", 61_000)], {
+      maxScansPerCase: PUBLISH_LIMITS.maxScansPerCase,
+      maxScansTotal: PUBLISH_LIMITS.maxScansTotal,
+    });
+    expect(result.passed).toBe(true);
+  });
+
+  it("1 ケースずつは短くても、積み上げが上限を超えたら落ちる", () => {
+    // 1 ケース 3,000 スキャン × 10 件 = 30,000 > 合計 20,000
+    const cases = Array.from({ length: 10 }, (_, i) => waitCase(`t${i}`, 30_000));
+    const result = judge(circuit, cases, {
+      maxScansPerCase: PUBLISH_LIMITS.maxScansPerCase,
+      maxScansTotal: PUBLISH_LIMITS.maxScansTotal,
+    });
+    expect(result.passed).toBe(false);
+    // 前のほうのケースは通り、どこかで打ち切られる
+    expect(result.cases.filter((c) => c.passed).length).toBeGreaterThan(0);
+    expect(result.cases.some((c) => c.failure?.kind === "limit")).toBe(true);
+  });
+
+  it("上限を指定しなければ、これまでどおり合計では打ち切らない", () => {
+    const cases = Array.from({ length: 10 }, (_, i) => waitCase(`t${i}`, 30_000));
+    expect(judge(circuit, cases).passed).toBe(true);
   });
 });

@@ -63,6 +63,14 @@ describe("表記の切り替え(S-028)", () => {
       expect(formatTimerPreset(3000, "iec")).toBe("PT 3.0s");
     });
 
+    it("0.1 秒未満でも「設定なし」に見える表示にしない(S-034)", () => {
+      expect(formatTimerPreset(50, "mitsubishi")).toBe("K1");
+      expect(formatTimerPreset(50, "omron")).toBe("#0001");
+      expect(formatTimerPreset(50, "iec")).toBe("PT 0.05s");
+      expect(formatTimerPreset(1, "mitsubishi")).not.toBe("K0");
+      expect(formatTimerPreset(1, "omron")).not.toBe("#0000");
+    });
+
     it("カウンタ", () => {
       expect(formatCounterPreset(5, "mitsubishi")).toBe("K5");
       expect(formatCounterPreset(5, "omron")).toBe("#0005");

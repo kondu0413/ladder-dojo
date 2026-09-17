@@ -170,4 +170,23 @@ test.describe("自分で動かす(押しボタンとして扱う)", () => {
     await page.getByTestId("hold-X0").click();
     await expect(page.getByTestId("input-X0")).toHaveAttribute("data-on", "false");
   });
+
+  /**
+   * 速度を変えてもシミュレータを作り直さない(S-029)。
+   * 作り直すと、数えた回数も点いているランプも消える
+   */
+  test("速度を変えても、それまで数えた回数は消えない", async ({ page }) => {
+    await openFreePlay(page);
+    for (let i = 0; i < 3; i++) {
+      await page.getByTestId("input-X0").click();
+      await page.waitForTimeout(60);
+    }
+    await expect(page.getByTestId("device-C0")).toContainText("3 / 5");
+
+    await page.getByTestId("sim-speed-5").click();
+    await expect(page.getByTestId("device-C0")).toContainText("3 / 5");
+
+    await page.getByTestId("sim-speed-instant").click();
+    await expect(page.getByTestId("device-C0")).toContainText("3 / 5");
+  });
 });

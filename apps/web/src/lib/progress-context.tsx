@@ -11,6 +11,7 @@ import {
 import { ApiError, api } from "./api.js";
 import { useSession } from "./auth-client.js";
 import {
+  chunkEntries,
   clearAllProgress,
   getProblemProgress,
   loadProgress,
@@ -210,21 +211,31 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
 
   const acceptMerge = useCallback(async () => {
     if (!pendingMerge) return;
-    const entries = Object.entries(pendingMerge)
-      .slice(0, MAX_MERGE_ENTRIES)
-      .map(([problemId, p]) => ({
-        problemId,
-        attempts: p.attempts,
-        failures: p.failures,
-        cleared: p.cleared,
-      }));
+    const entries = Object.entries(pendingMerge).map(([problemId, p]) => ({
+      problemId,
+      attempts: p.attempts,
+      failures: p.failures,
+      cleared: p.cleared,
+    }));
     if (entries.length === 0) {
       setPendingMerge(undefined);
       return;
     }
+    /**
+     * **1 回に送れる件数を超えたら、分けて送る**(S-032)。
+     *
+     * 以前は先頭 45 件だけ送って、そのあと端末の進捗を全部消していた。
+     * 46 件目から先は、ログインした瞬間に黙って消えていた。
+     * 送り切ってから消す
+     */
     try {
-      const res = await api.recordMerge(entries);
-      setProgress(fromServer(res.progress));
+      let last = fromServer([]);
+      for (const batch of chunkEntries(entries, MAX_MERGE_ENTRIES)) {
+        // マージの応答は「その時点の全進捗」なので、最後の 1 回で足りる
+        const res = await api.recordMerge(batch);
+        last = fromServer(res.progress);
+      }
+      setProgress(last);
       clearAllProgress();
       setPendingMerge(undefined);
       setSyncError(undefined);

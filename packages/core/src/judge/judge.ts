@@ -13,6 +13,37 @@ import { Simulator, type Snapshot } from "../sim/simulator.js";
  * - wait は ms ぶんスキャンしてタイマを進め、その後 settle する
  */
 
+/**
+ * 投稿時の再検証に使う上限(S-030)。
+ *
+ * **サーバーとブラウザで同じ値を使う。** 違う値にすると、手元では通るのに
+ * 投稿だけ弾かれる。判定は Workers の中で走り、Free プランは 1 リクエスト
+ * CPU 10ms(COST.md §1.1)。1 ケースあたりの長さと、問題ぜんぶの合計の
+ * 両方を抑える
+ */
+export const PUBLISH_LIMITS = {
+  /** テストケース数 */
+  maxTestCases: 20,
+  /**
+   * 1 ケースで回せるスキャン数。
+   *
+   * テストケースの待ち時間の合計はスキーマが 120 秒までに制限している
+   * (`MAX_TOTAL_WAIT_MS`)。120 秒 = 12,000 スキャンなので、**スキーマが許す
+   * 長さは必ず確かめきれる**ように、settle のぶんの余裕を足してある。
+   * ここを下げると「スキーマ上は正しいのに投稿だけできない」問題が生まれる
+   */
+  maxScansPerCase: 14_000,
+  /**
+   * 1 問ぜんぶの合計。**CPU を抑えているのはこちら**。
+   *
+   * ケースごとに短くても、20 件積めば同じだけ CPU を使う。目安として
+   * この環境の実測で 1 スキャン ≈ 1〜6 マイクロ秒(回路の大きさによる)。
+   * Workers Free は 1 リクエスト CPU 10ms(COST.md §1.1)なので、
+   * 実機で投稿がエラーになるようなら、まずこの値を下げる
+   */
+  maxScansTotal: 16_000,
+} as const;
+
 export type JudgeOptions = {
   scanMs?: number;
   /**
@@ -25,6 +56,11 @@ export type JudgeOptions = {
   maxSettleScans?: number;
   /** 1 ケースあたりの総スキャン数の上限(CPU 保護) */
   maxScansPerCase?: number;
+  /**
+   * 全ケース合わせた総スキャン数の上限(CPU 保護)。
+   * 1 ケースずつ短くても、20 ケース積めば同じだけ CPU を使う
+   */
+  maxScansTotal?: number;
 };
 
 /** ある時刻の全デバイスの ON / OFF。値が変わった時刻だけ記録する */
@@ -72,6 +108,8 @@ export type CaseResult = {
   caseId: string;
   title: string;
   passed: boolean;
+  /** このケースで回したスキャン数(合計の上限を配分するのに使う) */
+  scans: number;
   failure?: CaseFailure;
   /** 実行したステップの記録(失敗ステップまで) */
   trace: StepTrace[];
@@ -88,6 +126,7 @@ const DEFAULTS: Required<JudgeOptions> = {
   scanMs: 10,
   maxSettleScans: 50,
   maxScansPerCase: 50_000,
+  maxScansTotal: Number.POSITIVE_INFINITY,
   recordTimeline: false,
 };
 
@@ -96,7 +135,22 @@ export function judge(
   testCases: readonly TestCase[],
   options: JudgeOptions = {},
 ): JudgeResult {
-  const cases = testCases.map((tc) => runTestCase(circuit, tc, options));
+  /**
+   * **シミュレータは 1 つだけ作って、ケースごとに初期化して使い回す**(S-030)。
+   *
+   * `new Simulator()` は回路 JSON をスキーマで検証する。20 ケースぶん作り直すと
+   * 検証だけで数十 ms かかり、Workers の CPU 10ms/リクエスト(COST.md §1.1)を
+   * 検証だけで使い切る。`reset()` は作り直したのと同じ状態に戻す
+   */
+  const sim = new Simulator(circuit, { trackPower: false });
+  let remaining = options.maxScansTotal ?? DEFAULTS.maxScansTotal;
+  const cases = testCases.map((tc) => {
+    sim.reset();
+    const perCase = Math.min(options.maxScansPerCase ?? DEFAULTS.maxScansPerCase, remaining);
+    const result = runCaseOn(sim, tc, { ...options, maxScansPerCase: perCase });
+    remaining = Math.max(0, remaining - result.scans);
+    return result;
+  });
   return { passed: cases.every((c) => c.passed), cases };
 }
 
@@ -105,15 +159,21 @@ export function runTestCase(
   testCase: TestCase,
   options: JudgeOptions = {},
 ): CaseResult {
+  // 判定は通電マップを使わない。作らないぶんだけ速くなる(S-030)
+  return runCaseOn(new Simulator(circuit, { trackPower: false }), testCase, options);
+}
+
+/** 用意済みのシミュレータでテストケースを 1 件流す。状態は呼ぶ側で初期化しておく */
+function runCaseOn(sim: Simulator, testCase: TestCase, options: JudgeOptions): CaseResult {
   const opt = { ...DEFAULTS, ...options };
-  const sim = new Simulator(circuit);
   const runner = new StepRunner(sim, opt);
   const trace: StepTrace[] = [];
   const markers: TimelineMarker[] = [];
   const base = { caseId: testCase.id, title: testCase.title };
   /** recordTimeline のときだけ波形を添える */
-  const finish = (r: Omit<CaseResult, "timeline">): CaseResult => {
-    if (!opt.recordTimeline) return r;
+  const finish = (r: Omit<CaseResult, "timeline" | "scans">): CaseResult => {
+    const withScans: CaseResult = { ...r, scans: runner.scanCount };
+    if (!opt.recordTimeline) return withScans;
     const samples = runner.timelineSamples();
     const timeline: Timeline = {
       devices: listTimelineDevices(samples),
@@ -121,7 +181,7 @@ export function runTestCase(
       markers,
       durationMs: runner.elapsedMs,
     };
-    return { ...r, timeline };
+    return { ...withScans, timeline };
   };
 
   // 初期状態を安定させる(b 接点だけのラングなど、電源投入直後に ON になる出力を反映)
@@ -196,6 +256,11 @@ export class StepRunner {
   /** いまの仮想時間(ms) */
   get elapsedMs(): number {
     return this.nowMs;
+  }
+
+  /** ここまでに回したスキャン数 */
+  get scanCount(): number {
+    return this.scans;
   }
 
   /** 記録した波形。recordTimeline が false なら空 */
