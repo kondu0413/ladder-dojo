@@ -119,3 +119,39 @@ describe("動かしているときの通電状態", () => {
     expect(describeRow(selfHold(), 0, { power })).toContain("無電圧");
   });
 });
+
+/**
+ * 読み上げも表記に従う(S-028)。
+ * 図だけ切り替えて読み上げが元のままだと、目で見ない人に別の回路が伝わる。
+ */
+describe("表記の切り替え", () => {
+  const circuit = ladder(4).row(no("X0"), counter("C0", 5)).row(no("C0"), out("Y0")).build();
+
+  it("既定(三菱系)はデバイス名をそのまま読む", () => {
+    expect(describeRow(circuit, 0)).toContain("X0 の a 接点");
+    expect(describeRow(circuit, 1)).toContain("Y0 の出力コイル");
+  });
+
+  it("オムロン系ではワード.ビットで読む", () => {
+    const text = describeRow(circuit, 0, { notation: "omron" });
+    expect(text).toContain("0.00 の a 接点");
+    expect(text).toContain("C0000 のカウンタコイル");
+    expect(text).not.toContain("X0");
+  });
+
+  it("説明付きでも表記が効く", () => {
+    const text = describeRow(circuit, 1, {
+      notation: "omron",
+      deviceLabels: { Y0: "ランプ" },
+    });
+    expect(text).toContain("100.00(ランプ)の出力コイル");
+  });
+
+  it("IEC はデバイス名を変えない", () => {
+    expect(describeRow(circuit, 0, { notation: "iec" })).toContain("X0 の a 接点");
+  });
+
+  it("回路全体の読み上げにも表記が伝わる", () => {
+    expect(describeCircuit(circuit, { notation: "omron" })).toContain("100.00");
+  });
+});

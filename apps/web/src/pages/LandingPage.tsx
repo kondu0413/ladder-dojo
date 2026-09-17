@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { LadderView } from "../components/LadderView.js";
 import { buttonClass } from "../components/ui.js";
 import { signInWithGoogle } from "../lib/auth-client.js";
+import { useNotation } from "../lib/notation-context.jsx";
 import { sortedProblems } from "../problems/index.js";
 
 /**
@@ -17,6 +18,7 @@ import { sortedProblems } from "../problems/index.js";
 const SAMPLE = sortedProblems().find((p) => p.id === "selfhold-read-0")?.solution;
 
 export function LandingPage() {
+  const notation = useNotation();
   const [busy, setBusy] = useState(false);
   const total = sortedProblems().length;
 
@@ -82,7 +84,7 @@ export function LandingPage() {
               <LadderView circuit={SAMPLE} deviceLabels={{ X0: "起動", Y0: "ランプ" }} />
             ) : null}
             <p className="mt-4 text-sm text-slate-600">
-              押しボタン X0 を押すと、ランプ Y0 が点く。いちばん簡単な回路です。
+              {notation.text("押しボタン X0 を押すと、ランプ Y0 が点く。いちばん簡単な回路です。")}
             </p>
           </div>
         </section>

@@ -281,7 +281,7 @@ function CellView({
 }
 
 /**
- * セルの上に出す文字。「C0 ×5」「C0000 #0005」のように、表記で長さが変わる(S-028)。
+ * セルの上に出す文字。「C0 K5」「C0000 #0005」のように、表記で長さが変わる(S-028)。
  * 長くなった分はセル幅に収める側(呼び出し元)で小さくする
  */
 function cellLabel(el: ContactElement | CoilElement, notation: NotationContextValue): string {

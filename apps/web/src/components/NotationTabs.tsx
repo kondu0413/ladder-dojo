@@ -25,8 +25,7 @@ export function NotationTabs() {
               type="button"
               data-testid={`notation-${id}`}
               aria-pressed={notation === id}
-              // 見た目は「X0 / Y0」だが、入力ボタンの X0 と読み上げ名がぶつかる。
-              // 何のボタンなのかを名前に入れる
+              // ボタンに出るのは表記の名前だけ。押すと何が起きるのかを読み上げ名に入れる
               aria-label={`表記を ${NOTATION_INFO[id].label} にする`}
               onClick={() => setNotation(id)}
               className={`min-h-11 px-3 font-mono text-xs font-medium ${

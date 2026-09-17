@@ -184,3 +184,21 @@ describe("操作を日本語にする", () => {
     );
   });
 });
+
+describe("操作の説明の表記(S-028)", () => {
+  it("オムロン系ではデバイス名がワード.ビットになる", () => {
+    expect(describeStep({ type: "press", device: "X0" }, undefined, "omron")).toBe(
+      "0.00 を押して離す",
+    );
+  });
+
+  it("既定では元のデバイス名のまま", () => {
+    expect(describeStep({ type: "press", device: "X0" })).toBe("X0 を押して離す");
+  });
+
+  it("説明付きでも表記が効く", () => {
+    expect(describeStep({ type: "set", inputs: { X1: true } }, { X1: "停止" }, "omron")).toBe(
+      "0.01(停止) を ON にする",
+    );
+  });
+});

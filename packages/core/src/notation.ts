@@ -42,7 +42,7 @@ export const NOTATION_INFO: Record<Notation, NotationInfo> = {
     id: "iec",
     label: "IEC 61131-3",
     description:
-      "国際規格 IEC 61131-3(JIS B 3503)の書き方。立ち上がり接点は P、設定値は PT(時間)・PV(回数)で書く。",
+      "国際規格 IEC 61131-3(JIS B 3503)に寄せた書き方。立ち上がり接点は P、設定値は PT(時間)・PV(回数)と呼ぶ。規格どおりならタイマ・カウンタは TON / CTU の箱で描くところを、ここではコイルのまま出している。",
   },
 };
 

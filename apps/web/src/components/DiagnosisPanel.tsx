@@ -1,5 +1,6 @@
 import type { Circuit } from "@ladder-dojo/core";
 import type { DiagnosisState } from "../hooks/useDiagnosis.js";
+import { useNotation } from "../lib/notation-context.jsx";
 import { LadderView } from "./LadderView.js";
 
 export type DiagnosisPanelProps = {
@@ -26,6 +27,8 @@ export function DiagnosisPanel({
   failures,
   deviceLabels,
 }: DiagnosisPanelProps) {
+  // 早期 return より前に取る(フックの順番を変えない)
+  const notation = useNotation();
   if (failures < DIAGNOSIS_AFTER_FAILURES || diagnosis.state === "idle") return null;
 
   if (diagnosis.state === "working") {
@@ -56,9 +59,9 @@ export function DiagnosisPanel({
         {diagnoses.map((d) => (
           <li key={`${d.id}-${d.cells.map((c) => `${c.row},${c.col}`).join("-")}`}>
             <p data-testid={`diagnosis-${d.id}`} className="text-sm font-semibold text-slate-800">
-              {d.title}
+              {notation.text(d.title)}
             </p>
-            <p className="mt-0.5 text-sm text-slate-700">{d.detail}</p>
+            <p className="mt-0.5 text-sm text-slate-700">{notation.text(d.detail)}</p>
           </li>
         ))}
       </ul>
