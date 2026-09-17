@@ -25,7 +25,7 @@ export function SimulatorDemoPage() {
           </Link>
         </div>
         <p className="text-xs text-slate-500">
-          シミュレータの動作確認(開発中)。接点か下のボタンをタップして操作します。
+          シミュレータの動作確認(開発中)。接点か下のボタンを押している間だけ入力が ON になります。
         </p>
       </header>
 
@@ -57,7 +57,7 @@ export function SimulatorDemoPage() {
           circuit={sample.circuit}
           power={sim.power}
           deviceLabels={sample.deviceLabels}
-          onTapInput={sim.toggleInput}
+          input={sim.input}
         />
       </div>
 
@@ -72,8 +72,9 @@ export function SimulatorDemoPage() {
       <DevicePanel
         devices={sim.devices}
         snapshot={sim.snapshot}
+        circuit={sample.circuit}
         deviceLabels={sample.deviceLabels}
-        onToggleInput={sim.toggleInput}
+        input={sim.input}
       />
 
       <p className="mt-auto pt-4 text-[11px] text-slate-400" data-testid="schema-version">

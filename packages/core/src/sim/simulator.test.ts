@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { counter, ladder, nc, no, out, pulse, reset, rise, timer } from "../builder.js";
 import type { Circuit } from "../schema/circuit.js";
 import type { DeviceId } from "../schema/device.js";
-import { Simulator, splitRungs } from "./simulator.js";
+import { devicePresets, Simulator, splitRungs } from "./simulator.js";
 
 /** 入力を与えて n スキャン回す(時間は進めない) */
 function scans(sim: Simulator, n: number): void {
@@ -428,5 +428,28 @@ describe("入力デバイスの検証", () => {
   it("X 以外に setInput すると例外", () => {
     const sim = new Simulator(ladder(3).row(no("X0"), out("Y0")).build());
     expect(() => sim.setInput("Y0", true)).toThrow(/入力デバイスではありません/);
+  });
+});
+
+describe("devicePresets", () => {
+  it("タイマとカウンタの設定値を集める", () => {
+    const circuit = ladder(4)
+      .row(no("X0"), counter("C0", 5))
+      .row(no("X1"), timer("T0", 3000))
+      .row(no("C0"), out("Y0"))
+      .build();
+    expect(devicePresets(circuit)).toEqual({ timers: { T0: 3000 }, counters: { C0: 5 } });
+  });
+
+  it("設定値を持たない回路では空", () => {
+    expect(devicePresets(ladder(3).row(no("X0"), out("Y0")).build())).toEqual({
+      timers: {},
+      counters: {},
+    });
+  });
+
+  it("RST コイルは設定値を持たないので入らない", () => {
+    const circuit = ladder(3).row(no("X0"), counter("C0", 2)).row(no("X1"), reset("C0")).build();
+    expect(devicePresets(circuit).counters).toEqual({ C0: 2 });
   });
 });

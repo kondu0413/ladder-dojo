@@ -365,6 +365,27 @@ export function splitRungs(circuit: Circuit): Rung[] {
   return rungs;
 }
 
+/**
+ * タイマ・カウンタの設定値を集める。
+ *
+ * 現在値だけを出しても「あと何回で完了するのか」が分からない。
+ * 画面で「3 / 5」と出すために使う(S-027)
+ */
+export function devicePresets(circuit: Circuit): {
+  timers: Record<string, number>;
+  counters: Record<string, number>;
+} {
+  const timers: Record<string, number> = {};
+  const counters: Record<string, number> = {};
+  for (const cell of circuit.cells) {
+    const el = cell.element;
+    if (el?.type !== "coil") continue;
+    if (el.kind === "timer") timers[el.device] = el.presetMs;
+    if (el.kind === "counter") counters[el.device] = el.preset;
+  }
+  return { timers, counters };
+}
+
 /** 回路が参照するデバイスを種別ごとに列挙する(重複なし、番号順) */
 export function listDevices(circuit: Circuit): DeviceId[] {
   const set = new Set<DeviceId>();

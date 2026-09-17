@@ -333,14 +333,15 @@ function FreePlay({ problem }: { problem: Problem }) {
   return (
     <div className="flex flex-col gap-3">
       <p className="text-xs text-slate-500">
-        入力をタップして、予想どおりに動くか確かめてください。
+        入力は押しボタンです。押している間だけ ON になり、離すと OFF に戻ります。センサのように
+        ずっと ON にしたいときは「保持」を使ってください。
       </p>
       <div className="overflow-x-auto rounded-lg bg-white p-2">
         <LadderView
           circuit={problem.solution}
           power={sim.power}
           deviceLabels={labels}
-          onTapInput={sim.toggleInput}
+          input={sim.input}
         />
       </div>
       <SimulatorControls
@@ -353,8 +354,9 @@ function FreePlay({ problem }: { problem: Problem }) {
       <DevicePanel
         devices={sim.devices}
         snapshot={sim.snapshot}
+        circuit={problem.solution}
         deviceLabels={labels}
-        onToggleInput={sim.toggleInput}
+        input={sim.input}
       />
     </div>
   );
@@ -511,12 +513,7 @@ function RunPanel({ circuit, labels }: { circuit: Circuit; labels: Record<string
   return (
     <div className="flex flex-col gap-3">
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-2">
-        <LadderView
-          circuit={circuit}
-          power={sim.power}
-          deviceLabels={labels}
-          onTapInput={sim.toggleInput}
-        />
+        <LadderView circuit={circuit} power={sim.power} deviceLabels={labels} input={sim.input} />
       </div>
       <SimulatorControls
         speed={sim.speed}
@@ -533,8 +530,9 @@ function RunPanel({ circuit, labels }: { circuit: Circuit; labels: Record<string
         <DevicePanel
           devices={sim.devices}
           snapshot={sim.snapshot}
+          circuit={circuit}
           deviceLabels={labels}
-          onToggleInput={sim.toggleInput}
+          input={sim.input}
         />
       )}
     </div>

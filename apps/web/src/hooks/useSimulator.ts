@@ -11,6 +11,20 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 /** タイマの進み方(SPEC.md §5 の暫定値: 1x / 5x / 即時) */
 export type SimSpeed = 1 | 5 | "instant";
 
+/**
+ * 入力の操作一式(S-027)。`DevicePanel` と `LadderView` にそのまま渡す。
+ *
+ * 入力は**押しボタン**として扱う。押している間だけ ON で、離すと OFF。
+ * センサやスイッチのようにずっと ON にしたいときだけ `toggleHold` で保持する。
+ */
+export type InputControl = {
+  press: (device: DeviceId) => void;
+  release: (device: DeviceId) => void;
+  toggleHold: (device: DeviceId) => void;
+  /** 保持中の入力 */
+  held: readonly DeviceId[];
+};
+
 export type SimulatorState = {
   snapshot: Snapshot;
   power: PowerMap;
@@ -19,9 +33,10 @@ export type SimulatorState = {
   speed: SimSpeed;
   running: boolean;
   scans: number;
+  /** 入力の操作。押している間だけ ON になる(S-027) */
+  input: InputControl;
   setSpeed: (speed: SimSpeed) => void;
   setRunning: (running: boolean) => void;
-  toggleInput: (device: DeviceId) => void;
   setInput: (device: DeviceId, value: boolean) => void;
   reset: () => void;
 };
@@ -36,6 +51,7 @@ export type SimulatorState = {
 export function useSimulator(circuit: Circuit): SimulatorState {
   const [speed, setSpeed] = useState<SimSpeed>(1);
   const [running, setRunning] = useState(true);
+  const [held, setHeld] = useState<DeviceId[]>([]);
   const [, forceRender] = useReducer((n: number) => n + 1, 0);
 
   const sim = useMemo(
@@ -44,6 +60,18 @@ export function useSimulator(circuit: Circuit): SimulatorState {
   );
   const speedRef = useRef(speed);
   speedRef.current = speed;
+  const heldRef = useRef(held);
+  heldRef.current = held;
+
+  /**
+   * 押した時点のスキャン数と、離す予約。
+   *
+   * タップは一瞬なので、押してすぐ離すと**同じスキャンの中で ON と OFF が起きて**
+   * 立ち上がりが消える。カウンタが数えないのはこれが原因だった。
+   * 離すのは「押した値が 1 回スキャンされたあと」まで待つ
+   */
+  const pressedAtScan = useRef(new Map<DeviceId, number>());
+  const pendingRelease = useRef(new Set<DeviceId>());
 
   const devices = useMemo(() => listDevices(circuit), [circuit]);
   const inputs = useMemo(() => devices.filter((d) => d.startsWith("X")), [devices]);
@@ -59,6 +87,13 @@ export function useSimulator(circuit: Circuit): SimulatorState {
       const dt = Math.min(Math.max(now - last, 0), 100) * factor;
       last = now;
       sim.scan(dt);
+      // 1 スキャン ON になったものから離していく
+      for (const device of [...pendingRelease.current]) {
+        if (sim.scans > (pressedAtScan.current.get(device) ?? 0)) {
+          sim.setInput(device, false);
+          pendingRelease.current.delete(device);
+        }
+      }
       forceRender();
       frame = requestAnimationFrame(loop);
     };
@@ -66,9 +101,44 @@ export function useSimulator(circuit: Circuit): SimulatorState {
     return () => cancelAnimationFrame(frame);
   }, [sim, running]);
 
-  const toggleInput = useCallback(
+  // 回路が差し替わったら押しっぱなしの記録も捨てる。
+  // sim は本文で使わないが、**差し替わったこと**が起動条件なので依存に要る
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sim の差し替えが起動条件
+  useEffect(() => {
+    pendingRelease.current.clear();
+    pressedAtScan.current.clear();
+    setHeld([]);
+  }, [sim]);
+
+  const press = useCallback(
     (device: DeviceId) => {
-      sim.setInput(device, !sim.read(device));
+      pendingRelease.current.delete(device);
+      pressedAtScan.current.set(device, sim.scans);
+      sim.setInput(device, true);
+      forceRender();
+    },
+    [sim],
+  );
+
+  const release = useCallback((device: DeviceId) => {
+    // 保持中はボタンから指を離しても ON のまま
+    if (heldRef.current.includes(device)) return;
+    pendingRelease.current.add(device);
+    forceRender();
+  }, []);
+
+  const toggleHold = useCallback(
+    (device: DeviceId) => {
+      // 更新関数の中でシミュレータを触らない。StrictMode で 2 回呼ばれる
+      if (heldRef.current.includes(device)) {
+        pendingRelease.current.add(device);
+        setHeld(heldRef.current.filter((d) => d !== device));
+      } else {
+        pendingRelease.current.delete(device);
+        pressedAtScan.current.set(device, sim.scans);
+        sim.setInput(device, true);
+        setHeld([...heldRef.current, device]);
+      }
       forceRender();
     },
     [sim],
@@ -84,6 +154,9 @@ export function useSimulator(circuit: Circuit): SimulatorState {
 
   const reset = useCallback(() => {
     sim.reset();
+    pendingRelease.current.clear();
+    pressedAtScan.current.clear();
+    setHeld([]);
     forceRender();
   }, [sim]);
 
@@ -95,9 +168,9 @@ export function useSimulator(circuit: Circuit): SimulatorState {
     speed,
     running,
     scans: sim.scans,
+    input: { press, release, toggleHold, held },
     setSpeed,
     setRunning,
-    toggleInput,
     setInput,
     reset,
   };

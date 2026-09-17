@@ -67,14 +67,15 @@ test.describe("シミュレータ", () => {
     const y0 = page.getByTestId("device-Y0");
     await expect(y0).toHaveAttribute("data-on", "false");
 
-    // 押して離す
-    await page.getByRole("button", { name: /^X0/ }).click();
+    // 入力は押しボタン。1 回押すと押して離したことになる(S-027)
+    await page.getByTestId("input-X0").click();
     await expect(y0).toHaveAttribute("data-on", "true");
-    await page.getByRole("button", { name: /^X0/ }).click();
+    // 離しても自己保持で点いたまま
+    await expect(page.getByTestId("input-X0")).toHaveAttribute("data-on", "false");
     await expect(y0).toHaveAttribute("data-on", "true");
 
     // 停止ボタンで消える
-    await page.getByRole("button", { name: /^X1/ }).click();
+    await page.getByTestId("input-X1").click();
     await expect(y0).toHaveAttribute("data-on", "false");
   });
 
@@ -91,10 +92,8 @@ test.describe("シミュレータ", () => {
     await page.getByTestId("sample-timer").click();
     const y0 = page.getByTestId("device-Y0");
 
-    // 押しっぱなしだと 3 秒ごとに再点灯してしまうので、押して離す(押しボタン相当)
-    await page.getByRole("button", { name: /^X0/ }).click();
+    await page.getByTestId("input-X0").click();
     await expect(y0).toHaveAttribute("data-on", "true");
-    await page.getByRole("button", { name: /^X0/ }).click();
     // 3 秒のタイマなので、1 秒後はまだ自己保持で点いている
     await page.waitForTimeout(1000);
     await expect(y0).toHaveAttribute("data-on", "true");
@@ -106,10 +105,9 @@ test.describe("シミュレータ", () => {
     await page.goto("/samples");
     await page.getByTestId("sample-counter").click();
     const y0 = page.getByTestId("device-Y0");
+    // 1 回押すごとに 1 つ数える
     for (let i = 0; i < 3; i++) {
-      await page.getByRole("button", { name: /^X0/ }).click();
-      await page.waitForTimeout(60);
-      await page.getByRole("button", { name: /^X0/ }).click();
+      await page.getByTestId("input-X0").click();
       await page.waitForTimeout(60);
     }
     await expect(y0).toHaveAttribute("data-on", "true");
