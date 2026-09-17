@@ -108,7 +108,8 @@ test("タイマの設定値を変えて置ける", async ({ page }) => {
   await page.getByTestId("cell-0-5").click();
   await page.getByTestId("part-timer").click();
   await expect(page.getByTestId("current-device")).toHaveText("T0");
-  await expect(page.getByTestId("cell-text-0-5")).toHaveText("T0 3.5s");
+  // 既定は三菱系の表記。タイマの設定値は 0.1 秒を 1 として数える(3.5 秒 = K35、S-028)
+  await expect(page.getByTestId("cell-text-0-5")).toHaveText("T0 K35");
 });
 
 test.describe("保存とテストケース(§3.4)", () => {

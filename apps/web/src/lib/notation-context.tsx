@@ -1,5 +1,6 @@
 import type { DeviceId } from "@ladder-dojo/core";
 import {
+  DEFAULT_NOTATION,
   formatCounterPreset,
   formatDevice,
   formatDeviceNames,
@@ -33,14 +34,19 @@ export type NotationContextValue = {
 
 const NotationContext = createContext<NotationContextValue | undefined>(undefined);
 
+/** 名前を付け替える前に保存された値(S-028 の初版) */
+const LEGACY_IDS: Record<string, Notation> = { standard: "mitsubishi", cio: "omron" };
+
 function load(): Notation {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved && (NOTATIONS as readonly string[]).includes(saved)) return saved as Notation;
+    // 前の名前で保存されていたら引き継ぐ。選び直させない
+    if (saved && LEGACY_IDS[saved]) return LEGACY_IDS[saved];
   } catch {
     // プライベートモードなどで読めないことがある。既定に落とす
   }
-  return "standard";
+  return DEFAULT_NOTATION;
 }
 
 export function NotationProvider({ children }: { children: ReactNode }) {

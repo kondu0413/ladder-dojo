@@ -1,5 +1,5 @@
 import { type JudgeOptions, StepRunner } from "./judge/judge.js";
-import { formatDevice, type Notation } from "./notation.js";
+import { DEFAULT_NOTATION, formatDevice, type Notation } from "./notation.js";
 import type { Circuit, DeviceId, Step } from "./schema/index.js";
 import { type PowerMap, Simulator, type Snapshot } from "./sim/simulator.js";
 
@@ -84,7 +84,7 @@ export function replayScenario(
 export function describeStep(
   step: Step,
   labels?: Record<string, string>,
-  notation: Notation = "standard",
+  notation: Notation = DEFAULT_NOTATION,
 ): string {
   const name = (device: string) => {
     const shown = formatDevice(device as DeviceId, notation);

@@ -1,4 +1,4 @@
-import { formatDevice, type Notation } from "./notation.js";
+import { DEFAULT_NOTATION, formatDevice, type Notation } from "./notation.js";
 import type { Circuit, CoilElement, ContactElement, DeviceId } from "./schema/index.js";
 import { cellKey, cellMap } from "./schema/index.js";
 import type { PowerMap } from "./sim/simulator.js";
@@ -87,7 +87,7 @@ export type DescribeOptions = {
  * 何行目の話をしているのか分からなくなる。
  */
 export function describeRow(circuit: Circuit, row: number, options: DescribeOptions = {}): string {
-  const notation = options.notation ?? "standard";
+  const notation = options.notation ?? DEFAULT_NOTATION;
   const cells = cellMap(circuit);
   const parts: string[] = [];
 
