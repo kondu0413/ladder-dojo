@@ -34,9 +34,12 @@ async function registration(): Promise<ServiceWorkerRegistration | undefined> {
 /** いまの状態。サーバー側に残っている購読だけを ON と数える(別アカウントに付け替わることがある) */
 export async function readPushState(): Promise<PushState> {
   if (!pushSupported()) return "unsupported";
-  if (Notification.permission === "denied") return "denied";
+  // サーバーに鍵が無ければ、ブラウザの許可があっても送れない。こちらを先に見る。
+  // CI のヘッドレス Chromium は通知が最初から「拒否」なので、順番を逆にすると
+  // 鍵の無い環境の表示が確かめられない
   const { publicKey } = await api.pushPublicKey();
   if (!publicKey) return "unavailable";
+  if (Notification.permission === "denied") return "denied";
   const reg = await registration();
   const sub = await reg?.pushManager.getSubscription();
   if (!sub) return "off";
