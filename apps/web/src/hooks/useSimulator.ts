@@ -33,6 +33,8 @@ export type SimulatorState = {
   speed: SimSpeed;
   running: boolean;
   scans: number;
+  /** リセットからの仮想時間(ms)。タイマが見ている時間と同じ(速度倍率込み)。操作の記録に使う(S-042) */
+  elapsedMs: number;
   /** 入力の操作。押している間だけ ON になる(S-027) */
   input: InputControl;
   setSpeed: (speed: SimSpeed) => void;
@@ -81,6 +83,8 @@ export function useSimulator(circuit: Circuit): SimulatorState {
    */
   const pressedAtScan = useRef(new Map<DeviceId, number>());
   const pendingRelease = useRef(new Set<DeviceId>());
+  /** リセットからの仮想時間。scan に渡した dt の合計 */
+  const elapsedRef = useRef(0);
 
   const devices = useMemo(() => listDevices(circuit), [circuit]);
   const inputs = useMemo(() => devices.filter((d) => d.startsWith("X")), [devices]);
@@ -89,6 +93,7 @@ export function useSimulator(circuit: Circuit): SimulatorState {
   const tick = useCallback(
     (dt: number) => {
       sim.scan(dt);
+      elapsedRef.current += dt;
       // 1 スキャン ON になったものから離していく
       for (const device of [...pendingRelease.current]) {
         if (sim.scans > (pressedAtScan.current.get(device) ?? 0)) {
@@ -131,6 +136,7 @@ export function useSimulator(circuit: Circuit): SimulatorState {
   useEffect(() => {
     pendingRelease.current.clear();
     pressedAtScan.current.clear();
+    elapsedRef.current = 0;
     setHeld([]);
   }, [sim]);
 
@@ -180,6 +186,7 @@ export function useSimulator(circuit: Circuit): SimulatorState {
     sim.reset();
     pendingRelease.current.clear();
     pressedAtScan.current.clear();
+    elapsedRef.current = 0;
     setHeld([]);
     forceRender();
   }, [sim]);
@@ -192,6 +199,7 @@ export function useSimulator(circuit: Circuit): SimulatorState {
     speed,
     running,
     scans: sim.scans,
+    elapsedMs: elapsedRef.current,
     input: { press, release, toggleHold, held },
     setSpeed,
     setRunning,

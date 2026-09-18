@@ -18,6 +18,7 @@ import { LadderEditor } from "../components/LadderEditor.js";
 import { LadderView } from "../components/LadderView.js";
 import { NotationTabs } from "../components/NotationTabs.js";
 import { PublishDialog } from "../components/PublishDialog.js";
+import { RecorderBar } from "../components/RecorderBar.js";
 import { ShareButton } from "../components/ShareButton.js";
 import { SimulatorControls } from "../components/SimulatorControls.js";
 import { TestCaseEditor } from "../components/TestCaseEditor.js";
@@ -33,6 +34,7 @@ import {
   Segmented,
 } from "../components/ui.js";
 import { useHistory } from "../hooks/useHistory.js";
+import { useRecorder } from "../hooks/useRecorder.js";
 import { useSimulator } from "../hooks/useSimulator.js";
 import { ApiError, api, type SandboxSummary } from "../lib/api.js";
 import { useProgress } from "../lib/progress-context.jsx";
@@ -330,7 +332,19 @@ export function SandboxPage() {
           extra={<ShareButton circuit={circuit} title={title} />}
         />
       )}
-      {tab === "run" && <RunPanel circuit={circuit} />}
+      {tab === "run" && (
+        <RunPanel
+          circuit={circuit}
+          nextTitle={`記録 ${testCases.length + 1}`}
+          onRecorded={(tc) => {
+            setTestCases((prev) => [...prev, tc]);
+            setResult(undefined);
+            setMessage(
+              `操作をテスト「${tc.title}」として追加しました。「テスト」タブで確かめられます。`,
+            );
+          }}
+        />
+      )}
       {tab === "test" && (
         <div className="flex flex-col gap-3">
           <TestCaseEditor circuit={circuit} testCases={testCases} onChange={setTestCases} />
@@ -372,12 +386,23 @@ function explain(err: unknown): string {
   return "保存できませんでした。";
 }
 
-function RunPanel({ circuit }: { circuit: Circuit }) {
+function RunPanel({
+  circuit,
+  nextTitle,
+  onRecorded,
+}: {
+  circuit: Circuit;
+  /** 記録したテストに付ける名前 */
+  nextTitle: string;
+  onRecorded: (testCase: TestCase) => void;
+}) {
   const sim = useSimulator(circuit);
+  // 操作を記録してテストにする(S-042)。記録中は入力を横取りする
+  const recorder = useRecorder(sim);
   return (
     <div className="flex flex-col gap-3">
       <Card className="overflow-x-auto p-2">
-        <LadderView circuit={circuit} power={sim.power} input={sim.input} />
+        <LadderView circuit={circuit} power={sim.power} input={recorder.input} />
       </Card>
       <SimulatorControls
         speed={sim.speed}
@@ -388,6 +413,13 @@ function RunPanel({ circuit }: { circuit: Circuit }) {
         onStep={sim.step}
         scans={sim.scans}
       />
+      {sim.devices.length > 0 && (
+        <RecorderBar
+          recorder={recorder}
+          disabled={sim.speed === "instant"}
+          onStop={() => onRecorded(recorder.stop(nextTitle))}
+        />
+      )}
       {sim.devices.length === 0 ? (
         <EmptyState
           icon="flask"
@@ -399,7 +431,7 @@ function RunPanel({ circuit }: { circuit: Circuit }) {
           devices={sim.devices}
           snapshot={sim.snapshot}
           circuit={circuit}
-          input={sim.input}
+          input={recorder.input}
         />
       )}
     </div>

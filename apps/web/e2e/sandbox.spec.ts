@@ -151,6 +151,46 @@ test("共有リンクを開くと、同じ回路がサンドボックスに出�
   await expect(page.getByTestId("cell-text-0-0")).toHaveCount(0);
 });
 
+test("動かしながら操作を記録して、そのままテストにできる(S-042)", async ({ page }) => {
+  await page.goto("/sandbox");
+  await page.getByTestId("cell-0-0").click();
+  await page.getByTestId("part-no").click();
+  await page.getByTestId("cell-0-5").click();
+  await page.getByTestId("device-type-Y").click();
+  await page.getByTestId("part-out").click();
+  await page.getByTestId("connect-row").click();
+
+  await page.getByTestId("mode-run").click();
+  await page.getByTestId("record-start").click();
+  await expect(page.getByTestId("record-status")).toContainText("記録中");
+
+  // X0 を保持 → Y0 が点いたことを確認 → 保持を外す → 終える(消えたことの確認は自動で付く)
+  await page.getByTestId("hold-X0").click();
+  await expect(page.getByTestId("device-Y0")).toHaveAttribute("data-on", "true");
+  await page.getByTestId("record-expect").click();
+  await expect(page.getByTestId("record-status")).toContainText("2 手");
+  await page.getByTestId("hold-X0").click();
+  await expect(page.getByTestId("device-Y0")).toHaveAttribute("data-on", "false");
+  await page.getByTestId("record-stop").click();
+  await expect(page.getByTestId("sandbox-message")).toContainText(
+    "テスト「記録 1」として追加しました",
+  );
+  await expect(page.getByTestId("record-start")).toBeVisible();
+
+  await page.getByTestId("mode-test").click();
+  await expect(page.getByTestId("mode-test")).toContainText("テスト (1)");
+  await expect(page.getByTestId("test-title-0")).toHaveValue("記録 1");
+  // 待ち時間の手が間に入ることがあるので、順番だけを見る
+  await expect(page.locator('[data-testid^="case-0-step-"]')).toContainText([
+    "X0 を ON",
+    "Y0=ON",
+    "X0 を OFF",
+    "Y0=OFF",
+  ]);
+  await page.getByTestId("run-tests").click();
+  await expect(page.getByTestId("judge-result")).toHaveAttribute("data-passed", "true");
+});
+
 test("壊れた共有リンクは無視して、白紙のサンドボックスになる", async ({ page }) => {
   await page.goto("/sandbox#c=v1.6.3.0,0,zzz");
   await expect(page.getByRole("heading", { name: "サンドボックス" })).toBeVisible();
