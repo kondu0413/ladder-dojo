@@ -128,7 +128,7 @@ export function PublishDialog({
       className="rise-in flex flex-col gap-4 rounded-2xl border border-slate-900/10 bg-white p-4 shadow-float sm:p-5"
     >
       <div className="flex items-start gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-amber-300">
+        <span className="theme-fixed flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-amber-300">
           <Icon name="upload" className="h-5 w-5" />
         </span>
         <div>

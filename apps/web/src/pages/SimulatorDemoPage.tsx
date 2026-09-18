@@ -55,6 +55,8 @@ export function SimulatorDemoPage() {
           onSpeed={sim.setSpeed}
           onRunning={sim.setRunning}
           onReset={sim.reset}
+          onStep={sim.step}
+          scans={sim.scans}
         />
         <DevicePanel
           devices={sim.devices}

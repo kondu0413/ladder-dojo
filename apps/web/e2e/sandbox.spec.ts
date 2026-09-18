@@ -97,6 +97,157 @@ test("置いた部品を消せる", async ({ page }) => {
   await expect(page.getByTestId("cell-text-0-0")).toHaveCount(0);
 });
 
+test("置いた部品を元に戻せて、やり直せる(S-038)", async ({ page }) => {
+  await page.goto("/sandbox");
+  await expect(page.getByTestId("editor-undo")).toBeDisabled();
+
+  await page.getByTestId("cell-0-0").click();
+  await page.getByTestId("part-no").click();
+  await expect(page.getByTestId("cell-text-0-0")).toHaveText("X0");
+
+  await page.getByTestId("editor-undo").click();
+  await expect(page.getByTestId("cell-text-0-0")).toHaveCount(0);
+  await expect(page.getByTestId("editor-redo")).toBeEnabled();
+
+  await page.getByTestId("editor-redo").click();
+  await expect(page.getByTestId("cell-text-0-0")).toHaveText("X0");
+
+  // キーボードでも戻せる
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect(page.getByTestId("cell-text-0-0")).toHaveCount(0);
+});
+
+test("共有リンクを開くと、同じ回路がサンドボックスに出る(S-039)", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/sandbox");
+  await page.getByTestId("cell-0-0").click();
+  await page.getByTestId("part-no").click();
+  await page.getByTestId("cell-0-5").click();
+  await page.getByTestId("device-type-Y").click();
+  await page.getByTestId("part-out").click();
+  await page.getByTestId("connect-row").click();
+  await page.getByTestId("sandbox-title").fill("共有する回路");
+
+  await page.getByTestId("share-open").click();
+  const url = await page.getByTestId("share-url").inputValue();
+  expect(url).toContain("/sandbox#c=v1.6.3.");
+  expect(url).toContain("&t=");
+
+  await page.getByTestId("share-copy").click();
+  await expect(page.getByTestId("share-copy")).toHaveText("コピーしました");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(url);
+
+  // 受け取った側: まっさらな状態でリンクを開く
+  await page.goto("/");
+  await page.goto(url);
+  await expect(page.getByTestId("sandbox-message")).toContainText("共有された回路を開きました");
+  await expect(page.getByTestId("sandbox-title")).toHaveValue("共有する回路");
+  await expect(page.getByTestId("cell-text-0-0")).toHaveText("X0");
+  await expect(page.getByTestId("cell-text-0-5")).toHaveText("Y0");
+
+  // 「新規」でリンクが外れ、白紙に戻る
+  await page.getByTestId("sandbox-new").click();
+  await expect(page).toHaveURL(/\/sandbox$/);
+  await expect(page.getByTestId("cell-text-0-0")).toHaveCount(0);
+});
+
+test("動かしながら操作を記録して、そのままテストにできる(S-042)", async ({ page }) => {
+  await page.goto("/sandbox");
+  await page.getByTestId("cell-0-0").click();
+  await page.getByTestId("part-no").click();
+  await page.getByTestId("cell-0-5").click();
+  await page.getByTestId("device-type-Y").click();
+  await page.getByTestId("part-out").click();
+  await page.getByTestId("connect-row").click();
+
+  await page.getByTestId("mode-run").click();
+  await page.getByTestId("record-start").click();
+  await expect(page.getByTestId("record-status")).toContainText("記録中");
+
+  // X0 を保持 → Y0 が点いたことを確認 → 保持を外す → 終える(消えたことの確認は自動で付く)
+  await page.getByTestId("hold-X0").click();
+  await expect(page.getByTestId("device-Y0")).toHaveAttribute("data-on", "true");
+  await page.getByTestId("record-expect").click();
+  await expect(page.getByTestId("record-status")).toContainText("2 手");
+  await page.getByTestId("hold-X0").click();
+  await expect(page.getByTestId("device-Y0")).toHaveAttribute("data-on", "false");
+  await page.getByTestId("record-stop").click();
+  await expect(page.getByTestId("sandbox-message")).toContainText(
+    "テスト「記録 1」として追加しました",
+  );
+  await expect(page.getByTestId("record-start")).toBeVisible();
+
+  await page.getByTestId("mode-test").click();
+  await expect(page.getByTestId("mode-test")).toContainText("テスト (1)");
+  await expect(page.getByTestId("test-title-0")).toHaveValue("記録 1");
+  // 待ち時間の手が間に入ることがあるので、順番だけを見る
+  await expect(page.locator('[data-testid^="case-0-step-"]')).toContainText([
+    "X0 を ON",
+    "Y0=ON",
+    "X0 を OFF",
+    "Y0=OFF",
+  ]);
+  await page.getByTestId("run-tests").click();
+  await expect(page.getByTestId("judge-result")).toHaveAttribute("data-passed", "true");
+});
+
+test("SET / RST・立ち下がり・オフディレイを置いて動かせる(S-044)", async ({ page }) => {
+  await page.goto("/sandbox");
+  // 1 行目: X0 の a 接点 → SET Y0
+  await page.getByTestId("cell-0-0").click();
+  await page.getByTestId("part-no").click();
+  await page.getByTestId("cell-0-5").click();
+  await page.getByTestId("device-type-Y").click();
+  await page.getByTestId("part-set").click();
+  await expect(page.getByTestId("cell-text-0-5")).toHaveText("Y0");
+  await page.getByTestId("connect-row").click();
+
+  // 2 行目: X1 の a 接点 → RST Y0
+  await page.getByTestId("cell-1-0").click();
+  await page.getByTestId("device-type-X").click();
+  await page.getByTestId("device-number-inc").click();
+  await page.getByTestId("part-no").click();
+  await page.getByTestId("cell-1-5").click();
+  await page.getByTestId("device-type-Y").click();
+  await page.getByTestId("device-number-dec").click();
+  await page.getByTestId("part-reset").click();
+  await page.getByTestId("connect-row").click();
+
+  // 3 行目: X1 の立ち下がり → オフディレイ T0(3 秒)
+  await page.getByTestId("cell-2-0").click();
+  await page.getByTestId("device-type-X").click();
+  await page.getByTestId("device-number-inc").click();
+  await page.getByTestId("part-fall").click();
+  await page.getByTestId("cell-2-5").click();
+  await page.getByTestId("device-type-T").click();
+  await page.getByTestId("device-number-dec").click();
+  await page.getByTestId("part-offdelay").click();
+  await expect(page.getByTestId("cell-text-2-5")).toHaveText("T0 K30");
+  await page.getByTestId("connect-row").click();
+
+  await page.getByTestId("mode-run").click();
+  const y0 = page.getByTestId("device-Y0");
+  const t0 = page.getByTestId("device-T0");
+  await page.getByTestId("input-X0").click();
+  await expect(y0).toHaveAttribute("data-on", "true"); // SET で点いたまま
+  await expect(t0).toHaveAttribute("data-on", "false");
+
+  await page.getByTestId("input-X1").click();
+  await expect(y0).toHaveAttribute("data-on", "false"); // RST で消える
+  // 離した瞬間の立ち下がりでオフディレイが動き、3 秒のあいだ ON を保つ
+  await expect(t0).toHaveAttribute("data-on", "true");
+  await page.waitForTimeout(1000);
+  await expect(t0).toHaveAttribute("data-on", "true");
+  await expect(t0).toHaveAttribute("data-on", "false", { timeout: 5000 });
+});
+
+test("壊れた共有リンクは無視して、白紙のサンドボックスになる", async ({ page }) => {
+  await page.goto("/sandbox#c=v1.6.3.0,0,zzz");
+  await expect(page.getByRole("heading", { name: "サンドボックス" })).toBeVisible();
+  await expect(page.getByTestId("sandbox-message")).toHaveCount(0);
+  await expect(page.getByTestId("cell-text-0-0")).toHaveCount(0);
+});
+
 test("タイマの設定値を変えて置ける", async ({ page }) => {
   await page.goto("/sandbox");
   await page.getByTestId("cell-0-0").click();

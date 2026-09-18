@@ -131,3 +131,64 @@ async function cacheFirst(request) {
   if (fresh) return fresh;
   return new Response("", { status: 504 });
 }
+
+// ---------------------------------------------------------------------------
+// Web Push(S-045)。課題の期限と新しい課題を、毎朝サーバーが送ってくる
+// ---------------------------------------------------------------------------
+
+self.addEventListener("push", (event) => {
+  let data = { title: "ラダー道場", body: "", url: "/orgs", tag: "ladder-dojo" };
+  try {
+    data = { ...data, ...(event.data ? event.data.json() : {}) };
+  } catch {
+    // 本文が JSON でなければ既定の文面で出す
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
+      // 同じ tag の通知は置き換わる(毎朝の通知が溜まらない)
+      tag: data.tag,
+      data: { url: data.url },
+      lang: "ja",
+    }),
+  );
+});
+
+/** 通知を押したら、その画面を開く。すでに開いているタブがあればそれを使う */
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = new URL(event.notification.data?.url ?? "/", self.location.origin).href;
+  event.waitUntil(
+    (async () => {
+      const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      const existing = windows.find((c) => c.url.startsWith(self.location.origin));
+      if (existing) {
+        await existing.focus();
+        if ("navigate" in existing) await existing.navigate(target);
+        return;
+      }
+      await self.clients.openWindow(target);
+    })(),
+  );
+});
+
+/** プッシュサービス側で購読が作り直されたら、新しいものをサーバーに登録し直す */
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(
+    (async () => {
+      const key = event.oldSubscription?.options?.applicationServerKey;
+      if (!key) return;
+      const sub = await self.registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: key,
+      });
+      await fetch("/api/push/subscriptions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(sub.toJSON()),
+      });
+    })().catch(() => undefined),
+  );
+});

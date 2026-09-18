@@ -38,6 +38,7 @@ function canonicalElement(el: Element): unknown[] {
     case "coil":
       switch (el.kind) {
         case "timer":
+        case "offdelay":
           return ["coil", el.kind, el.device, el.presetMs];
         case "counter":
           return ["coil", el.kind, el.device, el.preset];

@@ -8,6 +8,7 @@ import { mistakeRoutes } from "./routes/mistakes.js";
 import { orgRoutes } from "./routes/orgs.js";
 import { problemRoutes } from "./routes/problems.js";
 import { progressRoutes } from "./routes/progress.js";
+import { pushRoutes } from "./routes/push.js";
 import { rankingRoutes } from "./routes/rankings.js";
 import { sandboxRoutes } from "./routes/sandbox.js";
 import { submissionRoutes } from "./routes/submissions.js";
@@ -37,6 +38,7 @@ export const app = new Hono<AppBindings>()
   .route("/mistakes", mistakeRoutes)
   .route("/problems", problemRoutes)
   .route("/orgs", orgRoutes)
+  .route("/push", pushRoutes)
   .route("/rankings", rankingRoutes)
   .route("/sandbox", sandboxRoutes)
   .route("/submissions", submissionRoutes)

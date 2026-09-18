@@ -72,8 +72,18 @@ export type ApiErrorDto = {
     | "invalid_body"
     | "too_large"
     | "quota_exceeded"
+    | "push_unavailable"
     | "internal_error";
 };
+
+// ---------------------------------------------------------------------------
+// Web Push(S-045)
+// ---------------------------------------------------------------------------
+
+/** VAPID の公開鍵(base64url)。鍵が登録されていない環境では null */
+export type PushPublicKeyDto = { publicKey: string | null };
+export type PushSubscriptionListDto = { endpoints: string[] };
+export type PushTestDto = { sent: number; removed: number };
 
 // ---------------------------------------------------------------------------
 // 投稿問題(フェーズ2、SPEC.md §3.6)

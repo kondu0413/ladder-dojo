@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import { App } from "./App.js";
 import { registerServiceWorker } from "./lib/register-sw.js";
+import { initTheme } from "./lib/theme.js";
 import "./index.css";
 
 const root = document.getElementById("root");
@@ -11,6 +12,7 @@ if (!root) {
 }
 
 registerServiceWorker();
+initTheme();
 
 createRoot(root).render(
   <StrictMode>

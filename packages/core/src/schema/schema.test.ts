@@ -256,3 +256,54 @@ describe("問題スキーマ", () => {
     expect(() => parseProblem({ ...base, id: "Self Hold" })).toThrow();
   });
 });
+
+describe("SET / RST / 立ち下がり / オフディレイ(S-044)", () => {
+  const cell = (element: unknown, col = 2) => ({
+    schemaVersion: SCHEMA_VERSION,
+    cols: 3,
+    rows: 1,
+    cells: [{ row: 0, col, element }],
+  });
+
+  it("SET は Y / M に置け、X には置けない", () => {
+    expect(circuitSchema.safeParse(cell({ type: "coil", kind: "set", device: "M3" })).success).toBe(
+      true,
+    );
+    expect(circuitSchema.safeParse(cell({ type: "coil", kind: "set", device: "X0" })).success).toBe(
+      false,
+    );
+  });
+
+  it("RST は C のほか Y / M にも置ける。T には置けない", () => {
+    for (const device of ["C0", "Y1", "M2"]) {
+      expect(
+        circuitSchema.safeParse(cell({ type: "coil", kind: "reset", device })).success,
+        device,
+      ).toBe(true);
+    }
+    expect(
+      circuitSchema.safeParse(cell({ type: "coil", kind: "reset", device: "T0" })).success,
+    ).toBe(false);
+  });
+
+  it("立ち下がり接点はどのデバイスでも読める", () => {
+    expect(
+      circuitSchema.safeParse(cell({ type: "contact", kind: "fall", device: "T0" }, 0)).success,
+    ).toBe(true);
+  });
+
+  it("オフディレイは T にだけ置け、設定値は 1ms 以上", () => {
+    expect(
+      circuitSchema.safeParse(cell({ type: "coil", kind: "offdelay", device: "T0", presetMs: 500 }))
+        .success,
+    ).toBe(true);
+    expect(
+      circuitSchema.safeParse(cell({ type: "coil", kind: "offdelay", device: "T0", presetMs: 0 }))
+        .success,
+    ).toBe(false);
+    expect(
+      circuitSchema.safeParse(cell({ type: "coil", kind: "offdelay", device: "C0", presetMs: 500 }))
+        .success,
+    ).toBe(false);
+  });
+});

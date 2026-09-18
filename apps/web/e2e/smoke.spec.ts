@@ -101,6 +101,40 @@ test.describe("シミュレータ", () => {
     await expect(y0).toHaveAttribute("data-on", "false", { timeout: 5000 });
   });
 
+  test("通電している線には流れの印が重なり、動きを減らす設定では出ない(S-040)", async ({
+    page,
+  }) => {
+    await page.goto("/samples");
+    const cell = page.getByTestId("cell-0-0");
+    const flow = cell.locator("line.flow-dash");
+    await expect(flow).toHaveCount(0);
+
+    await page.getByTestId("hold-X0").click();
+    await expect(cell).toHaveAttribute("data-flowing", "true");
+    await expect(flow).toHaveCount(2); // 接点の左右のリード線
+    // 元の実線が最初の線のまま(読み上げ・他のテストは最初の線を見る)
+    await expect(cell.locator("line").first()).not.toHaveClass(/flow-dash/);
+    await expect(flow.first()).toHaveCSS("display", "inline");
+
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await expect(flow.first()).toHaveCSS("display", "none");
+  });
+
+  test("一時停止中は 1 スキャンずつ進められる(S-038)", async ({ page }) => {
+    await page.goto("/samples");
+    await expect(page.getByTestId("sim-step")).toBeDisabled();
+    await page.getByTestId("sim-toggle-run").click();
+    await expect(page.getByTestId("sim-step")).toBeEnabled();
+
+    // 止めている間は、押しても次のスキャンまで反映されない
+    await page.getByTestId("hold-X0").click();
+    await expect(page.getByTestId("input-X0")).toHaveAttribute("data-on", "true");
+    await expect(page.getByTestId("device-Y0")).toHaveAttribute("data-on", "false");
+
+    await page.getByTestId("sim-step").click();
+    await expect(page.getByTestId("device-Y0")).toHaveAttribute("data-on", "true");
+  });
+
   test("リセットで全デバイスが初期状態に戻る", async ({ page }) => {
     await page.goto("/samples");
     await page.getByTestId("sample-counter").click();

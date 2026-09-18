@@ -68,6 +68,58 @@ test.describe("読む", () => {
   });
 });
 
+test.describe("次の問題へ(S-038)", () => {
+  test("クリアすると、まだ解いていない次の問題へ進める", async ({ page }) => {
+    await page.goto("/problems/selfhold-read-1");
+    await page.getByTestId("choice-1").click();
+    await page.getByTestId("next-question").click();
+    await page.getByTestId("choice-0").click();
+    await expect(page.getByTestId("read-complete")).toHaveAttribute("data-cleared", "true");
+
+    const next = page.getByTestId("next-problem");
+    await expect(next).toBeVisible();
+    await next.click();
+    await expect(page).toHaveURL(/\/problems\/(?!selfhold-read-1$)[a-z0-9-]+$/);
+    await expect(page.getByRole("heading", { level: 1 })).not.toHaveText(
+      "押しボタンを離したらどうなる?",
+    );
+  });
+
+  test("一覧の「続きはここから」は、いちばん手前の未クリアを指す", async ({ page }) => {
+    await page.goto("/problems");
+    await expect(page.getByTestId("recommended-problem")).toHaveAttribute(
+      "href",
+      "/problems/selfhold-read-0",
+    );
+  });
+});
+
+test.describe("一覧の絞り込み(S-038)", () => {
+  test("モードとクリア状況で絞り込める", async ({ page }) => {
+    // まず 1 問クリアしておく(未ログインなので端末に残る)
+    await page.goto("/problems/selfhold-read-1");
+    await page.getByTestId("choice-1").click();
+    await page.getByTestId("next-question").click();
+    await page.getByTestId("choice-0").click();
+    await expect(page.getByTestId("read-complete")).toHaveAttribute("data-cleared", "true");
+
+    await page.goto("/problems");
+    await page.getByTestId("filter-mode-fix").click();
+    await expect(page.getByTestId("problem-selfhold-fix-1")).toBeVisible();
+    await expect(page.getByTestId("problem-selfhold-read-1")).toHaveCount(0);
+    await expect(page).toHaveURL(/mode=fix/);
+
+    await page.getByTestId("filter-mode-all").click();
+    await page.getByTestId("filter-status-done").click();
+    await expect(page.getByTestId("problem-selfhold-read-1")).toBeVisible();
+    await expect(page.getByTestId("problem-selfhold-fix-1")).toHaveCount(0);
+
+    await page.getByTestId("filter-status-todo").click();
+    await expect(page.getByTestId("problem-selfhold-read-1")).toHaveCount(0);
+    await expect(page.getByTestId("problem-selfhold-fix-1")).toBeVisible();
+  });
+});
+
 test.describe("直す", () => {
   test("不正解のときは、どの操作で何が違ったかが出る", async ({ page }) => {
     await page.goto("/problems/selfhold-fix-1");

@@ -9,8 +9,8 @@ import {
   sandboxTestCasesSchema,
   type TestCase,
 } from "@ladder-dojo/core";
-import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router";
 import { AppShell } from "../components/AppShell.js";
 import { DevicePanel } from "../components/DevicePanel.js";
 import { JudgeResultView } from "../components/JudgeResultView.js";
@@ -18,6 +18,8 @@ import { LadderEditor } from "../components/LadderEditor.js";
 import { LadderView } from "../components/LadderView.js";
 import { NotationTabs } from "../components/NotationTabs.js";
 import { PublishDialog } from "../components/PublishDialog.js";
+import { RecorderBar } from "../components/RecorderBar.js";
+import { ShareButton } from "../components/ShareButton.js";
 import { SimulatorControls } from "../components/SimulatorControls.js";
 import { TestCaseEditor } from "../components/TestCaseEditor.js";
 import {
@@ -31,9 +33,12 @@ import {
   SectionTitle,
   Segmented,
 } from "../components/ui.js";
+import { useHistory } from "../hooks/useHistory.js";
+import { useRecorder } from "../hooks/useRecorder.js";
 import { useSimulator } from "../hooks/useSimulator.js";
 import { ApiError, api, type SandboxSummary } from "../lib/api.js";
 import { useProgress } from "../lib/progress-context.jsx";
+import { readSharedCircuit } from "../lib/share.js";
 
 type Tab = "edit" | "run" | "test";
 
@@ -41,8 +46,12 @@ type Tab = "edit" | "run" | "test";
 export function SandboxPage() {
   const { user } = useProgress();
   const navigate = useNavigate();
+  const location = useLocation();
   const [publishing, setPublishing] = useState(false);
-  const [circuit, setCircuit] = useState<Circuit>(() => emptyCircuit(6, 3));
+  // 編集は「元に戻す / やり直す」つき(S-038)
+  const history = useHistory<Circuit>(emptyCircuit(6, 3));
+  const circuit = history.value;
+  const setCircuit = history.set;
   const [testCases, setTestCases] = useState<TestCase[]>([]);
   const [title, setTitle] = useState("無題の回路");
   const [savedId, setSavedId] = useState<string | undefined>(undefined);
@@ -71,6 +80,24 @@ export function SandboxPage() {
     void refreshList();
   }, [refreshList]);
 
+  // 共有リンク(`#c=...`、S-039)で開かれたら、その回路を出す。
+  // 同じ画面で別のリンクを開き直したときにも追いかける
+  const appliedHash = useRef("");
+  const resetHistory = history.reset;
+  useEffect(() => {
+    if (location.hash === appliedHash.current) return;
+    appliedHash.current = location.hash;
+    const shared = readSharedCircuit(location.hash);
+    if (!shared) return;
+    resetHistory(shared.circuit);
+    setTitle(shared.title ?? "無題の回路");
+    setTestCases([]);
+    setSavedId(undefined);
+    setResult(undefined);
+    setTab("edit");
+    setMessage("共有された回路を開きました。");
+  }, [location.hash, resetHistory]);
+
   const save = async () => {
     setBusy(true);
     setMessage(undefined);
@@ -94,7 +121,7 @@ export function SandboxPage() {
     setMessage(undefined);
     try {
       const res = await api.getSandbox(id);
-      setCircuit(circuitSchema.parse(res.circuit.circuit));
+      history.reset(circuitSchema.parse(res.circuit.circuit));
       setTestCases(sandboxTestCasesSchema.catch([]).parse(res.circuit.testCases));
       setTitle(res.circuit.title);
       setSavedId(res.circuit.id);
@@ -132,11 +159,13 @@ export function SandboxPage() {
   };
 
   const reset = () => {
-    setCircuit(emptyCircuit(6, 3));
+    history.reset(emptyCircuit(6, 3));
     setTestCases([]);
     setTitle("無題の回路");
     setSavedId(undefined);
     setResult(undefined);
+    // 共有リンクから開いていたなら、リンクを外す(再読み込みで戻ってこないように)
+    if (location.hash) void navigate("/sandbox", { replace: true });
   };
 
   return (
@@ -295,8 +324,27 @@ export function SandboxPage() {
         ]}
       />
 
-      {tab === "edit" && <LadderEditor circuit={circuit} onChange={setCircuit} />}
-      {tab === "run" && <RunPanel circuit={circuit} />}
+      {tab === "edit" && (
+        <LadderEditor
+          circuit={circuit}
+          onChange={setCircuit}
+          history={history}
+          extra={<ShareButton circuit={circuit} title={title} />}
+        />
+      )}
+      {tab === "run" && (
+        <RunPanel
+          circuit={circuit}
+          nextTitle={`記録 ${testCases.length + 1}`}
+          onRecorded={(tc) => {
+            setTestCases((prev) => [...prev, tc]);
+            setResult(undefined);
+            setMessage(
+              `操作をテスト「${tc.title}」として追加しました。「テスト」タブで確かめられます。`,
+            );
+          }}
+        />
+      )}
       {tab === "test" && (
         <div className="flex flex-col gap-3">
           <TestCaseEditor circuit={circuit} testCases={testCases} onChange={setTestCases} />
@@ -338,12 +386,23 @@ function explain(err: unknown): string {
   return "保存できませんでした。";
 }
 
-function RunPanel({ circuit }: { circuit: Circuit }) {
+function RunPanel({
+  circuit,
+  nextTitle,
+  onRecorded,
+}: {
+  circuit: Circuit;
+  /** 記録したテストに付ける名前 */
+  nextTitle: string;
+  onRecorded: (testCase: TestCase) => void;
+}) {
   const sim = useSimulator(circuit);
+  // 操作を記録してテストにする(S-042)。記録中は入力を横取りする
+  const recorder = useRecorder(sim);
   return (
     <div className="flex flex-col gap-3">
       <Card className="overflow-x-auto p-2">
-        <LadderView circuit={circuit} power={sim.power} input={sim.input} />
+        <LadderView circuit={circuit} power={sim.power} input={recorder.input} />
       </Card>
       <SimulatorControls
         speed={sim.speed}
@@ -351,7 +410,16 @@ function RunPanel({ circuit }: { circuit: Circuit }) {
         onSpeed={sim.setSpeed}
         onRunning={sim.setRunning}
         onReset={sim.reset}
+        onStep={sim.step}
+        scans={sim.scans}
       />
+      {sim.devices.length > 0 && (
+        <RecorderBar
+          recorder={recorder}
+          disabled={sim.speed === "instant"}
+          onStop={() => onRecorded(recorder.stop(nextTitle))}
+        />
+      )}
       {sim.devices.length === 0 ? (
         <EmptyState
           icon="flask"
@@ -363,7 +431,7 @@ function RunPanel({ circuit }: { circuit: Circuit }) {
           devices={sim.devices}
           snapshot={sim.snapshot}
           circuit={circuit}
-          input={sim.input}
+          input={recorder.input}
         />
       )}
     </div>

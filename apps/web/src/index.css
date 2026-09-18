@@ -23,10 +23,157 @@
   --shadow-float: 0 12px 40px -12px rgb(15 23 42 / 0.25);
   /* 通電しているボタンの光 */
   --shadow-glow: 0 0 0 3px rgb(251 191 36 / 0.35), 0 4px 16px -4px rgb(245 158 11 / 0.5);
+
+  /* テーマで変わらない濃い文字色。橙の面(主役のボタン・点いた入力)の上に使う */
+  --color-ink: #020617;
 }
 
 :root {
   color-scheme: light;
+
+  /* ラダー図の線の色(S-043)。SVG は Tailwind の色を使えないので、ここで両テーマぶんを決める */
+  --ladder-flow: #f59e0b;
+  --ladder-live: #fbbf24;
+  --ladder-dead: #94a3b8;
+  --ladder-rail: #1e293b;
+  --ladder-flow-dash: #fffbeb;
+  --ladder-empty: #e2e8f0;
+  --ladder-select-fill: #e0f2fe;
+  --ladder-select-stroke: #0284c7;
+  --ladder-highlight-fill: #fef3c7;
+  --ladder-highlight-stroke: #d97706;
+}
+
+/*
+ * ダークモード(S-043)。
+ *
+ * 画面ごとに dark: を書いて回るのではなく、**色の変数を裏返す**。
+ * 灰色の段階(slate)は 50 ↔ 950 のように反転し、色付きの帯(お知らせ・札)も
+ * 50 ↔ 950、100 ↔ 900 … と入れ替える。400〜600 の鮮やかな色はそのまま。
+ * bg-white は面の色(slate-900)になる。
+ *
+ * 紺の面(ヘッダー・紹介画面)は両テーマで同じ見た目にしたいので、
+ * `.theme-fixed` で変数を元の値に戻す。
+ */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  /* 面(カード・入力欄)は slate-900、地は slate-950 */
+  --color-white: oklch(20.8% 0.042 265.755);
+  --color-slate-50: oklch(12.9% 0.042 264.695);
+  --color-slate-100: oklch(20.8% 0.042 265.755);
+  --color-slate-200: oklch(27.9% 0.041 260.031);
+  --color-slate-300: oklch(37.2% 0.044 257.287);
+  --color-slate-400: oklch(55.4% 0.046 257.417);
+  --color-slate-500: oklch(70.4% 0.04 256.788);
+  --color-slate-600: oklch(86.9% 0.022 252.894);
+  --color-slate-700: oklch(92.9% 0.013 255.508);
+  --color-slate-800: oklch(96.8% 0.007 247.896);
+  --color-slate-900: oklch(98.4% 0.003 247.858);
+  --color-slate-950: #fff;
+  --color-amber-50: oklch(27.9% 0.077 45.635);
+  --color-amber-100: oklch(41.4% 0.112 45.904);
+  --color-amber-200: oklch(47.3% 0.137 46.201);
+  --color-amber-300: oklch(55.5% 0.163 48.998);
+  --color-amber-700: oklch(87.9% 0.169 91.605);
+  --color-amber-800: oklch(92.4% 0.12 95.746);
+  --color-amber-900: oklch(96.2% 0.059 95.617);
+  --color-amber-950: oklch(98.7% 0.022 95.277);
+  --color-emerald-50: oklch(26.2% 0.051 172.552);
+  --color-emerald-100: oklch(37.8% 0.077 168.94);
+  --color-emerald-200: oklch(43.2% 0.095 166.913);
+  --color-emerald-300: oklch(50.8% 0.118 165.612);
+  --color-emerald-700: oklch(84.5% 0.143 164.978);
+  --color-emerald-800: oklch(90.5% 0.093 164.15);
+  --color-emerald-900: oklch(95% 0.052 163.051);
+  --color-emerald-950: oklch(97.9% 0.021 166.113);
+  --color-rose-50: oklch(27.1% 0.105 12.094);
+  --color-rose-100: oklch(41% 0.159 10.272);
+  --color-rose-200: oklch(45.5% 0.188 13.697);
+  --color-rose-300: oklch(51.4% 0.222 16.935);
+  --color-rose-700: oklch(81% 0.117 11.638);
+  --color-rose-800: oklch(89.2% 0.058 10.001);
+  --color-rose-900: oklch(94.1% 0.03 12.58);
+  --color-rose-950: oklch(96.9% 0.015 12.422);
+  --color-sky-50: oklch(29.3% 0.066 243.157);
+  --color-sky-100: oklch(39.1% 0.09 240.876);
+  --color-sky-200: oklch(44.3% 0.11 240.79);
+  --color-sky-300: oklch(50% 0.134 242.749);
+  --color-sky-700: oklch(82.8% 0.111 230.318);
+  --color-sky-800: oklch(90.1% 0.058 230.902);
+  --color-sky-900: oklch(95.1% 0.026 236.824);
+  --color-sky-950: oklch(97.7% 0.013 236.62);
+  --color-violet-50: oklch(28.3% 0.141 291.089);
+  --color-violet-100: oklch(38% 0.189 293.745);
+  --color-violet-200: oklch(43.2% 0.232 292.759);
+  --color-violet-300: oklch(49.1% 0.27 292.581);
+  --color-violet-700: oklch(81.1% 0.111 293.571);
+  --color-violet-800: oklch(89.4% 0.057 293.283);
+  --color-violet-900: oklch(94.3% 0.029 294.588);
+  --color-violet-950: oklch(96.9% 0.016 293.756);
+
+  --ladder-dead: #64748b;
+  --ladder-rail: #cbd5e1;
+  --ladder-empty: #334155;
+  --ladder-select-fill: #0c4a6e;
+  --ladder-select-stroke: #38bdf8;
+  --ladder-highlight-fill: #451a03;
+  --ladder-highlight-stroke: #fbbf24;
+}
+
+/* テーマに関わらず元の色で描く面(紺のヘッダーや、点いた入力のボタン) */
+.theme-fixed {
+  --color-white: #fff;
+  --color-slate-50: oklch(98.4% 0.003 247.858);
+  --color-slate-100: oklch(96.8% 0.007 247.896);
+  --color-slate-200: oklch(92.9% 0.013 255.508);
+  --color-slate-300: oklch(86.9% 0.022 252.894);
+  --color-slate-400: oklch(70.4% 0.04 256.788);
+  --color-slate-500: oklch(55.4% 0.046 257.417);
+  --color-slate-600: oklch(44.6% 0.043 257.281);
+  --color-slate-700: oklch(37.2% 0.044 257.287);
+  --color-slate-800: oklch(27.9% 0.041 260.031);
+  --color-slate-900: oklch(20.8% 0.042 265.755);
+  --color-slate-950: oklch(12.9% 0.042 264.695);
+  --color-amber-50: oklch(98.7% 0.022 95.277);
+  --color-amber-100: oklch(96.2% 0.059 95.617);
+  --color-amber-200: oklch(92.4% 0.12 95.746);
+  --color-amber-300: oklch(87.9% 0.169 91.605);
+  --color-amber-700: oklch(55.5% 0.163 48.998);
+  --color-amber-800: oklch(47.3% 0.137 46.201);
+  --color-amber-900: oklch(41.4% 0.112 45.904);
+  --color-amber-950: oklch(27.9% 0.077 45.635);
+  --color-emerald-50: oklch(97.9% 0.021 166.113);
+  --color-emerald-100: oklch(95% 0.052 163.051);
+  --color-emerald-200: oklch(90.5% 0.093 164.15);
+  --color-emerald-300: oklch(84.5% 0.143 164.978);
+  --color-emerald-700: oklch(50.8% 0.118 165.612);
+  --color-emerald-800: oklch(43.2% 0.095 166.913);
+  --color-emerald-900: oklch(37.8% 0.077 168.94);
+  --color-emerald-950: oklch(26.2% 0.051 172.552);
+  --color-rose-50: oklch(96.9% 0.015 12.422);
+  --color-rose-100: oklch(94.1% 0.03 12.58);
+  --color-rose-200: oklch(89.2% 0.058 10.001);
+  --color-rose-300: oklch(81% 0.117 11.638);
+  --color-rose-700: oklch(51.4% 0.222 16.935);
+  --color-rose-800: oklch(45.5% 0.188 13.697);
+  --color-rose-900: oklch(41% 0.159 10.272);
+  --color-rose-950: oklch(27.1% 0.105 12.094);
+  --color-sky-50: oklch(97.7% 0.013 236.62);
+  --color-sky-100: oklch(95.1% 0.026 236.824);
+  --color-sky-200: oklch(90.1% 0.058 230.902);
+  --color-sky-300: oklch(82.8% 0.111 230.318);
+  --color-sky-700: oklch(50% 0.134 242.749);
+  --color-sky-800: oklch(44.3% 0.11 240.79);
+  --color-sky-900: oklch(39.1% 0.09 240.876);
+  --color-sky-950: oklch(29.3% 0.066 243.157);
+  --color-violet-50: oklch(96.9% 0.016 293.756);
+  --color-violet-100: oklch(94.3% 0.029 294.588);
+  --color-violet-200: oklch(89.4% 0.057 293.283);
+  --color-violet-300: oklch(81.1% 0.111 293.571);
+  --color-violet-700: oklch(49.1% 0.27 292.581);
+  --color-violet-800: oklch(43.2% 0.232 292.759);
+  --color-violet-900: oklch(38% 0.189 293.745);
+  --color-violet-950: oklch(28.3% 0.141 291.089);
 }
 
 html,
@@ -130,6 +277,23 @@ h3 {
   animation: shimmer 1.4s ease-in-out infinite;
 }
 
+/*
+ * 通電の流れ(S-040)。
+ *
+ * 電流が流れている線の上に、明るい破線を重ねて左から右へ動かす。
+ * 色と太さだけでは「どちらへ流れているか」「いま動いているか」が伝わらない。
+ * 動きを減らす設定の人には出さない(その場合も線の色・太さで通電は分かる)。
+ */
+@keyframes flow-dash {
+  to {
+    stroke-dashoffset: -14;
+  }
+}
+
+.flow-dash {
+  animation: flow-dash 0.7s linear infinite;
+}
+
 /* 紹介画面の紺の背景に敷く、うっすらした点のグリッド */
 .dot-grid {
   background-image: radial-gradient(circle at 1px 1px, rgb(255 255 255 / 0.09) 1px, transparent 0);
@@ -141,5 +305,8 @@ h3 {
   .rise-in,
   .skeleton {
     animation: none;
+  }
+  .flow-dash {
+    display: none;
   }
 }

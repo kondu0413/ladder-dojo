@@ -19,6 +19,7 @@ import { JudgeResultView } from "../components/JudgeResultView.js";
 import { LadderEditor } from "../components/LadderEditor.js";
 import { LadderView } from "../components/LadderView.js";
 import { NotationTabs } from "../components/NotationTabs.js";
+import { ShareButton } from "../components/ShareButton.js";
 import { SimulatorControls } from "../components/SimulatorControls.js";
 import {
   Badge,
@@ -38,6 +39,7 @@ import {
   Skeleton,
 } from "../components/ui.js";
 import { useDiagnosis } from "../hooks/useDiagnosis.js";
+import { useHistory } from "../hooks/useHistory.js";
 import { useSimulator } from "../hooks/useSimulator.js";
 import { api, type PostedProblemDetail } from "../lib/api.js";
 import { circuitMetricsRows } from "../lib/metrics-view.js";
@@ -54,7 +56,10 @@ export function CommunityProblemPage() {
   const { user, recordSubmission } = useProgress();
   const [problem, setProblem] = useState<PostedProblemDetail | undefined>(undefined);
   const [testCases, setTestCases] = useState<TestCase[]>([]);
-  const [circuit, setCircuit] = useState<Circuit>(() => emptyCircuit(6, 4));
+  // 編集は「元に戻す / やり直す」つき(S-038)
+  const history = useHistory<Circuit>(emptyCircuit(6, 4));
+  const circuit = history.value;
+  const setCircuit = history.set;
   const [tab, setTab] = useState<"edit" | "run">("edit");
   /** 答え合わせしたときの回路と結果を 1 組で持つ(あとから編集されてもずれないように) */
   const [checked, setChecked] = useState<{ circuit: Circuit; result: JudgeResult } | undefined>(
@@ -264,7 +269,12 @@ export function CommunityProblemPage() {
       />
 
       {tab === "edit" ? (
-        <LadderEditor circuit={circuit} onChange={setCircuit} />
+        <LadderEditor
+          circuit={circuit}
+          onChange={setCircuit}
+          history={history}
+          extra={<ShareButton circuit={circuit} title={problem.title} />}
+        />
       ) : (
         <RunPanel circuit={circuit} />
       )}
@@ -466,6 +476,8 @@ function RunPanel({ circuit }: { circuit: Circuit }) {
         onSpeed={sim.setSpeed}
         onRunning={sim.setRunning}
         onReset={sim.reset}
+        onStep={sim.step}
+        scans={sim.scans}
       />
       {sim.devices.length === 0 ? (
         <EmptyState

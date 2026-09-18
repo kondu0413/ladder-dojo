@@ -15,13 +15,26 @@ import {
   removeRow,
   setVline,
 } from "@ladder-dojo/core";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { HistoryControls } from "../hooks/useHistory.js";
 import { useNotation } from "../lib/notation-context.jsx";
 import { LadderView } from "./LadderView.js";
 import { Button, Card, Icon, Label, Notice, Segmented } from "./ui.js";
 
 /** パレットの部品。device が必要なものは選択中のデバイスを使う */
-type PartId = "wire" | "no" | "nc" | "rise" | "out" | "pulse" | "timer" | "counter" | "reset";
+type PartId =
+  | "wire"
+  | "no"
+  | "nc"
+  | "rise"
+  | "fall"
+  | "out"
+  | "set"
+  | "pulse"
+  | "timer"
+  | "offdelay"
+  | "counter"
+  | "reset";
 
 type Part = {
   id: PartId;
@@ -52,10 +65,22 @@ const PARTS: Part[] = [
     build: (device) => ({ type: "contact", kind: "rise", device }),
   },
   {
+    id: "fall",
+    label: "立下り",
+    types: ["X", "Y", "M", "T", "C"],
+    build: (device) => ({ type: "contact", kind: "fall", device }),
+  },
+  {
     id: "out",
     label: "出力",
     types: ["Y", "M"],
     build: (device) => ({ type: "coil", kind: "out", device }),
+  },
+  {
+    id: "set",
+    label: "SET",
+    types: ["Y", "M"],
+    build: (device) => ({ type: "coil", kind: "set", device }),
   },
   {
     id: "pulse",
@@ -70,6 +95,12 @@ const PARTS: Part[] = [
     build: (device, presetMs) => ({ type: "coil", kind: "timer", device, presetMs }),
   },
   {
+    id: "offdelay",
+    label: "オフディレイ",
+    types: ["T"],
+    build: (device, presetMs) => ({ type: "coil", kind: "offdelay", device, presetMs }),
+  },
+  {
     id: "counter",
     label: "カウンタ",
     types: ["C"],
@@ -78,7 +109,8 @@ const PARTS: Part[] = [
   {
     id: "reset",
     label: "RST",
-    types: ["C"],
+    // カウンタのほか、SET で保持した Y / M も戻せる(S-044)
+    types: ["C", "Y", "M"],
     build: (device) => ({ type: "coil", kind: "reset", device }),
   },
 ];
@@ -88,14 +120,42 @@ const DEVICE_TYPES: DeviceType[] = ["X", "Y", "M", "T", "C"];
 export type LadderEditorProps = {
   circuit: Circuit;
   onChange: (circuit: Circuit) => void;
+  /** 「元に戻す / やり直す」(S-038)。渡すとボタンと Ctrl+Z / Ctrl+Shift+Z が効く */
+  history?: HistoryControls | undefined;
+  /** 図の右上に置く追加の操作(共有など) */
+  extra?: React.ReactNode;
 };
 
 /**
  * ラダー図の編集(SPEC.md §3.1: 部品パレットからグリッドに置く。スマホのタップ中心、ドラッグ非依存)。
  * セルを選んでから部品をタップすると、選択中のデバイスで配置する。
  */
-export function LadderEditor({ circuit, onChange }: LadderEditorProps) {
+export function LadderEditor({ circuit, onChange, history, extra }: LadderEditorProps) {
   const [selected, setSelected] = useState<{ row: number; col: number } | undefined>(undefined);
+
+  // キーボードでも戻せる(PC で編集する人向け)。入力欄の中では効かせない
+  useEffect(() => {
+    if (!history) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      const key = e.key.toLowerCase();
+      if (key === "z" && e.shiftKey) {
+        e.preventDefault();
+        history.redo();
+      } else if (key === "z") {
+        e.preventDefault();
+        history.undo();
+      } else if (key === "y") {
+        e.preventDefault();
+        history.redo();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [history]);
   const [deviceType, setDeviceType] = useState<DeviceType>("X");
   const [deviceNumber, setDeviceNumber] = useState(0);
   const [presetSec, setPresetSec] = useState(3);
@@ -145,19 +205,48 @@ export function LadderEditor({ circuit, onChange }: LadderEditorProps) {
         />
       </Card>
 
-      <p
-        className={`flex items-center gap-1.5 text-xs ${selected ? "font-semibold text-sky-700" : "text-slate-500"}`}
-        data-testid="editor-hint"
-      >
-        {selected ? (
-          <>
-            <Icon name="target" className="h-3.5 w-3.5" />
-            {`選択中: ${selected.row + 1} 行 ${selected.col + 1} 列`}
-          </>
-        ) : (
-          "編集したいマスをタップしてください"
+      <div className="flex flex-wrap items-center gap-2">
+        <p
+          className={`flex min-w-0 flex-1 items-center gap-1.5 text-xs ${selected ? "font-semibold text-sky-700" : "text-slate-500"}`}
+          data-testid="editor-hint"
+        >
+          {selected ? (
+            <>
+              <Icon name="target" className="h-3.5 w-3.5" />
+              {`選択中: ${selected.row + 1} 行 ${selected.col + 1} 列`}
+            </>
+          ) : (
+            "編集したいマスをタップしてください"
+          )}
+        </p>
+        {history && (
+          <div className="flex gap-1">
+            <Button
+              tone="secondary"
+              size="sm"
+              icon="undo"
+              data-testid="editor-undo"
+              disabled={!history.canUndo}
+              title="元に戻す(Ctrl+Z)"
+              onClick={history.undo}
+            >
+              元に戻す
+            </Button>
+            <Button
+              tone="secondary"
+              size="sm"
+              icon="redo"
+              data-testid="editor-redo"
+              disabled={!history.canRedo}
+              title="やり直す(Ctrl+Shift+Z)"
+              onClick={history.redo}
+            >
+              やり直す
+            </Button>
+          </div>
         )}
-      </p>
+        {extra}
+      </div>
       {error && (
         <Notice tone="danger" role="alert">
           {error}
@@ -188,7 +277,7 @@ export function LadderEditor({ circuit, onChange }: LadderEditorProps) {
               testId="device-number"
             />
             <span
-              className="inline-flex min-h-9 items-center rounded-lg bg-slate-900 px-3 font-mono text-sm font-semibold text-amber-300"
+              className="theme-fixed inline-flex min-h-9 items-center rounded-lg bg-slate-900 px-3 font-mono text-sm font-semibold text-amber-300"
               data-testid="current-device"
             >
               {notation.device(device)}
@@ -207,7 +296,11 @@ export function LadderEditor({ circuit, onChange }: LadderEditorProps) {
                 onClick={() => place(part)}
                 className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white pl-2 pr-3 text-sm font-medium text-slate-800 transition-colors hover:border-slate-400 hover:bg-slate-50 active:bg-slate-100"
               >
-                <PartGlyph id={part.id} risingMark={notation.risingMark} />
+                <PartGlyph
+                  id={part.id}
+                  risingMark={notation.risingMark}
+                  fallingMark={notation.fallingMark}
+                />
                 {part.label}
               </button>
             ))}
@@ -318,8 +411,25 @@ export function LadderEditor({ circuit, onChange }: LadderEditorProps) {
 }
 
 /** パレットのボタンに描く小さな記号。ラダー図と同じ形にして、置く前に何が置かれるか分かるように */
-function PartGlyph({ id, risingMark }: { id: PartId; risingMark: string }) {
-  const stroke = "#334155";
+const GLYPH_MARKS: Partial<Record<PartId, string>> = {
+  pulse: "P",
+  set: "S",
+  timer: "T",
+  offdelay: "TOF",
+  counter: "C",
+  reset: "R",
+};
+
+function PartGlyph({
+  id,
+  risingMark,
+  fallingMark,
+}: {
+  id: PartId;
+  risingMark: string;
+  fallingMark: string;
+}) {
+  const stroke = "currentColor";
   const w = 2;
   let body: React.ReactNode;
   switch (id) {
@@ -329,6 +439,7 @@ function PartGlyph({ id, risingMark }: { id: PartId; risingMark: string }) {
     case "no":
     case "nc":
     case "rise":
+    case "fall":
       body = (
         <>
           <line x1={2} y1={10} x2={11} y2={10} stroke={stroke} strokeWidth={w} />
@@ -362,25 +473,16 @@ function PartGlyph({ id, risingMark }: { id: PartId; risingMark: string }) {
               strokeLinecap="round"
             />
           )}
-          {id === "rise" && (
+          {(id === "rise" || id === "fall") && (
             <text x={16} y={13.5} textAnchor="middle" fontSize={9} fontWeight={700} fill={stroke}>
-              {risingMark}
+              {id === "rise" ? risingMark : fallingMark}
             </text>
           )}
         </>
       );
       break;
     default: {
-      const mark =
-        id === "pulse"
-          ? "P"
-          : id === "timer"
-            ? "T"
-            : id === "counter"
-              ? "C"
-              : id === "reset"
-                ? "R"
-                : "";
+      const mark = GLYPH_MARKS[id] ?? "";
       body = (
         <>
           <line x1={2} y1={10} x2={9} y2={10} stroke={stroke} strokeWidth={w} />
@@ -388,7 +490,14 @@ function PartGlyph({ id, risingMark }: { id: PartId; risingMark: string }) {
           <path d="M 10 3 A 8 8 0 0 0 10 17" fill="none" stroke={stroke} strokeWidth={w} />
           <path d="M 22 3 A 8 8 0 0 1 22 17" fill="none" stroke={stroke} strokeWidth={w} />
           {mark && (
-            <text x={16} y={13.5} textAnchor="middle" fontSize={9} fontWeight={700} fill={stroke}>
+            <text
+              x={16}
+              y={mark.length > 1 ? 12.5 : 13.5}
+              textAnchor="middle"
+              fontSize={mark.length > 1 ? 6.5 : 9}
+              fontWeight={700}
+              fill={stroke}
+            >
               {mark}
             </text>
           )}

@@ -41,7 +41,7 @@ export function DevicePanel({ devices, snapshot, circuit, deviceLabels, input }:
               const on = snapshot.bits[d] ?? false;
               const cls = `flex min-h-12 min-w-[5.5rem] flex-col items-start justify-center rounded-xl border-2 px-3 py-1.5 text-left transition-[background-color,border-color,box-shadow,transform] duration-100 ${
                 on
-                  ? "border-amber-400 bg-amber-300 text-slate-950 shadow-glow"
+                  ? "theme-fixed border-amber-400 bg-amber-300 text-slate-950 shadow-glow"
                   : "border-slate-300 bg-white text-slate-700"
               }`;
               const body = (

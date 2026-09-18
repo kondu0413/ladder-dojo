@@ -10,6 +10,12 @@ export type Env = {
   BETTER_AUTH_SECRET?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  /**
+   * Web Push の VAPID 鍵(S-045)。CI が初回に生成して登録する。
+   * 公開鍵は 65 バイトの生の点、秘密鍵は 32 バイトのスカラー。どちらも base64url
+   */
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
 };
 
 /** ハンドラから見えるログイン中のユーザー */

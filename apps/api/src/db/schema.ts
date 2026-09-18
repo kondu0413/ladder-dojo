@@ -390,7 +390,32 @@ export const assignments = sqliteTable(
   (t) => [
     index("assignments_org_idx").on(t.orgId, t.createdAt),
     index("assignments_user_idx").on(t.userId, t.createdAt),
+    // 期限が近い課題を日次で拾う(S-045)。org_id 先頭の索引では期限で絞れない
+    index("assignments_due_idx").on(t.dueAt),
   ],
+);
+
+/**
+ * Web Push の購読(S-045)。課題の期限と新しい課題を毎朝知らせる。
+ * 1 人が複数の端末で受け取れるよう、endpoint ごとに 1 行。外部サービスは使わない(0 円)。
+ * 鍵(p256dh / auth)はブラウザが作るもので、本文の暗号化にだけ使う。
+ */
+export const pushSubscriptions = sqliteTable(
+  "push_subscriptions",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** プッシュサービスの URL。端末 × ブラウザごとに一意 */
+    endpoint: text("endpoint").notNull().unique(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    /** 最後に送れた日時。送れなくなった購読の掃除に使う */
+    lastUsedAt: integer("last_used_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [index("push_subscriptions_user_idx").on(t.userId, t.createdAt)],
 );
 
 /**
@@ -442,6 +467,7 @@ export const schema = {
   orgInvites,
   assignments,
   rankingSnapshots,
+  pushSubscriptions,
 };
 
 /** `sql` を import 済みであることを型レベルで保つためのダミー(drizzle-kit の解析用) */

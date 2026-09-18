@@ -14,6 +14,9 @@ import type {
   ProgressListDto,
   ProgressMergeDto,
   ProgressOneDto,
+  PushPublicKeyDto,
+  PushSubscriptionListDto,
+  PushTestDto,
   RankingDto,
   RankingMetric,
   RankingPeriod,
@@ -82,6 +85,26 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   me: () => request<MeDto>("/me"),
+
+  // --- Web Push(S-045)---
+
+  pushPublicKey: () => request<PushPublicKeyDto>("/push/public-key"),
+
+  listPushSubscriptions: () => request<PushSubscriptionListDto>("/push/subscriptions"),
+
+  subscribePush: (subscription: { endpoint: string; keys: { p256dh: string; auth: string } }) =>
+    request<{ subscribed: true }>("/push/subscriptions", {
+      method: "POST",
+      body: JSON.stringify(subscription),
+    }),
+
+  unsubscribePush: (endpoint: string) =>
+    request<{ deleted: true }>("/push/subscriptions", {
+      method: "DELETE",
+      body: JSON.stringify({ endpoint }),
+    }),
+
+  sendTestPush: () => request<PushTestDto>("/push/test", { method: "POST" }),
 
   listProgress: () => request<ProgressListDto>("/progress"),
 

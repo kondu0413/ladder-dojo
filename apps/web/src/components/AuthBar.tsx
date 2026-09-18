@@ -127,7 +127,7 @@ function Avatar({ name, image }: { name: string; image: string | null }) {
   return (
     <span
       aria-hidden="true"
-      className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-400 text-[11px] font-bold text-slate-950"
+      className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-400 text-[11px] font-bold text-ink"
     >
       {[...name.trim()][0]?.toUpperCase() ?? "?"}
     </span>

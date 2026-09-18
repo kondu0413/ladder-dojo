@@ -23,6 +23,9 @@ const CommunityListPage = lazy(() =>
 const CommunityProblemPage = lazy(() =>
   import("./pages/CommunityProblemPage.js").then((m) => ({ default: m.CommunityProblemPage })),
 );
+const GlossaryPage = lazy(() =>
+  import("./pages/GlossaryPage.js").then((m) => ({ default: m.GlossaryPage })),
+);
 const OrgDetailPage = lazy(() =>
   import("./pages/OrgDetailPage.js").then((m) => ({ default: m.OrgDetailPage })),
 );
@@ -52,6 +55,7 @@ function prefetchRoutes(): void {
   void import("./pages/OrgDetailPage.js");
   void import("./pages/RankingPage.js");
   void import("./pages/SimulatorDemoPage.js");
+  void import("./pages/GlossaryPage.js");
 }
 
 export function App() {
@@ -81,6 +85,7 @@ export function App() {
             <Route path="/rankings" element={<RankingPage />} />
             <Route path="/sandbox" element={<SandboxPage />} />
             <Route path="/samples" element={<SimulatorDemoPage />} />
+            <Route path="/glossary" element={<GlossaryPage />} />
             <Route path="*" element={<Home />} />
           </Routes>
         </Suspense>
@@ -111,7 +116,7 @@ function PageLoading() {
       <p className="sr-only" role="status">
         読み込み中
       </p>
-      <div className="h-14 bg-slate-950" aria-hidden="true" />
+      <div className="theme-fixed h-14 bg-slate-950" aria-hidden="true" />
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6">
         <Skeleton className="h-8 w-48" />
         <Skeleton className="mt-3 h-4 w-72 max-w-full" />

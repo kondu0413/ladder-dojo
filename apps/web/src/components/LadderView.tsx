@@ -29,11 +29,15 @@ export type LadderViewProps = {
   highlight?: ReadonlyArray<{ row: number; col: number }> | undefined;
 };
 
-/** 電流が流れている色 / 通電しているだけの色 / 無電圧の色 / 母線 */
-const FLOW = "#f59e0b";
-const LIVE = "#fbbf24";
-const DEAD = "#94a3b8";
-const RAIL = "#1e293b";
+/**
+ * 電流が流れている色 / 通電しているだけの色 / 無電圧の色 / 母線。
+ * 値は index.css にあり、ダークモードで変わる(S-043)。SVG の属性は Tailwind の
+ * クラスを受け取れないので、style で変数を渡す
+ */
+const FLOW = "var(--ladder-flow)";
+const LIVE = "var(--ladder-live)";
+const DEAD = "var(--ladder-dead)";
+const RAIL = "var(--ladder-rail)";
 
 /**
  * ラダー図の SVG 描画(DECISIONS.md D-004)。
@@ -90,7 +94,7 @@ export function LadderView({
         y1={6}
         x2={leftX}
         y2={height - 6}
-        stroke={RAIL}
+        style={{ stroke: RAIL }}
         strokeWidth={5}
         strokeLinecap="round"
       />
@@ -99,7 +103,7 @@ export function LadderView({
         y1={6}
         x2={rightX}
         y2={height - 6}
-        stroke={RAIL}
+        style={{ stroke: RAIL }}
         strokeWidth={5}
         strokeLinecap="round"
       />
@@ -152,9 +156,49 @@ type CellViewProps = {
  * - 無電圧: 細い実線
  */
 function leadProps(on: boolean, flowing: boolean) {
-  if (flowing) return { stroke: FLOW, strokeWidth: 3.5, strokeLinecap: "round" as const };
-  if (on) return { stroke: LIVE, strokeWidth: 2, strokeDasharray: "5 3" };
-  return { stroke: DEAD, strokeWidth: 2 };
+  if (flowing)
+    return { style: { stroke: FLOW }, strokeWidth: 3.5, strokeLinecap: "round" as const };
+  if (on) return { style: { stroke: LIVE }, strokeWidth: 2, strokeDasharray: "5 3" };
+  return { style: { stroke: DEAD }, strokeWidth: 2 };
+}
+
+/**
+ * リード線。電流が流れているときは、上に明るい破線を重ねて左から右へ動かす(S-040)。
+ * 元の実線を先に描く(読み上げ・テストは最初の線を見る)。縦線は流れる向きが
+ * 枝ごとに違うので動かさない。
+ */
+function Lead({
+  x1,
+  x2,
+  y,
+  on,
+  flowing,
+}: {
+  x1: number;
+  x2: number;
+  y: number;
+  on: boolean;
+  flowing: boolean;
+}) {
+  return (
+    <>
+      <line x1={x1} y1={y} x2={x2} y2={y} {...leadProps(on, flowing)} />
+      {flowing && (
+        <line
+          x1={x1}
+          y1={y}
+          x2={x2}
+          y2={y}
+          className="flow-dash"
+          style={{ stroke: "var(--ladder-flow-dash)" }}
+          strokeOpacity={0.9}
+          strokeWidth={1.5}
+          strokeDasharray="4 10"
+          strokeLinecap="round"
+        />
+      )}
+    </>
+  );
 }
 
 function CellView({
@@ -204,7 +248,7 @@ function CellView({
           height={CELL_H - 8}
           rx={8}
           fill="none"
-          stroke="#e2e8f0"
+          style={{ stroke: "var(--ladder-empty)" }}
           strokeWidth={1}
           strokeDasharray="3 4"
         />
@@ -216,8 +260,7 @@ function CellView({
           width={CELL_W - 2}
           height={CELL_H - 2}
           rx={8}
-          fill="#fef3c7"
-          stroke="#d97706"
+          style={{ fill: "var(--ladder-highlight-fill)", stroke: "var(--ladder-highlight-stroke)" }}
           strokeWidth={2}
           strokeDasharray="4 3"
         />
@@ -229,15 +272,12 @@ function CellView({
           width={CELL_W - 4}
           height={CELL_H - 4}
           rx={8}
-          fill="#e0f2fe"
-          stroke="#0284c7"
+          style={{ fill: "var(--ladder-select-fill)", stroke: "var(--ladder-select-stroke)" }}
           strokeWidth={2}
         />
       )}
 
-      {el?.type === "wire" && (
-        <line x1={x} y1={y0} x2={x + CELL_W} y2={y0} {...leadProps(leftOn, flowing)} />
-      )}
+      {el?.type === "wire" && <Lead x1={x} x2={x + CELL_W} y={y0} on={leftOn} flowing={flowing} />}
       {el?.type === "contact" && (
         <Contact
           x={x}
@@ -247,6 +287,7 @@ function CellView({
           leftOn={leftOn}
           rightOn={rightOn}
           risingMark={notation.risingMark}
+          fallingMark={notation.fallingMark}
         />
       )}
       {el?.type === "coil" && <Coil x={x} y={y0} el={el} flowing={flowing} leftOn={leftOn} />}
@@ -257,7 +298,7 @@ function CellView({
           y1={y0}
           x2={nodeX(col + 1)}
           y2={wireY(row + 1)}
-          stroke={rightOn ? FLOW : DEAD}
+          style={{ stroke: rightOn ? FLOW : DEAD }}
           strokeWidth={rightOn ? 3.5 : 2}
           strokeLinecap="round"
         />
@@ -318,12 +359,14 @@ function CellView({
 function cellLabel(el: ContactElement | CoilElement, notation: NotationContextValue): string {
   const name = notation.device(el.device);
   if (el.type !== "coil") return name;
-  if (el.kind === "timer") return `${name} ${notation.timerPreset(el.presetMs)}`;
+  if (el.kind === "timer" || el.kind === "offdelay") {
+    return `${name} ${notation.timerPreset(el.presetMs)}`;
+  }
   if (el.kind === "counter") return `${name} ${notation.counterPreset(el.preset)}`;
   return name;
 }
 
-/** 接点: 縦棒 2 本。b 接点は斜線、立ち上がりは中に記号(↑ / P、S-028) */
+/** 接点: 縦棒 2 本。b 接点は斜線、立ち上がり / 立ち下がりは中に記号(↑↓ / P N、S-028) */
 function Contact({
   x,
   y,
@@ -332,6 +375,7 @@ function Contact({
   leftOn,
   rightOn,
   risingMark,
+  fallingMark,
 }: {
   x: number;
   y: number;
@@ -340,6 +384,7 @@ function Contact({
   leftOn: boolean;
   rightOn: boolean;
   risingMark: string;
+  fallingMark: string;
 }) {
   const gap = 12;
   const half = CELL_W / 2;
@@ -350,14 +395,14 @@ function Contact({
 
   return (
     <g>
-      <line x1={x} y1={y} x2={x + half - gap} y2={y} {...leadProps(leftOn, flowing)} />
-      <line x1={x + half + gap} y1={y} x2={x + CELL_W} y2={y} {...leadProps(rightOn, flowing)} />
+      <Lead x1={x} x2={x + half - gap} y={y} on={leftOn} flowing={flowing} />
+      <Lead x1={x + half + gap} x2={x + CELL_W} y={y} on={rightOn} flowing={flowing} />
       <line
         x1={x + half - gap}
         y1={barTop}
         x2={x + half - gap}
         y2={barBottom}
-        stroke={body}
+        style={{ stroke: body }}
         strokeWidth={w}
         strokeLinecap="round"
       />
@@ -366,7 +411,7 @@ function Contact({
         y1={barTop}
         x2={x + half + gap}
         y2={barBottom}
-        stroke={body}
+        style={{ stroke: body }}
         strokeWidth={w}
         strokeLinecap="round"
       />
@@ -376,26 +421,37 @@ function Contact({
           y1={barBottom - 2}
           x2={x + half + gap + 3}
           y2={barTop + 2}
-          stroke={body}
+          style={{ stroke: body }}
           strokeWidth={w}
           strokeLinecap="round"
         />
       )}
-      {el.kind === "rise" && (
+      {(el.kind === "rise" || el.kind === "fall") && (
         <text
           x={x + half}
           y={y + 5}
           textAnchor="middle"
           className="fill-slate-700 text-[12px] font-bold"
         >
-          {risingMark}
+          {el.kind === "rise" ? risingMark : fallingMark}
         </text>
       )}
     </g>
   );
 }
 
-/** コイル: 開いた括弧。種別を中に 1 文字で示す(P / T / C / R) */
+/** コイルの中に描く記号。out は何も書かない */
+const COIL_MARKS: Record<CoilElement["kind"], string> = {
+  out: "",
+  pulse: "P",
+  set: "S",
+  timer: "T",
+  offdelay: "TOF",
+  counter: "C",
+  reset: "R",
+};
+
+/** コイル: 開いた括弧。種別を中に記号で示す(P / S / T / TOF / C / R) */
 function Coil({
   x,
   y,
@@ -413,48 +469,31 @@ function Coil({
   const gap = 13;
   const color = flowing ? FLOW : DEAD;
   const w = flowing ? 3.5 : 2;
-  const mark =
-    el.kind === "pulse"
-      ? "P"
-      : el.kind === "timer"
-        ? "T"
-        : el.kind === "counter"
-          ? "C"
-          : el.kind === "reset"
-            ? "R"
-            : "";
+  const mark = COIL_MARKS[el.kind];
   return (
     <g>
-      <line x1={x} y1={y} x2={x + half - gap} y2={y} {...leadProps(leftOn, flowing)} />
-      <line
-        x1={x + half + gap}
-        y1={y}
-        x2={x + CELL_W}
-        y2={y}
-        stroke={color}
-        strokeWidth={w}
-        strokeLinecap="round"
-      />
+      <Lead x1={x} x2={x + half - gap} y={y} on={leftOn} flowing={flowing} />
+      <Lead x1={x + half + gap} x2={x + CELL_W} y={y} on={flowing} flowing={flowing} />
       <path
         d={`M ${x + half - gap} ${y - 13} A 15 15 0 0 0 ${x + half - gap} ${y + 13}`}
         fill="none"
-        stroke={color}
+        style={{ stroke: color }}
         strokeWidth={w}
         strokeLinecap="round"
       />
       <path
         d={`M ${x + half + gap} ${y - 13} A 15 15 0 0 1 ${x + half + gap} ${y + 13}`}
         fill="none"
-        stroke={color}
+        style={{ stroke: color }}
         strokeWidth={w}
         strokeLinecap="round"
       />
       {mark && (
         <text
           x={x + half}
-          y={y + 5}
+          y={mark.length > 1 ? y + 3.5 : y + 5}
           textAnchor="middle"
-          className="fill-slate-700 text-[12px] font-bold"
+          className={`fill-slate-700 font-bold ${mark.length > 1 ? "text-[8px]" : "text-[12px]"}`}
         >
           {mark}
         </text>

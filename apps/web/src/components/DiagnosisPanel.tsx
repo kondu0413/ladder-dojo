@@ -60,7 +60,7 @@ export function DiagnosisPanel({
       className="rise-in flex flex-col gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5"
     >
       <p className="flex items-center gap-2 text-sm font-bold text-amber-950">
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-400 text-slate-950">
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-400 text-ink">
           <Icon name="search" className="h-4 w-4" />
         </span>
         ここを見てみましょう

@@ -119,6 +119,11 @@ export function risingMark(notation: Notation): string {
   return notation === "iec" ? "P" : "↑";
 }
 
+/** 立ち下がり接点の中に描く文字(S-044)。IEC は N(negative transition) */
+export function fallingMark(notation: Notation): string {
+  return notation === "iec" ? "N" : "↓";
+}
+
 /** 文章の中のデバイス名(`X0` など)を、その表記に置き換える */
 export function formatDeviceNames(text: string, notation: Notation): string {
   if (notation !== "omron") return text;

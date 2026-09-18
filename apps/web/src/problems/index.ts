@@ -53,3 +53,28 @@ export const MODE_LABELS: Record<ProblemMode, string> = {
   fix: "直す",
   write: "書く",
 };
+
+/**
+ * 次に解く問題(S-038)。
+ *
+ * いまの問題より後ろで、まだクリアしていない最初の問題。後ろに無ければ先頭から探す
+ * (前のほうに飛ばした問題が残っていることがある)。全部クリア済みなら undefined
+ */
+export function nextProblem(
+  currentId: string,
+  isCleared: (id: string) => boolean,
+  problems: Problem[] = sortedProblems(),
+): Problem | undefined {
+  const index = problems.findIndex((p) => p.id === currentId);
+  const after = problems.slice(index + 1).find((p) => p.id !== currentId && !isCleared(p.id));
+  if (after) return after;
+  return problems.slice(0, Math.max(index, 0)).find((p) => !isCleared(p.id));
+}
+
+/** 一覧で勧める「次の 1 問」。出題順でいちばん手前の未クリア */
+export function recommendedProblem(
+  isCleared: (id: string) => boolean,
+  problems: Problem[] = sortedProblems(),
+): Problem | undefined {
+  return problems.find((p) => !isCleared(p.id));
+}

@@ -128,6 +128,10 @@ export class Simulator {
       if (el.type === "coil" && el.kind === "timer") {
         this.timers.set(el.device, { elapsedMs: 0, done: false });
       }
+      // オフディレイは「通電が切れてからの時間」を数える。電源投入直後は数え終わった状態(OFF)
+      if (el.type === "coil" && el.kind === "offdelay") {
+        this.timers.set(el.device, { elapsedMs: el.presetMs, done: false });
+      }
       if (el.type === "coil" && el.kind === "counter") {
         this.counters.set(el.device, { count: 0, done: false });
       }
@@ -342,6 +346,13 @@ export class Simulator {
         if (nextRow) nextRow[col] = value;
         return value && !prev;
       }
+      case "fall": {
+        // ON → OFF になったスキャンだけ導通する(S-044)。離した瞬間を拾う
+        const prev = this.prevCell[row]?.[col] ?? false;
+        const nextRow = next[row];
+        if (nextRow) nextRow[col] = value;
+        return prev && !value;
+      }
     }
   }
 
@@ -365,6 +376,10 @@ export class Simulator {
     switch (el.kind) {
       case "out":
         this.bits.set(el.device, energized);
+        break;
+      case "set":
+        // 通電した瞬間に ON。切れても戻さない(戻すのは RST、S-044)
+        if (energized) this.bits.set(el.device, true);
         break;
       case "pulse": {
         if (nextRow) nextRow[col] = energized;
@@ -393,8 +408,26 @@ export class Simulator {
         }
         break;
       }
+      case "offdelay": {
+        // 通電中は ON。切れてから presetMs のあいだ ON を保ち、そのあと OFF(S-044)
+        const st = this.timers.get(el.device) ?? { elapsedMs: el.presetMs, done: false };
+        if (energized) {
+          this.timers.set(el.device, { elapsedMs: 0, done: true });
+        } else {
+          const elapsed = this.timerMode === "instant" ? el.presetMs : st.elapsedMs + dtMs;
+          const capped = Math.min(elapsed, el.presetMs);
+          this.timers.set(el.device, { elapsedMs: capped, done: capped < el.presetMs });
+        }
+        break;
+      }
       case "reset":
-        if (energized) this.counters.set(el.device, { count: 0, done: false });
+        if (!energized) break;
+        if (deviceType(el.device) === "C") {
+          this.counters.set(el.device, { count: 0, done: false });
+        } else {
+          // SET で保持したビットを戻す(S-044)
+          this.bits.set(el.device, false);
+        }
         break;
     }
   }
@@ -443,7 +476,7 @@ export function devicePresets(circuit: Circuit): {
   for (const cell of circuit.cells) {
     const el = cell.element;
     if (el?.type !== "coil") continue;
-    if (el.kind === "timer") timers[el.device] = el.presetMs;
+    if (el.kind === "timer" || el.kind === "offdelay") timers[el.device] = el.presetMs;
     if (el.kind === "counter") counters[el.device] = el.preset;
   }
   return { timers, counters };

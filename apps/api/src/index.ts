@@ -2,6 +2,7 @@ import { app } from "./app.js";
 import { pruneOldSubmissions } from "./cleanup.js";
 import type { Env } from "./env.js";
 import { runDailyJobs } from "./jobs.js";
+import { REMINDER_CRON, sendDueReminders } from "./push/reminders.js";
 import { computeGlobalRankings } from "./ranking.js";
 
 export default {
@@ -13,7 +14,15 @@ export default {
    *    やると D1 の読み取り行数を使いすぎるため
    * 2. 古い提出履歴を掃除する(改善候補 13 / S-017)
    */
-  scheduled: (_event, env, ctx) => {
+  scheduled: (event, env, ctx) => {
+    // 朝の Cron は課題の通知だけ(S-045)。集計と同じ実行に混ぜると、
+    // サブリクエストの上限(COST.md §1.1)を通知と集計で取り合うことになる
+    if (event.cron === REMINDER_CRON) {
+      ctx.waitUntil(
+        runDailyJobs([{ name: "assignment-reminders", run: () => sendDueReminders(env) }]),
+      );
+      return;
+    }
     // 成功時はログを出さない(COST.md: Workers Logs はエラー時のみ)。
     // 実行結果は Cloudflare のダッシュボードの Cron Triggers で確認できる。
     //

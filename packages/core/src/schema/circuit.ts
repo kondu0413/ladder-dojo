@@ -3,6 +3,7 @@ import {
   bitCoilDeviceSchema,
   counterDeviceSchema,
   deviceIdSchema,
+  resettableDeviceSchema,
   timerDeviceSchema,
 } from "./device.js";
 
@@ -27,11 +28,12 @@ export const wireElementSchema = z.object({ type: z.literal("wire") });
  * - no: a 接点(常開)。デバイスが ON のとき導通
  * - nc: b 接点(常閉)。デバイスが OFF のとき導通
  * - rise: 立ち上がり接点。デバイスが OFF → ON になったスキャンだけ導通
+ * - fall: 立ち下がり接点。デバイスが ON → OFF になったスキャンだけ導通(S-044)
  * T / C を参照した場合は「設定値到達(done)」を読む
  */
 export const contactElementSchema = z.object({
   type: z.literal("contact"),
-  kind: z.enum(["no", "nc", "rise"]),
+  kind: z.enum(["no", "nc", "rise", "fall"]),
   device: deviceIdSchema,
 });
 
@@ -57,6 +59,27 @@ export const timerCoilSchema = z.object({
   presetMs: z.number().int().min(1).max(MAX_TIMER_PRESET_MS),
 });
 
+/**
+ * セット(SET)。通電した瞬間に対象を ON にし、通電が切れても ON のまま保つ(S-044)。
+ * 戻すには RST を使う。自己保持を接点で組まずに済む書き方
+ */
+export const setCoilSchema = z.object({
+  type: z.literal("coil"),
+  kind: z.literal("set"),
+  device: bitCoilDeviceSchema,
+});
+
+/**
+ * オフディレイタイマ(TOF)。通電中は T が ON。通電が切れてから presetMs たつと OFF(S-044)。
+ * 「ボタンを離してから 3 秒後に消える」に使う
+ */
+export const offDelayCoilSchema = z.object({
+  type: z.literal("coil"),
+  kind: z.literal("offdelay"),
+  device: timerDeviceSchema,
+  presetMs: z.number().int().min(1).max(MAX_TIMER_PRESET_MS),
+});
+
 /** アップカウンタ。通電の立ち上がりを数え、preset 回に達すると C が ON。RST でリセット */
 export const counterCoilSchema = z.object({
   type: z.literal("coil"),
@@ -65,17 +88,23 @@ export const counterCoilSchema = z.object({
   preset: z.number().int().min(1).max(MAX_COUNTER_PRESET),
 });
 
-/** カウンタのリセット(RST)。通電中、対象カウンタの現在値と done を 0 にする */
+/**
+ * リセット(RST)。通電中、対象を初期状態に戻す。
+ * - カウンタ: 現在値と done を 0 にする
+ * - ビット(Y / M): OFF にする。SET で保持したものを戻すのに使う(S-044)
+ */
 export const resetCoilSchema = z.object({
   type: z.literal("coil"),
   kind: z.literal("reset"),
-  device: counterDeviceSchema,
+  device: resettableDeviceSchema,
 });
 
 export const coilElementSchema = z.discriminatedUnion("kind", [
   outCoilSchema,
   pulseCoilSchema,
+  setCoilSchema,
   timerCoilSchema,
+  offDelayCoilSchema,
   counterCoilSchema,
   resetCoilSchema,
 ]);

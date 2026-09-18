@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { Brand } from "../components/AppShell.js";
 import { LadderView } from "../components/LadderView.js";
+import { ThemeToggle } from "../components/ThemeToggle.js";
 import { buttonClass, Icon, type IconName } from "../components/ui.js";
 import { useSimulator } from "../hooks/useSimulator.js";
 import { signInWithGoogle } from "../lib/auth-client.js";
@@ -33,7 +34,7 @@ export function LandingPage() {
   return (
     <div className="flex min-h-dvh flex-col bg-slate-50 text-slate-900">
       {/* 紺の帯と主役の一言。ヘッダーは AppShell と同じ見た目にして、入ったあとと地続きにする */}
-      <div className="dot-grid relative overflow-hidden bg-slate-950 text-white">
+      <div className="theme-fixed dot-grid relative overflow-hidden bg-slate-950 text-white">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute -right-24 -top-24 h-96 w-96 rounded-full bg-amber-400/20 blur-3xl"
@@ -51,6 +52,7 @@ export function LandingPage() {
             問題を見る
             <Icon name="arrowRight" className="h-4 w-4" />
           </Link>
+          <ThemeToggle />
         </header>
 
         <section className="relative mx-auto grid w-full max-w-6xl gap-10 px-4 pb-16 pt-10 sm:px-6 lg:grid-cols-[1.1fr_1fr] lg:items-center lg:gap-16 lg:pb-24 lg:pt-16">
@@ -59,7 +61,7 @@ export function LandingPage() {
               <Icon name="cpu" className="h-3.5 w-3.5" />
               PLC ラダー図の練習アプリ
             </span>
-            <h1 className="text-4xl font-bold leading-[1.15] tracking-tight sm:text-5xl xl:text-[3.4rem]">
+            <h1 className="text-4xl font-bold leading-[1.15] tracking-tight sm:text-5xl xl:text-[3.1rem]">
               ラダー図が
               <br />
               <span className="bg-gradient-to-r from-amber-300 via-amber-400 to-orange-400 bg-clip-text text-transparent">
@@ -147,7 +149,7 @@ export function LandingPage() {
                   className="relative flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-slate-50 p-5"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 font-mono text-sm font-bold text-amber-300">
+                    <span className="theme-fixed flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 font-mono text-sm font-bold text-amber-300">
                       {i + 1}
                     </span>
                     <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-slate-700 shadow-card">
@@ -164,7 +166,7 @@ export function LandingPage() {
 
         {/* 最後にもう一度入口 */}
         <section className="mx-auto w-full max-w-6xl px-4 py-14 sm:px-6 lg:py-20">
-          <div className="dot-grid flex flex-col items-start gap-5 rounded-3xl bg-slate-950 p-8 text-white sm:p-10 lg:flex-row lg:items-center lg:justify-between">
+          <div className="theme-fixed dot-grid flex flex-col items-start gap-5 rounded-3xl bg-slate-950 p-8 text-white sm:p-10 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-col gap-2">
               <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
                 公式問題は {total} 問。

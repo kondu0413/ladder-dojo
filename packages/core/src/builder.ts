@@ -31,7 +31,22 @@ export const rise = (device: DeviceId): ContactElement => ({
   kind: "rise",
   device,
 });
+/** 立ち下がり接点(S-044) */
+export const fall = (device: DeviceId): ContactElement => ({
+  type: "contact",
+  kind: "fall",
+  device,
+});
 export const out = (device: DeviceId): CoilElement => ({ type: "coil", kind: "out", device });
+/** SET コイル(S-044) */
+export const set = (device: DeviceId): CoilElement => ({ type: "coil", kind: "set", device });
+/** オフディレイタイマ(S-044) */
+export const tof = (device: DeviceId, presetMs: number): CoilElement => ({
+  type: "coil",
+  kind: "offdelay",
+  device,
+  presetMs,
+});
 export const pulse = (device: DeviceId): CoilElement => ({ type: "coil", kind: "pulse", device });
 export const timer = (device: DeviceId, presetMs: number): CoilElement => ({
   type: "coil",

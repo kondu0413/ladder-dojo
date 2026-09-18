@@ -1,4 +1,14 @@
-import { ladder, nc, no, out, type Problem, SCHEMA_VERSION, timer, wire } from "@ladder-dojo/core";
+import {
+  ladder,
+  nc,
+  no,
+  out,
+  type Problem,
+  SCHEMA_VERSION,
+  timer,
+  tof,
+  wire,
+} from "@ladder-dojo/core";
 
 const LABELS = { X0: "起動", X1: "停止", Y0: "ランプ", T0: "タイマ" } as const;
 
@@ -266,6 +276,58 @@ const offDelayCases = [
   },
 ];
 
+const OFF_DELAY_LABELS = { X0: "ボタン", Y0: "ランプ", T0: "3 秒" } as const;
+
+/** 離してから 3 秒後に消える(オフディレイ、S-044) */
+const tofCircuit = ladder(4).row(no("X0"), tof("T0", 3000)).row(no("T0"), out("Y0")).build();
+
+const tofCases = [
+  {
+    id: "initial",
+    title: "最初は消えている",
+    steps: [{ type: "expect" as const, outputs: { Y0: false } }],
+  },
+  {
+    id: "while-pressed",
+    title: "押している間はずっと点いている",
+    steps: [
+      { type: "set" as const, inputs: { X0: true } },
+      { type: "expect" as const, outputs: { Y0: true }, note: "押した瞬間に点く" },
+      { type: "wait" as const, ms: 5000 },
+      { type: "expect" as const, outputs: { Y0: true }, note: "押している間は消えない" },
+    ],
+  },
+  {
+    id: "after-release",
+    title: "離してから 3 秒後に消える",
+    steps: [
+      { type: "press" as const, device: "X0" as const },
+      { type: "expect" as const, outputs: { Y0: true }, note: "離した直後はまだ点いている" },
+      { type: "wait" as const, ms: 2500 },
+      { type: "expect" as const, outputs: { Y0: true }, note: "2.5 秒ではまだ点いている" },
+      { type: "wait" as const, ms: 700 },
+      { type: "expect" as const, outputs: { Y0: false }, note: "3 秒たったので消えているはず" },
+    ],
+  },
+  {
+    id: "retrigger",
+    title: "消える前に押し直すと、また 3 秒数え直す",
+    steps: [
+      { type: "press" as const, device: "X0" as const },
+      { type: "wait" as const, ms: 2000 },
+      { type: "press" as const, device: "X0" as const },
+      { type: "wait" as const, ms: 2500 },
+      {
+        type: "expect" as const,
+        outputs: { Y0: true },
+        note: "押し直してから 2.5 秒なので点いている",
+      },
+      { type: "wait" as const, ms: 700 },
+      { type: "expect" as const, outputs: { Y0: false } },
+    ],
+  },
+];
+
 export const timerProblems: Problem[] = [
   {
     schemaVersion: SCHEMA_VERSION,
@@ -331,7 +393,7 @@ export const timerProblems: Problem[] = [
           id: "q1",
           prompt: "X0 を押して離し、そのまま 5 秒待ちました。ランプ Y0 はどうなっていますか?",
           scenario: [
-            { type: "press", device: "X0" },
+            { type: "press", device: "X0" as const },
             { type: "wait", ms: 5000 },
           ],
           choices: ["点いたまま", "消えている", "点いたり消えたりしている"],
@@ -343,9 +405,9 @@ export const timerProblems: Problem[] = [
           id: "q2",
           prompt: "Y0 が消えたあと、もう一度 X0 を押すとどうなりますか?",
           scenario: [
-            { type: "press", device: "X0" },
+            { type: "press", device: "X0" as const },
             { type: "wait", ms: 5000 },
-            { type: "press", device: "X0" },
+            { type: "press", device: "X0" as const },
           ],
           choices: ["また 3 秒間点灯する", "もう点かない", "すぐ消える"],
           answerIndex: 0,
@@ -527,6 +589,72 @@ export const timerProblems: Problem[] = [
     testCases: offDelayCases,
     write: {
       hint: "停止ボタンで内部リレー M0 を自己保持してタイマを動かし、タイマの b 接点で運転と M0 の両方を切ります。M0 も切らないと、次に起動できません。",
+    },
+  },
+  {
+    schemaVersion: SCHEMA_VERSION,
+    id: "timer-read-4",
+    title: "離してから消えるタイマ",
+    mode: "read",
+    stage: "timer",
+    difficulty: 2,
+    tags: ["タイマ", "オフディレイ"],
+    spec: "押しボタン X0 でランプ Y0 を点ける回路ですが、タイマ T0(設定 3 秒)はオフディレイです。オフディレイタイマは通電中 ON で、通電が切れてから設定時間のあいだ ON を保ちます。",
+    deviceLabels: OFF_DELAY_LABELS,
+    solution: tofCircuit,
+    testCases: tofCases,
+    read: {
+      questions: [
+        {
+          id: "q1",
+          prompt: "X0 を押して離した直後、Y0 はどうなっていますか?",
+          scenario: [{ type: "press", device: "X0" as const }],
+          choices: ["点いている", "消えている", "3 秒後に点く"],
+          answerIndex: 0,
+          explanation:
+            "オフディレイタイマは通電した瞬間に ON になり、通電が切れてもすぐには OFF になりません。離した直後はまだ T0 が ON なので、Y0 も点いています。",
+        },
+        {
+          id: "q2",
+          prompt: "離してから 3 秒たつと、Y0 はどうなりますか?",
+          scenario: [
+            { type: "press", device: "X0" as const },
+            { type: "wait", ms: 3100 },
+          ],
+          choices: ["消える", "点いたまま", "また点く"],
+          answerIndex: 0,
+          explanation:
+            "通電が切れてから設定時間(3 秒)たつと T0 が OFF になり、Y0 も消えます。オンディレイが「点くのが遅れる」のに対し、オフディレイは「消えるのが遅れる」タイマです。",
+        },
+        {
+          id: "q3",
+          prompt: "X0 を 5 秒押し続けている間、Y0 はどうなりますか?",
+          scenario: [
+            { type: "set", inputs: { X0: true } },
+            { type: "wait", ms: 5000 },
+          ],
+          choices: ["点いたまま", "3 秒で消える", "点いたり消えたりする"],
+          answerIndex: 0,
+          explanation:
+            "オフディレイは通電中はずっと ON です。時間を数えるのは通電が切れてからなので、押している間は何秒たっても消えません。",
+        },
+      ],
+    },
+  },
+  {
+    schemaVersion: SCHEMA_VERSION,
+    id: "timer-write-4",
+    title: "離してから 3 秒後に消える",
+    mode: "write",
+    stage: "timer",
+    difficulty: 3,
+    tags: ["タイマ", "オフディレイ"],
+    spec: "押しボタン X0 を押すとランプ Y0 が点き、ボタンを離してから 3 秒後に消える。押している間はずっと点いている。離して 3 秒たつ前にもう一度押して離すと、そこからまた 3 秒数え直す。",
+    deviceLabels: OFF_DELAY_LABELS,
+    solution: tofCircuit,
+    testCases: tofCases,
+    write: {
+      hint: "オフディレイタイマ(TOF)は、通電が切れてから設定時間のあいだ ON を保ちます。X0 で T0 のオフディレイを動かし、T0 の a 接点で Y0 を点けます。",
     },
   },
 ];
