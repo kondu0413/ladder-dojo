@@ -97,7 +97,8 @@ jobs:
           if [ "$HAS_VAPID" = "0" ]; then
             echo "VAPID 鍵が未登録のため生成して登録します(初回のみ)"
             VAPID_FILE="$RUNNER_TEMP/vapid.json"
-            node .github/scripts/vapid-keys.mjs > "$VAPID_FILE"
+            # この step は apps/api で動くので、リポジトリの root から辿る
+            node "$GITHUB_WORKSPACE/.github/scripts/vapid-keys.mjs" > "$VAPID_FILE"
             echo "::add-mask::$(jq -r .VAPID_PRIVATE_KEY "$VAPID_FILE")"
             jq -s '.[0] + .[1]' "$FILE" "$VAPID_FILE" > "$FILE.merged" && mv "$FILE.merged" "$FILE"
             rm -f "$VAPID_FILE"
