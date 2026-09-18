@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router";
 import { AppShell } from "../components/AppShell.js";
 import { LadderView } from "../components/LadderView.js";
 import { ProgressMatrix } from "../components/ProgressMatrix.js";
+import { PushSettings } from "../components/PushSettings.js";
 import {
   Badge,
   Button,
@@ -225,7 +226,10 @@ export function OrgDetailPage() {
         ))}
 
       {tab === "assignments" && (
-        <AssignmentsPanel orgId={id} isAdmin={isAdmin} members={detail.members} />
+        <>
+          <PushSettings />
+          <AssignmentsPanel orgId={id} isAdmin={isAdmin} members={detail.members} />
+        </>
       )}
 
       {tab === "matrix" && isAdmin && <ProgressMatrix orgId={id} orgName={detail.org.name} />}

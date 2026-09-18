@@ -8,9 +8,10 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "observability": { "enabled": true },
-  // ランキングの集計(SPEC.md §3.7 / DECISIONS.md D-010)。毎日 18:00 UTC = 翌 03:00 JST
+  // 1 本目: ランキングの集計と掃除(SPEC.md §3.7 / D-010)。毎日 18:00 UTC = 翌 03:00 JST
+  // 2 本目: 課題の期限と新しい課題の通知(S-045)。毎日 00:00 UTC = 09:00 JST
   "triggers": {
-    "crons": ["0 18 * * *"]
+    "crons": ["0 18 * * *", "0 0 * * *"]
   },
   "assets": {
     "directory": "../web/dist",
@@ -33,7 +34,7 @@
     "APP_ENV": "production"
   },
   // シークレット(CI が wrangler secret bulk で登録。ここには書かない):
-  //   BETTER_AUTH_SECRET / GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
+  //   BETTER_AUTH_SECRET / GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY
   "env": {
     // E2E 専用環境(D-014)。ローカル D1 のみ。E2E_AUTH_BYPASS は本番には存在しない。
     "e2e": {

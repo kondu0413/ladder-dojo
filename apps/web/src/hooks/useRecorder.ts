@@ -63,7 +63,7 @@ export function useRecorder(sim: SimulatorState): RecorderState {
 
   const stop = (title: string): TestCase => {
     const last = events.current[events.current.length - 1];
-    if (!last || last.kind !== "expect") {
+    if (last?.kind !== "expect") {
       events.current.push({ t: sim.elapsedMs, kind: "expect", outputs: snapshotOutputs() });
     }
     const steps = eventsToSteps(events.current);

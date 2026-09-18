@@ -5,6 +5,7 @@ name: Deploy
 #   - アカウント ID は wrangler whoami で取得
 #   - D1 `ladder-dojo` は無ければ作成し、ID を wrangler.jsonc に反映
 #   - BETTER_AUTH_SECRET は Worker に無ければ初回だけ生成して登録
+#   - VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY(Web Push、S-045)も同様に初回だけ生成して登録
 on:
   push:
     branches: [main]
@@ -90,6 +91,16 @@ jobs:
           else
             jq -n --arg g "$GOOGLE_CLIENT_ID" --arg s "$GOOGLE_CLIENT_SECRET" \
               '{GOOGLE_CLIENT_ID: $g, GOOGLE_CLIENT_SECRET: $s}' > "$FILE"
+          fi
+          # Web Push の鍵(S-045)。無ければ生成する。作り直すと全員の購読が無効になるので、初回だけ
+          HAS_VAPID=$(printf '%s' "$EXISTING" | jq -r 'map(select(.name == "VAPID_PRIVATE_KEY")) | length')
+          if [ "$HAS_VAPID" = "0" ]; then
+            echo "VAPID 鍵が未登録のため生成して登録します(初回のみ)"
+            VAPID_FILE="$RUNNER_TEMP/vapid.json"
+            node .github/scripts/vapid-keys.mjs > "$VAPID_FILE"
+            echo "::add-mask::$(jq -r .VAPID_PRIVATE_KEY "$VAPID_FILE")"
+            jq -s '.[0] + .[1]' "$FILE" "$VAPID_FILE" > "$FILE.merged" && mv "$FILE.merged" "$FILE"
+            rm -f "$VAPID_FILE"
           fi
           pnpm exec wrangler secret bulk "$FILE" --env ""
           rm -f "$FILE"
