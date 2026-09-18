@@ -11,17 +11,17 @@ export type TimeChartProps = {
 };
 
 /** 1 行の高さ(px) */
-const ROW_H = 26;
+const ROW_H = 28;
 /** 波の高さ。ROW_H より小さくして行間を空ける */
 const WAVE_H = 14;
 /** デバイス名を出す左側の幅 */
-const LABEL_W = 56;
+const LABEL_W = 60;
 /** 右端の余白。最後の変化が見切れないように */
 const PAD_R = 8;
 /** 波形部分の幅。実時間ではなく一定幅にして、スマホでも読めるようにする */
 const PLOT_W = 320;
 /** 目印の文字を置く上の帯 */
-const HEAD_H = 18;
+const HEAD_H = 14;
 
 /**
  * タイムチャート(改善候補 4)。
@@ -46,7 +46,10 @@ export function TimeChart({ timeline, deviceLabels, mismatched }: TimeChartProps
   if (devices.length === 0 || samples.length === 0) return null;
 
   return (
-    <div className="overflow-x-auto" data-testid="time-chart">
+    <div
+      className="overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-2"
+      data-testid="time-chart"
+    >
       <svg
         viewBox={`0 0 ${width} ${height}`}
         style={{ width: "100%", height: "auto", minWidth: 300 }}
@@ -78,22 +81,35 @@ export function TimeChart({ timeline, deviceLabels, mismatched }: TimeChartProps
               data-testid={`chart-row-${device}`}
               data-mismatched={isBad || undefined}
             >
+              {isBad && (
+                <rect x={0} y={y - 1} width={width} height={ROW_H - 2} rx={4} fill="#ffe4e6" />
+              )}
               <text
-                x={0}
+                x={4}
                 y={y + WAVE_H}
                 fontSize={11}
-                fill={isBad ? "#b91c1c" : "#475569"}
-                fontWeight={isBad ? 700 : 400}
+                fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+                fontWeight={isBad ? 700 : 600}
+                fill={isBad ? "#be123c" : "#475569"}
               >
                 {notation.device(device)}
               </text>
               {deviceLabels?.[device] && (
                 <title>{`${notation.device(device)} ${deviceLabels[device]}`}</title>
               )}
+              {/* OFF の水準を薄く引いて、どこが下かを分かるようにする */}
+              <line
+                x1={x(0)}
+                y1={y + 2 + WAVE_H}
+                x2={x(span)}
+                y2={y + 2 + WAVE_H}
+                stroke="#e2e8f0"
+                strokeWidth={1}
+              />
               <path
                 d={wavePath(samples, device, x, y, span)}
                 fill="none"
-                stroke={isBad ? "#dc2626" : "#0f766e"}
+                stroke={isBad ? "#e11d48" : "#0f172a"}
                 strokeWidth={2}
                 strokeLinejoin="miter"
               />
@@ -110,10 +126,11 @@ export function TimeChart({ timeline, deviceLabels, mismatched }: TimeChartProps
         </text>
       </svg>
 
-      <ol className="mt-1 flex flex-col gap-0.5">
+      <ol className="mt-1 flex flex-col gap-0.5 px-1">
         {markers.map((m) => (
           <li key={`step-${m.stepIndex}`} className="text-xs text-slate-500">
-            {formatMs(m.t)}: {describeStep(m.step, deviceLabels, notation.notation)}
+            <span className="mr-1.5 font-mono tabular-nums text-slate-400">{formatMs(m.t)}</span>
+            {describeStep(m.step, deviceLabels, notation.notation)}
           </li>
         ))}
       </ol>

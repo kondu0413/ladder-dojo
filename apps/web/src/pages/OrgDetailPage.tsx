@@ -2,9 +2,23 @@ import { circuitSchema } from "@ladder-dojo/core";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import { AppShell } from "../components/AppShell.js";
-import { AuthBar } from "../components/AuthBar.js";
 import { LadderView } from "../components/LadderView.js";
 import { ProgressMatrix } from "../components/ProgressMatrix.js";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Icon,
+  inputClass,
+  Label,
+  Notice,
+  PageHeader,
+  Segmented,
+  Skeleton,
+  selectClass,
+} from "../components/ui.js";
 import {
   type Assignment,
   api,
@@ -20,12 +34,13 @@ type Tab = "members" | "assignments" | "matrix" | "stuck";
 /** 組織の詳細。管理者ビュー(SPEC.md §3.8) */
 export function OrgDetailPage() {
   const { id } = useParams();
-  const { user } = useProgress();
+  const { user, loading } = useProgress();
   const [detail, setDetail] = useState<OrgDetail | undefined>(undefined);
   const [tab, setTab] = useState<Tab>("members");
   const [error, setError] = useState<string | undefined>(undefined);
   const [message, setMessage] = useState<string | undefined>(undefined);
   const [invite, setInvite] = useState<string | undefined>(undefined);
+  const [copied, setCopied] = useState(false);
 
   const reload = useCallback(async () => {
     if (!id) return;
@@ -38,34 +53,61 @@ export function OrgDetailPage() {
   }, [id]);
 
   useEffect(() => {
+    // セッションが決まってから読む。未ログインのまま叩いても 401 で「見つからない」になるだけ
+    if (loading || !user) return;
     void reload();
-  }, [reload]);
+  }, [reload, loading, user]);
+
+  // セッションの確認中は何も断定しない。ログイン済みの人に「ログインしてください」が一瞬見えてしまう
+  if (loading) {
+    return (
+      <AppShell width="wide">
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-8 w-1/2" />
+        <Skeleton className="h-40" />
+      </AppShell>
+    );
+  }
 
   if (!user) {
     return (
-      <Shell>
-        <p className="rounded-lg bg-slate-100 px-3 py-3 text-sm text-slate-600">
-          組織を見るにはログインしてください。
-        </p>
-      </Shell>
+      <AppShell width="wide">
+        <EmptyState
+          icon="lock"
+          title="組織を見るにはログインしてください。"
+          body="右上の「Google でログイン」から入れます。"
+        />
+      </AppShell>
     );
   }
 
   if (error || !id) {
     return (
-      <Shell>
-        <p data-testid="org-error" className="rounded-lg bg-red-50 px-3 py-3 text-sm text-red-700">
+      <AppShell width="wide">
+        <Notice tone="danger" data-testid="org-error">
           {error ?? "組織が指定されていません。"}
-        </p>
-      </Shell>
+        </Notice>
+        <Link
+          to="/orgs"
+          className="inline-flex w-fit items-center gap-1 text-sm font-medium text-slate-600 hover:text-slate-900"
+        >
+          <Icon name="arrowLeft" className="h-4 w-4" />
+          組織一覧へ戻る
+        </Link>
+      </AppShell>
     );
   }
 
   if (!detail) {
     return (
-      <Shell>
-        <p className="text-sm text-slate-500">読み込み中…</p>
-      </Shell>
+      <AppShell width="wide">
+        <p className="sr-only" role="status">
+          読み込み中
+        </p>
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-8 w-1/2" />
+        <Skeleton className="h-40" />
+      </AppShell>
     );
   }
 
@@ -75,89 +117,111 @@ export function OrgDetailPage() {
     try {
       const res = await api.createInvite(id);
       setInvite(res.invite.code);
+      setCopied(false);
       setMessage("招待コードを発行しました。期限は 14 日です。");
     } catch {
       setMessage("招待コードを発行できませんでした。");
     }
   };
 
+  const copyInvite = async () => {
+    if (!invite) return;
+    try {
+      await navigator.clipboard.writeText(invite);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  const tabs: Array<{ value: Tab; label: string; testId: string }> = [
+    { value: "members", label: isAdmin ? "メンバー" : "この組織", testId: "org-tab-members" },
+    { value: "assignments", label: "課題", testId: "org-tab-assignments" },
+    ...(isAdmin
+      ? [
+          { value: "matrix" as const, label: "一覧表", testId: "org-tab-matrix" },
+          { value: "stuck" as const, label: "つまずき", testId: "org-tab-stuck" },
+        ]
+      : []),
+  ];
+
   return (
-    <Shell>
-      <header className="flex flex-col gap-1">
-        <Link to="/orgs" className="text-sm text-slate-500 underline">
-          ← 組織一覧
-        </Link>
-        <h1 className="text-lg font-bold text-slate-900">{detail.org.name}</h1>
-        <p className="text-xs text-slate-500">
-          {isAdmin ? "あなたは管理者です" : "あなたはメンバーです"}
-        </p>
-      </header>
+    <AppShell width="wide">
+      <PageHeader
+        title={detail.org.name}
+        back={{ to: "/orgs", label: "組織一覧" }}
+        actions={
+          isAdmin ? (
+            <Button
+              tone="secondary"
+              icon="logIn"
+              data-testid="create-invite"
+              onClick={() => void makeInvite()}
+            >
+              招待コードを発行
+            </Button>
+          ) : undefined
+        }
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge tone={isAdmin ? "navy" : "slate"} icon={isAdmin ? "star" : "users"}>
+            {isAdmin ? "あなたは管理者です" : "あなたはメンバーです"}
+          </Badge>
+          {isAdmin && detail.members.length > 0 && (
+            <span className="text-xs text-slate-500">メンバー {detail.members.length} 人</span>
+          )}
+        </div>
+      </PageHeader>
 
       {message && (
-        <p
-          data-testid="org-message"
+        <Notice
+          tone={message.includes("ません") ? "warning" : "success"}
           role="status"
-          className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700"
+          data-testid="org-message"
         >
           {message}
-        </p>
+        </Notice>
       )}
 
       {invite && (
-        <div className="rounded-lg border border-sky-300 bg-sky-50 p-3">
-          <p className="text-xs text-sky-900">この招待コードを伝えてください</p>
-          <p data-testid="invite-code" className="mt-1 font-mono text-lg font-bold text-sky-900">
-            {invite}
-          </p>
-        </div>
-      )}
-
-      {isAdmin && (
-        <button
-          type="button"
-          data-testid="create-invite"
-          onClick={() => void makeInvite()}
-          className="min-h-11 rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700"
-        >
-          招待コードを発行
-        </button>
-      )}
-
-      <div className="flex overflow-hidden rounded-lg border border-slate-300">
-        {(
-          [
-            { value: "members", label: isAdmin ? "メンバー" : "この組織" },
-            { value: "assignments", label: "課題" },
-            ...(isAdmin
-              ? [
-                  { value: "matrix" as const, label: "一覧表" },
-                  { value: "stuck" as const, label: "つまずき" },
-                ]
-              : []),
-          ] as Array<{ value: Tab; label: string }>
-        ).map((t) => (
-          <button
-            key={t.value}
-            type="button"
-            data-testid={`org-tab-${t.value}`}
-            aria-pressed={tab === t.value}
-            onClick={() => setTab(t.value)}
-            className={`min-h-11 flex-1 text-sm font-medium ${
-              tab === t.value ? "bg-slate-700 text-white" : "bg-white text-slate-600"
-            }`}
+        <Card padded className="flex flex-wrap items-center gap-4 border-amber-200 bg-amber-50/60">
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <Label>この招待コードを伝えてください</Label>
+            <p
+              data-testid="invite-code"
+              className="select-all font-mono text-2xl font-bold tracking-widest text-slate-900"
+            >
+              {invite}
+            </p>
+          </div>
+          <Button
+            tone="secondary"
+            icon={copied ? "check" : "copy"}
+            onClick={() => void copyInvite()}
           >
-            {t.label}
-          </button>
-        ))}
-      </div>
+            {copied ? "コピーしました" : "コピー"}
+          </Button>
+        </Card>
+      )}
+
+      <Segmented<Tab>
+        fill
+        label="表示する内容"
+        value={tab}
+        onChange={setTab}
+        options={tabs}
+        className="max-w-2xl"
+      />
 
       {tab === "members" &&
         (isAdmin ? (
           <MembersPanel orgId={id} members={detail.members} me={user.id} onChanged={reload} />
         ) : (
-          <p className="rounded-lg bg-slate-100 px-3 py-3 text-sm text-slate-600">
-            メンバー一覧は管理者だけが見られます。
-          </p>
+          <EmptyState
+            icon="lock"
+            title="メンバー一覧は管理者だけが見られます。"
+            body="課題のタブで、あなたに割り当てられた課題を確認できます。"
+          />
         ))}
 
       {tab === "assignments" && (
@@ -167,15 +231,6 @@ export function OrgDetailPage() {
       {tab === "matrix" && isAdmin && <ProgressMatrix orgId={id} orgName={detail.org.name} />}
 
       {tab === "stuck" && isAdmin && <StuckPanel orgId={id} />}
-    </Shell>
-  );
-}
-
-function Shell({ children }: { children: React.ReactNode }) {
-  return (
-    <AppShell width="wide">
-      <AuthBar />
-      {children}
     </AppShell>
   );
 }
@@ -246,110 +301,122 @@ function MembersPanel({
   const stuck = progress.filter((p) => p.clearedAt === null);
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       {error && (
-        <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <Notice tone="danger" role="alert">
           {error}
-        </p>
+        </Notice>
       )}
       <ul className="flex flex-col gap-2" data-testid="member-list">
         {members.map((m) => (
           <li
             key={m.userId}
             data-testid={`member-${m.userId}`}
-            className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2"
+            className={`flex flex-wrap items-center gap-2 rounded-2xl border bg-white px-4 py-3 shadow-card ${
+              selected?.userId === m.userId ? "border-slate-900/30" : "border-slate-200/80"
+            }`}
           >
+            <span
+              aria-hidden="true"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-900 text-sm font-bold text-amber-300"
+            >
+              {[...m.name.trim()][0]?.toUpperCase() ?? "?"}
+            </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm text-slate-800">{m.name}</span>
+              <span className="block truncate text-sm font-semibold text-slate-800">
+                {m.name}
+                {m.userId === me && (
+                  <span className="ml-1.5 text-xs font-normal text-slate-400">(あなた)</span>
+                )}
+              </span>
               <span className="block truncate text-xs text-slate-500">{m.email}</span>
             </span>
-            <span className="shrink-0 rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+            <Badge tone={m.role === "admin" ? "navy" : "slate"}>
               {m.role === "admin" ? "管理者" : "メンバー"}
-            </span>
-            <button
-              type="button"
-              data-testid={`view-${m.userId}`}
-              onClick={() => void open(m)}
-              className="min-h-11 shrink-0 rounded-lg border border-slate-300 px-3 text-xs text-slate-700"
-            >
-              学習状況
-            </button>
-            <button
-              type="button"
-              data-testid={`role-${m.userId}`}
-              disabled={busy}
-              onClick={() => void changeRole(m, m.role === "admin" ? "member" : "admin")}
-              className="min-h-11 shrink-0 rounded-lg border border-slate-300 px-3 text-xs text-slate-700"
-            >
-              {m.role === "admin" ? "メンバーに" : "管理者に"}
-            </button>
-            {m.userId !== me && (
-              <button
-                type="button"
-                data-testid={`remove-${m.userId}`}
-                disabled={busy}
-                onClick={() => void remove(m)}
-                className="min-h-11 shrink-0 rounded-lg border border-red-300 px-3 text-xs text-red-600"
+            </Badge>
+            <div className="flex flex-wrap gap-1.5">
+              <Button
+                tone="secondary"
+                size="sm"
+                icon="chart"
+                data-testid={`view-${m.userId}`}
+                onClick={() => void open(m)}
               >
-                外す
-              </button>
-            )}
+                学習状況
+              </Button>
+              <Button
+                tone="secondary"
+                size="sm"
+                data-testid={`role-${m.userId}`}
+                disabled={busy}
+                onClick={() => void changeRole(m, m.role === "admin" ? "member" : "admin")}
+              >
+                {m.role === "admin" ? "メンバーに" : "管理者に"}
+              </Button>
+              {m.userId !== me && (
+                <Button
+                  tone="danger"
+                  size="sm"
+                  data-testid={`remove-${m.userId}`}
+                  disabled={busy}
+                  onClick={() => void remove(m)}
+                >
+                  外す
+                </Button>
+              )}
+            </div>
           </li>
         ))}
       </ul>
 
       {selected && (
-        <section
-          data-testid="member-detail"
-          className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3"
-        >
-          <h3 className="text-sm font-semibold text-slate-700">{selected.name} の学習状況</h3>
-          <p className="text-sm text-slate-600" data-testid="member-cleared">
-            クリア {cleared} 問 / 挑戦した問題 {progress.length} 問
-          </p>
+        <Card padded data-testid="member-detail" className="rise-in flex flex-col gap-4">
+          <div className="flex items-baseline justify-between gap-2">
+            <h3 className="text-base font-bold text-slate-900">{selected.name} の学習状況</h3>
+            <p className="text-sm text-slate-600" data-testid="member-cleared">
+              クリア {cleared} 問 / 挑戦した問題 {progress.length} 問
+            </p>
+          </div>
           {stuck.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-slate-500">止まっている問題</p>
-              <ul className="mt-1 flex flex-col gap-1">
+            <div className="flex flex-col gap-1.5">
+              <Label>止まっている問題</Label>
+              <ul className="flex flex-col gap-1">
                 {stuck.slice(0, 10).map((p) => (
-                  <li key={p.problemId} className="text-sm text-slate-700">
-                    {findProblem(p.problemId)?.title ?? p.problemId}
-                    <span className="ml-2 text-xs text-slate-500">失敗 {p.failures} 回</span>
+                  <li
+                    key={p.problemId}
+                    className="flex items-center justify-between gap-2 rounded-lg bg-amber-50 px-3 py-1.5 text-sm text-slate-800"
+                  >
+                    <span className="truncate">
+                      {findProblem(p.problemId)?.title ?? p.problemId}
+                    </span>
+                    <span className="shrink-0 text-xs text-amber-800">失敗 {p.failures} 回</span>
                   </li>
                 ))}
               </ul>
             </div>
           )}
 
-          <div>
-            <p className="text-xs font-semibold text-slate-500">
-              提出した回路(新しい順・最大 50 件)
-            </p>
+          <div className="flex flex-col gap-1.5">
+            <Label>提出した回路(新しい順・最大 50 件)</Label>
             {submissions.length === 0 ? (
-              <p data-testid="member-submissions-empty" className="mt-1 text-sm text-slate-500">
+              <p data-testid="member-submissions-empty" className="text-sm text-slate-500">
                 まだ提出がありません。
               </p>
             ) : (
-              <ul className="mt-1 flex flex-col gap-2" data-testid="member-submissions">
+              <ul className="flex flex-col gap-2" data-testid="member-submissions">
                 {submissions.slice(0, 10).map((sub) => {
                   const parsed = circuitSchema.safeParse(sub.circuit);
                   return (
                     <li
                       key={sub.id}
                       data-testid={`submission-${sub.id}`}
-                      className="rounded-lg border border-slate-200 p-2"
+                      className="rounded-xl border border-slate-200 p-2.5"
                     >
                       <p className="flex items-center gap-2 text-xs text-slate-600">
-                        <span
-                          className={`rounded px-1.5 py-0.5 ${
-                            sub.passed
-                              ? "bg-emerald-100 text-emerald-800"
-                              : "bg-red-100 text-red-800"
-                          }`}
-                        >
+                        <Badge tone={sub.passed ? "green" : "rose"}>
                           {sub.passed ? "正解" : "不正解"}
-                        </span>
-                        <span className="truncate">
+                        </Badge>
+                        <span className="truncate font-medium text-slate-800">
                           {findProblem(sub.problemId)?.title ?? sub.problemId}
                         </span>
                         <span className="ml-auto shrink-0 text-slate-400">
@@ -357,7 +424,7 @@ function MembersPanel({
                         </span>
                       </p>
                       {parsed.success && (
-                        <div className="mt-1 overflow-x-auto">
+                        <div className="mt-2 overflow-x-auto">
                           <LadderView circuit={parsed.data} />
                         </div>
                       )}
@@ -367,7 +434,7 @@ function MembersPanel({
               </ul>
             )}
           </div>
-        </section>
+        </Card>
       )}
     </div>
   );
@@ -389,19 +456,15 @@ function DueBadge({ dueAt, assignmentId }: { dueAt: string | null; assignmentId:
   const label = overdue ? `期限切れ(${-days} 日前)` : days === 0 ? "今日まで" : `あと ${days} 日`;
 
   return (
-    <span
+    <Badge
       data-testid={`due-${assignmentId}`}
       data-overdue={overdue || undefined}
-      className={`mt-0.5 inline-block rounded px-1.5 py-0.5 text-[11px] ${
-        overdue
-          ? "bg-red-100 text-red-800"
-          : soon
-            ? "bg-amber-100 text-amber-900"
-            : "bg-slate-100 text-slate-600"
-      }`}
+      icon="calendar"
+      tone={overdue ? "rose" : soon ? "amber" : "slate"}
+      className="mt-1"
     >
       {due.toLocaleDateString("ja-JP")} まで ・ {label}
-    </span>
+    </Badge>
   );
 }
 
@@ -419,12 +482,12 @@ function AchievementBar({
 }) {
   const pct = (n: number) => (stats.total === 0 ? 0 : (n / stats.total) * 100);
   return (
-    <span className="mt-1 block" data-testid={`achievement-${assignmentId}`}>
-      <span className="flex h-1.5 overflow-hidden rounded bg-slate-200">
+    <span className="mt-1.5 block" data-testid={`achievement-${assignmentId}`}>
+      <span className="flex h-1.5 overflow-hidden rounded-full bg-slate-200">
         <span className="bg-emerald-500" style={{ width: `${pct(stats.cleared)}%` }} />
-        <span className="bg-amber-300" style={{ width: `${pct(stats.attempting)}%` }} />
+        <span className="bg-amber-400" style={{ width: `${pct(stats.attempting)}%` }} />
       </span>
-      <span className="mt-0.5 block text-[11px] text-slate-500">
+      <span className="mt-1 block text-[11px] tabular-nums text-slate-500">
         クリア {stats.cleared} ・ 挑戦中 {stats.attempting} ・ 未着手 {stats.untouched} / 全{" "}
         {stats.total} 人
       </span>
@@ -447,6 +510,7 @@ function AssignmentsPanel({
   const [dueAt, setDueAt] = useState("");
   const [note, setNote] = useState("");
   const [message, setMessage] = useState<string | undefined>(undefined);
+  const [busy, setBusy] = useState(false);
 
   const reload = useCallback(async () => {
     try {
@@ -461,6 +525,7 @@ function AssignmentsPanel({
   }, [reload]);
 
   const assign = async () => {
+    setBusy(true);
     try {
       await api.createAssignment(orgId, {
         kind: "official",
@@ -476,19 +541,34 @@ function AssignmentsPanel({
       setMessage("課題を割り当てました。");
     } catch {
       setMessage("割り当てできませんでした。");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const unassign = async (assignmentId: string) => {
+    setBusy(true);
+    try {
+      await api.deleteAssignment(orgId, assignmentId);
+      await reload();
+      setMessage("課題を取り消しました。");
+    } catch {
+      setMessage("取り消せませんでした。");
+    } finally {
+      setBusy(false);
     }
   };
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       {message && (
-        <p
-          data-testid="assignment-message"
+        <Notice
+          tone={message.includes("ません") ? "warning" : "success"}
           role="status"
-          className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700"
+          data-testid="assignment-message"
         >
           {message}
-        </p>
+        </Notice>
       )}
 
       <ul className="flex flex-col gap-2" data-testid="assignment-list">
@@ -499,8 +579,11 @@ function AssignmentsPanel({
             <li
               key={a.id}
               data-testid={`assignment-${a.id}`}
-              className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2"
+              className="flex items-start gap-3 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-card"
             >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
+                <Icon name={a.userId ? "users" : "grid"} className="h-4 w-4" />
+              </span>
               <span className="min-w-0 flex-1">
                 <Link
                   to={
@@ -508,7 +591,7 @@ function AssignmentsPanel({
                       ? `/problems/${a.problemRef}`
                       : `/community/${a.problemRef}`
                   }
-                  className="block truncate text-sm font-medium text-slate-800 underline"
+                  className="block truncate text-sm font-semibold text-slate-900 underline-offset-4 hover:underline"
                 >
                   {problem?.title ?? a.problemRef}
                 </Link>
@@ -520,87 +603,96 @@ function AssignmentsPanel({
                 {a.stats && <AchievementBar stats={a.stats} assignmentId={a.id} />}
               </span>
               {isAdmin && (
-                <button
-                  type="button"
+                <Button
+                  tone="danger"
+                  size="sm"
                   data-testid={`unassign-${a.id}`}
-                  onClick={() => {
-                    void api.deleteAssignment(orgId, a.id).then(reload);
-                  }}
-                  className="min-h-11 shrink-0 rounded-lg border border-red-300 px-3 text-xs text-red-600"
+                  disabled={busy}
+                  onClick={() => void unassign(a.id)}
                 >
                   取り消す
-                </button>
+                </Button>
               )}
             </li>
           );
         })}
         {assignments.length === 0 && (
-          <li
-            data-testid="assignment-empty"
-            className="rounded-lg bg-slate-100 px-3 py-3 text-sm text-slate-600"
-          >
-            割り当てられた課題はありません。
+          <li>
+            <EmptyState
+              icon="calendar"
+              data-testid="assignment-empty"
+              title="割り当てられた課題はありません。"
+              body={isAdmin ? "下から問題を選んで割り当てられます。" : undefined}
+            />
           </li>
         )}
       </ul>
 
       {isAdmin && (
-        <section className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3">
-          <h3 className="text-sm font-semibold text-slate-700">課題を割り当てる</h3>
-          <select
-            value={problemRef}
-            onChange={(e) => setProblemRef(e.target.value)}
-            data-testid="assign-problem"
-            aria-label="割り当てる問題"
-            className="min-h-11 rounded-lg border border-slate-300 px-2 text-sm"
-          >
-            {sortedProblems().map((p) => (
-              <option key={p.id} value={p.id}>
-                {STAGE_LABELS[p.stage]} / {MODE_LABELS[p.mode]} ・ {p.title}
-              </option>
-            ))}
-          </select>
-          <select
-            value={target}
-            onChange={(e) => setTarget(e.target.value)}
-            data-testid="assign-target"
-            aria-label="割り当て先"
-            className="min-h-11 rounded-lg border border-slate-300 px-2 text-sm"
-          >
-            <option value="">組織の全員</option>
-            {members.map((m) => (
-              <option key={m.userId} value={m.userId}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-          <label className="flex items-center gap-2 text-sm text-slate-600">
-            <span className="shrink-0">期限(任意)</span>
-            <input
-              type="date"
-              value={dueAt}
-              onChange={(e) => setDueAt(e.target.value)}
-              data-testid="assign-due"
-              className="min-h-11 flex-1 rounded-lg border border-slate-300 px-2 text-sm"
-            />
-          </label>
-          <input
-            value={note}
-            onChange={(e) => setNote(e.target.value.slice(0, 200))}
-            placeholder="ひとこと(任意)"
-            data-testid="assign-note"
-            aria-label="ひとこと"
-            className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm"
-          />
-          <button
-            type="button"
+        <Card padded className="flex flex-col gap-3">
+          <h3 className="text-base font-bold text-slate-900">課題を割り当てる</h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="割り当てる問題" className="sm:col-span-2">
+              <select
+                value={problemRef}
+                onChange={(e) => setProblemRef(e.target.value)}
+                data-testid="assign-problem"
+                aria-label="割り当てる問題"
+                className={selectClass()}
+              >
+                {sortedProblems().map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {STAGE_LABELS[p.stage]} / {MODE_LABELS[p.mode]} ・ {p.title}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="割り当て先">
+              <select
+                value={target}
+                onChange={(e) => setTarget(e.target.value)}
+                data-testid="assign-target"
+                aria-label="割り当て先"
+                className={selectClass()}
+              >
+                <option value="">組織の全員</option>
+                {members.map((m) => (
+                  <option key={m.userId} value={m.userId}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="期限(任意)">
+              <input
+                type="date"
+                value={dueAt}
+                onChange={(e) => setDueAt(e.target.value)}
+                data-testid="assign-due"
+                className={inputClass()}
+              />
+            </Field>
+            <Field label="ひとこと(任意)" className="sm:col-span-2">
+              <input
+                value={note}
+                onChange={(e) => setNote(e.target.value.slice(0, 200))}
+                placeholder="例: 今週中に"
+                data-testid="assign-note"
+                aria-label="ひとこと"
+                className={inputClass()}
+              />
+            </Field>
+          </div>
+          <Button
+            icon="calendar"
+            className="self-start"
             data-testid="assign-submit"
+            disabled={busy || !problemRef}
             onClick={() => void assign()}
-            className="min-h-11 rounded-lg bg-slate-700 px-4 text-sm font-medium text-white"
           >
             割り当てる
-          </button>
-        </section>
+          </Button>
+        </Card>
       )}
     </div>
   );
@@ -622,37 +714,43 @@ function StuckPanel({ orgId }: { orgId: string }) {
       .catch(() => setData({ stuck: [], memberCount: 0 }));
   }, [orgId]);
 
-  if (!data) return <p className="text-sm text-slate-500">読み込み中…</p>;
+  if (!data) {
+    return (
+      <div className="flex flex-col gap-2" aria-hidden="true">
+        <Skeleton className="h-4 w-64" />
+        <Skeleton className="h-12" />
+        <Skeleton className="h-12" />
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col gap-2" data-testid="stuck-panel">
+    <div className="flex flex-col gap-3" data-testid="stuck-panel">
       <p className="text-xs text-slate-500">
         メンバー {data.memberCount} 人のうち、まだクリアできていない人が多い問題です。
       </p>
       {data.stuck.length === 0 ? (
-        <p
-          data-testid="stuck-empty"
-          className="rounded-lg bg-slate-100 px-3 py-3 text-sm text-slate-600"
-        >
-          止まっている問題はありません。
-        </p>
+        <EmptyState icon="check" data-testid="stuck-empty" title="止まっている問題はありません。" />
       ) : (
-        <ul className="flex flex-col gap-1">
-          {data.stuck.map((s) => (
-            <li
-              key={s.problemId}
-              data-testid={`stuck-${s.problemId}`}
-              className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2"
-            >
-              <span className="min-w-0 truncate text-sm text-slate-800">
-                {findProblem(s.problemId)?.title ?? s.problemId}
-              </span>
-              <span className="shrink-0 text-xs text-slate-500">
-                {s.stuckUsers} 人 ・ 失敗 {s.failures} 回
-              </span>
-            </li>
-          ))}
-        </ul>
+        <Card>
+          <ul className="divide-y divide-slate-100">
+            {data.stuck.map((s) => (
+              <li
+                key={s.problemId}
+                data-testid={`stuck-${s.problemId}`}
+                className="flex items-center justify-between gap-3 px-4 py-2.5"
+              >
+                <span className="min-w-0 truncate text-sm font-medium text-slate-800">
+                  {findProblem(s.problemId)?.title ?? s.problemId}
+                </span>
+                <span className="flex shrink-0 items-center gap-2 text-xs text-slate-500">
+                  <Badge tone="amber">{s.stuckUsers} 人</Badge>
+                  失敗 {s.failures} 回
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
       )}
     </div>
   );

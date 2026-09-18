@@ -1,8 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router";
 import { AppShell } from "../components/AppShell.js";
-import { AuthBar } from "../components/AuthBar.js";
-import { PageHeader } from "../components/ui.js";
+import {
+  Badge,
+  Button,
+  buttonClass,
+  Card,
+  Chip,
+  Difficulty,
+  EmptyState,
+  Icon,
+  inputClass,
+  Notice,
+  PageHeader,
+  Segmented,
+  Skeleton,
+  selectClass,
+} from "../components/ui.js";
 import { api, isAborted, type PostedProblemSummary } from "../lib/api.js";
 import { useProgress } from "../lib/progress-context.jsx";
 
@@ -86,43 +100,47 @@ export function CommunityListPage() {
       <PageHeader
         title="みんなの問題"
         lead="ほかの人が投稿した問題を解けます。サンドボックスで作った回路は、テストを付けて投稿できます。"
+        actions={
+          <Link to="/sandbox" className={buttonClass("secondary")}>
+            <Icon name="upload" className="h-4 w-4" />
+            サンドボックスから投稿
+          </Link>
+        }
       />
-      <div className="mb-6">
-        <AuthBar />
-      </div>
 
-      <section className="flex flex-col gap-2">
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value.slice(0, 100))}
-          placeholder="タイトルや仕様文で検索"
-          data-testid="search-input"
-          aria-label="検索"
-          className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm"
-        />
-        <div className="flex flex-wrap gap-2">
-          <div className="flex overflow-hidden rounded-lg border border-slate-300">
-            {SORTS.map((s) => (
-              <button
-                key={s.value}
-                type="button"
-                data-testid={`sort-${s.value}`}
-                aria-pressed={sort === s.value}
-                onClick={() => setSort(s.value)}
-                className={`min-h-11 px-3 text-sm font-medium ${
-                  sort === s.value ? "bg-slate-700 text-white" : "bg-white text-slate-600"
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
+      <Card padded className="flex flex-col gap-3">
+        <label className="relative block">
+          <span className="sr-only">検索</span>
+          <Icon
+            name="search"
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+          />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value.slice(0, 100))}
+            placeholder="タイトルや仕様文で検索"
+            data-testid="search-input"
+            aria-label="検索"
+            className={inputClass("pl-9")}
+          />
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <Segmented<Sort>
+            label="並べ替え"
+            value={sort}
+            onChange={setSort}
+            options={SORTS.map((s) => ({
+              value: s.value,
+              label: s.label,
+              testId: `sort-${s.value}`,
+            }))}
+          />
           <select
             value={difficulty ?? ""}
             onChange={(e) => setDifficulty(e.target.value ? Number(e.target.value) : undefined)}
             data-testid="filter-difficulty"
             aria-label="難易度で絞り込む"
-            className="min-h-11 rounded-lg border border-slate-300 px-2 text-sm"
+            className={selectClass("w-auto")}
           >
             <option value="">難易度すべて</option>
             {[1, 2, 3, 4, 5].map((d) => (
@@ -137,39 +155,38 @@ export function CommunityListPage() {
             placeholder="タグ"
             data-testid="filter-tag"
             aria-label="タグで絞り込む"
-            className="min-h-11 w-28 rounded-lg border border-slate-300 px-2 text-sm"
+            className={inputClass("w-32")}
           />
           {user && (
-            <button
-              type="button"
-              data-testid="filter-mine"
-              aria-pressed={mine}
-              onClick={() => setMine((v) => !v)}
-              className={`min-h-11 rounded-lg border px-3 text-sm font-medium ${
-                mine
-                  ? "border-slate-700 bg-slate-700 text-white"
-                  : "border-slate-300 bg-white text-slate-600"
-              }`}
-            >
+            <Chip data-testid="filter-mine" active={mine} onClick={() => setMine((v) => !v)}>
+              <Icon name="pencil" className="h-3.5 w-3.5" />
               自分の投稿
-            </button>
+            </Chip>
           )}
         </div>
-      </section>
+      </Card>
 
       {error && (
-        <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <Notice tone="danger" role="alert">
           {error}
-        </p>
+        </Notice>
+      )}
+
+      {loading && problems.length === 0 && (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-hidden="true">
+          {["a", "b", "c"].map((k) => (
+            <Skeleton key={k} className="h-36" />
+          ))}
+        </div>
       )}
 
       {!loading && problems.length === 0 && (
-        <p
+        <EmptyState
+          icon="search"
+          title="該当する問題がありません。"
+          body="条件を変えるか、サンドボックスで最初の 1 問を作ってみてください。"
           data-testid="empty-list"
-          className="rounded-lg bg-slate-100 px-3 py-3 text-sm text-slate-600"
-        >
-          該当する問題がありません。
-        </p>
+        />
       )}
 
       <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" data-testid="posted-list">
@@ -178,32 +195,32 @@ export function CommunityListPage() {
             <Link
               to={`/community/${p.id}`}
               data-testid={`posted-${p.id}`}
-              className="flex h-full flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md"
+              className="group flex h-full flex-col gap-2.5 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card transition-[transform,box-shadow,border-color] duration-150 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-float"
             >
-              <span className="text-sm font-semibold leading-snug text-slate-900">{p.title}</span>
+              <span className="flex items-start justify-between gap-2">
+                <span className="text-sm font-semibold leading-snug text-slate-900">{p.title}</span>
+                {p.visibility === "private" && <Badge icon="lock">非公開</Badge>}
+                {p.visibility === "org" && <Badge icon="factory">組織限定</Badge>}
+              </span>
               <span className="line-clamp-2 text-xs leading-relaxed text-slate-500">{p.spec}</span>
-              <span className="mt-auto flex flex-wrap items-center gap-2 pt-1 text-xs text-slate-500">
-                <span>難易度 {p.votedDifficulty ?? p.difficulty}</span>
-                <span>♥ {p.likes}</span>
-                <span data-testid={`clear-rate-${p.id}`}>
+              <span className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-xs text-slate-500">
+                <Difficulty level={p.votedDifficulty ?? p.difficulty} />
+                <span className="inline-flex items-center gap-1">
+                  <Icon name="heart" className="h-3.5 w-3.5 text-rose-400" />
+                  {p.likes}
+                </span>
+                <span data-testid={`clear-rate-${p.id}`} className="inline-flex items-center gap-1">
+                  <Icon name="target" className="h-3.5 w-3.5 text-slate-400" />
                   クリア率 {p.clearRate === null ? "—" : `${p.clearRate}%`}
-                  <span className="ml-1 text-slate-400">
+                  <span className="text-slate-400">
                     ({p.clears}/{p.attempts} 人)
                   </span>
                 </span>
-                {p.visibility === "private" && (
-                  <span className="rounded bg-slate-200 px-1">非公開</span>
-                )}
               </span>
               {p.tags.length > 0 && (
                 <span className="flex flex-wrap gap-1">
                   {p.tags.map((t) => (
-                    <span
-                      key={t}
-                      className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600"
-                    >
-                      {t}
-                    </span>
+                    <Badge key={t}>{t}</Badge>
                   ))}
                 </span>
               )}
@@ -213,15 +230,15 @@ export function CommunityListPage() {
       </ul>
 
       {cursor && (
-        <button
-          type="button"
+        <Button
+          tone="secondary"
+          className="self-center"
           data-testid="load-more"
           disabled={loading}
           onClick={() => void load(true)}
-          className="min-h-11 rounded-lg border border-slate-300 bg-white px-4 text-sm text-slate-700"
         >
           もっと読む
-        </button>
+        </Button>
       )}
     </AppShell>
   );

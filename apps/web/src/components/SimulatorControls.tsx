@@ -1,4 +1,5 @@
 import type { SimSpeed } from "../hooks/useSimulator.js";
+import { Button, Segmented } from "./ui.js";
 
 export type SimulatorControlsProps = {
   speed: SimSpeed;
@@ -8,11 +9,17 @@ export type SimulatorControlsProps = {
   onReset: () => void;
 };
 
-const SPEEDS: Array<{ value: SimSpeed; label: string }> = [
-  { value: 1, label: "1x" },
-  { value: 5, label: "5x" },
+type SpeedKey = "1" | "5" | "instant";
+
+const SPEEDS: ReadonlyArray<{ value: SpeedKey; label: string }> = [
+  { value: "1", label: "1x" },
+  { value: "5", label: "5x" },
   { value: "instant", label: "即時" },
 ];
+
+function toSpeed(key: SpeedKey): SimSpeed {
+  return key === "instant" ? "instant" : key === "5" ? 5 : 1;
+}
 
 /** シミュレータの操作(SPEC.md §5: タイマ速度は 1x / 5x / 即時) */
 export function SimulatorControls({
@@ -24,37 +31,29 @@ export function SimulatorControls({
 }: SimulatorControlsProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <button
-        type="button"
+      <Button
+        tone="secondary"
+        icon={running ? "pause" : "play"}
         data-testid="sim-toggle-run"
         onClick={() => onRunning(!running)}
-        className="min-h-11 rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700"
       >
         {running ? "一時停止" : "再開"}
-      </button>
-      <button
-        type="button"
-        data-testid="sim-reset"
-        onClick={onReset}
-        className="min-h-11 rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700"
-      >
+      </Button>
+      <Button tone="secondary" icon="reset" data-testid="sim-reset" onClick={onReset}>
         リセット
-      </button>
-      <div className="flex overflow-hidden rounded-lg border border-slate-300">
-        {SPEEDS.map((s) => (
-          <button
-            key={String(s.value)}
-            type="button"
-            data-testid={`sim-speed-${s.value}`}
-            onClick={() => onSpeed(s.value)}
-            aria-pressed={speed === s.value}
-            className={`min-h-11 px-3 text-sm font-medium ${
-              speed === s.value ? "bg-slate-700 text-white" : "bg-white text-slate-600"
-            }`}
-          >
-            {s.label}
-          </button>
-        ))}
+      </Button>
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-semibold text-slate-500">タイマ</span>
+        <Segmented<SpeedKey>
+          label="タイマの速さ"
+          value={String(speed) as SpeedKey}
+          onChange={(v) => onSpeed(toSpeed(v))}
+          options={SPEEDS.map((s) => ({
+            value: s.value,
+            label: s.label,
+            testId: `sim-speed-${s.value}`,
+          }))}
+        />
       </div>
     </div>
   );

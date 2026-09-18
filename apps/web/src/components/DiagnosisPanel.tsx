@@ -2,6 +2,7 @@ import type { Circuit } from "@ladder-dojo/core";
 import type { DiagnosisState } from "../hooks/useDiagnosis.js";
 import { useNotation } from "../lib/notation-context.jsx";
 import { LadderView } from "./LadderView.js";
+import { Icon, Skeleton } from "./ui.js";
 
 export type DiagnosisPanelProps = {
   /** 答え合わせしたときの回路。あとから編集されても、診断はこの回路のもの */
@@ -33,16 +34,20 @@ export function DiagnosisPanel({
 
   if (diagnosis.state === "working") {
     return (
-      <p data-testid="diagnosis-working" className="text-sm text-slate-500">
+      <div
+        data-testid="diagnosis-working"
+        className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+      >
+        <Skeleton className="h-5 w-5 rounded-full" />
         つまずいているところを探しています…
-      </p>
+      </div>
     );
   }
 
   const { diagnoses } = diagnosis;
   if (diagnoses.length === 0) {
     return (
-      <p data-testid="diagnosis-empty" className="text-sm text-slate-500">
+      <p data-testid="diagnosis-empty" className="text-sm leading-relaxed text-slate-500">
         自動で見つけられる原因はありませんでした。失敗したテストケースの操作を、動かしながら 1
         つずつ追ってみてください。
       </p>
@@ -52,21 +57,29 @@ export function DiagnosisPanel({
   return (
     <section
       data-testid="diagnosis"
-      className="flex flex-col gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3"
+      className="rise-in flex flex-col gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5"
     >
-      <p className="text-sm font-bold text-amber-900">ここを見てみましょう</p>
+      <p className="flex items-center gap-2 text-sm font-bold text-amber-950">
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-400 text-slate-950">
+          <Icon name="search" className="h-4 w-4" />
+        </span>
+        ここを見てみましょう
+      </p>
       <ul className="flex flex-col gap-3">
         {diagnoses.map((d) => (
-          <li key={`${d.id}-${d.cells.map((c) => `${c.row},${c.col}`).join("-")}`}>
-            <p data-testid={`diagnosis-${d.id}`} className="text-sm font-semibold text-slate-800">
+          <li
+            key={`${d.id}-${d.cells.map((c) => `${c.row},${c.col}`).join("-")}`}
+            className="rounded-xl border border-amber-200/70 bg-white/70 p-3"
+          >
+            <p data-testid={`diagnosis-${d.id}`} className="text-sm font-bold text-slate-900">
               {notation.text(d.title)}
             </p>
-            <p className="mt-0.5 text-sm text-slate-700">{notation.text(d.detail)}</p>
+            <p className="mt-1 text-sm leading-relaxed text-slate-700">{notation.text(d.detail)}</p>
           </li>
         ))}
       </ul>
       {diagnoses.some((d) => d.cells.length > 0) && (
-        <div className="overflow-x-auto rounded-lg bg-white p-2">
+        <div className="overflow-x-auto rounded-xl border border-amber-200/70 bg-white p-2">
           <LadderView
             circuit={circuit}
             deviceLabels={deviceLabels}
@@ -74,7 +87,7 @@ export function DiagnosisPanel({
           />
         </div>
       )}
-      <p className="text-xs text-amber-800">
+      <p className="text-xs text-amber-900/80">
         直し方までは言いません。囲ったところを見て、自分で考えてみてください。
       </p>
     </section>

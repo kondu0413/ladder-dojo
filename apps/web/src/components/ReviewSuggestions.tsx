@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { Link } from "react-router";
 import { useProgress } from "../lib/progress-context.jsx";
 import { dueForReview } from "../lib/review.js";
+import { Icon } from "./ui.js";
 
 export type ReviewSuggestionsProps = {
   problems: readonly Problem[];
@@ -33,22 +34,32 @@ export function ReviewSuggestions({ problems }: ReviewSuggestionsProps) {
   return (
     <section
       data-testid="review-suggestions"
-      className="rounded-xl border border-sky-200 bg-sky-50 p-3"
+      className="flex flex-col gap-3 rounded-2xl border border-sky-200 bg-sky-50 p-4 sm:p-5"
     >
-      <h2 className="text-base font-bold text-sky-900">そろそろ復習しませんか</h2>
-      <p className="mt-0.5 text-xs text-sky-800">
-        前にクリアした問題です。解き直すと、その日の学習にも数えられます。
-      </p>
-      <ul className="mt-2 flex flex-col gap-2">
+      <div className="flex items-start gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-600 text-white">
+          <Icon name="clock" className="h-5 w-5" />
+        </span>
+        <div>
+          <h2 className="text-base font-bold text-sky-950">そろそろ復習しませんか</h2>
+          <p className="mt-0.5 text-xs text-sky-800">
+            前にクリアした問題です。解き直すと、その日の学習にも数えられます。
+          </p>
+        </div>
+      </div>
+      <ul className="flex flex-col gap-2">
         {items.map((item) => (
           <li key={item.problemId}>
             <Link
               to={`/problems/${item.problemId}`}
               data-testid={`review-${item.problemId}`}
-              className="flex min-h-11 items-center justify-between gap-2 rounded-lg bg-white px-3 py-2"
+              className="flex min-h-11 items-center justify-between gap-2 rounded-xl border border-sky-100 bg-white px-3.5 py-2 transition-colors hover:border-sky-300"
             >
               <span className="text-sm font-medium text-slate-800">{item.title}</span>
-              <span className="shrink-0 text-xs text-slate-500">{daysLabel(item.daysSince)}</span>
+              <span className="flex shrink-0 items-center gap-1 text-xs text-slate-500">
+                {daysLabel(item.daysSince)}
+                <Icon name="chevronRight" className="h-4 w-4 text-slate-400" />
+              </span>
             </Link>
           </li>
         ))}

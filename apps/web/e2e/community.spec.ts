@@ -247,8 +247,11 @@ test("通報するとお礼が出る(3 件で非表示になる)", async ({ page
 
   await signUp(page, "reporter");
   await page.goto(url);
-  page.on("dialog", (d) => void d.accept("内容が不適切です"));
+  // 理由は画面の中の欄に書く(ブラウザの prompt() は使わない)
   await page.getByTestId("report-button").click();
+  await expect(page.getByTestId("report-submit")).toBeDisabled();
+  await page.getByTestId("report-reason").fill("内容が不適切です");
+  await page.getByTestId("report-submit").click();
   await expect(page.getByTestId("notice")).toContainText("通報を受け付けました");
 });
 
@@ -262,8 +265,9 @@ test("投稿者は自分の投稿を削除できる", async ({ page }) => {
   await page.getByTestId("publish-submit").click();
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
 
-  page.on("dialog", (d) => void d.accept());
+  // 取り消せない操作なので、もう一度押して初めて消える
   await page.getByTestId("delete-posted").click();
+  await page.getByTestId("delete-posted-confirm").click();
   await expect(page.getByRole("heading", { name: "みんなの問題" })).toBeVisible();
   await page.getByTestId("search-input").fill(title);
   await expect(page.getByTestId("empty-list")).toBeVisible();

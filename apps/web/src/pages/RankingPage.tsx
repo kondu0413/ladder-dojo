@@ -1,7 +1,16 @@
 import { useEffect, useState } from "react";
 import { AppShell } from "../components/AppShell.js";
-import { AuthBar } from "../components/AuthBar.js";
-import { PageHeader } from "../components/ui.js";
+import {
+  Card,
+  Chip,
+  EmptyState,
+  Icon,
+  Notice,
+  PageHeader,
+  Segmented,
+  Skeleton,
+  selectClass,
+} from "../components/ui.js";
 import {
   api,
   isAborted,
@@ -24,6 +33,13 @@ const PERIODS: Array<{ value: RankingPeriod; label: string }> = [
   { value: "monthly", label: "月間" },
   { value: "all", label: "累計" },
 ];
+
+/** 上位 3 人の色。数字も出すので、色が分からなくても順位は読める */
+const MEDAL: Record<number, string> = {
+  1: "bg-amber-400 text-slate-950",
+  2: "bg-slate-300 text-slate-800",
+  3: "bg-orange-300 text-orange-950",
+};
 
 /**
  * ランキング(SPEC.md §3.7)。
@@ -53,7 +69,7 @@ export function RankingPage() {
   useEffect(() => {
     const controller = new AbortController();
     api
-      .ranking({ metric, period, ...(orgId ? { orgId } : {}) })
+      .ranking({ metric, period, ...(orgId ? { orgId } : {}) }, controller.signal)
       .then((res) => {
         if (controller.signal.aborted) return;
         setData(res);
@@ -75,57 +91,40 @@ export function RankingPage() {
         title="ランキング"
         lead="速さは競いません。解いた数・作った問題への反応・続けた日数で並びます。"
       />
-      <div className="mb-6">
-        <AuthBar />
-      </div>
 
-      <section className="flex flex-col gap-2">
+      <Card padded className="flex flex-col gap-3">
         <div className="flex flex-wrap gap-2">
           {METRICS.map((m) => (
-            <button
+            <Chip
               key={m.value}
-              type="button"
               data-testid={`metric-${m.value}`}
-              aria-pressed={metric === m.value}
+              active={metric === m.value}
               onClick={() => setMetric(m.value)}
-              className={`min-h-11 rounded-lg border px-3 text-sm font-medium ${
-                metric === m.value
-                  ? "border-slate-700 bg-slate-700 text-white"
-                  : "border-slate-300 bg-white text-slate-600"
-              }`}
             >
               {m.label}
-            </button>
+            </Chip>
           ))}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex overflow-hidden rounded-lg border border-slate-300">
-            {PERIODS.map((p) => (
-              <button
-                key={p.value}
-                type="button"
-                data-testid={`period-${p.value}`}
-                aria-pressed={period === p.value}
-                disabled={isStreak}
-                onClick={() => setPeriod(p.value)}
-                className={`min-h-11 px-3 text-sm font-medium disabled:opacity-40 ${
-                  period === p.value && !isStreak
-                    ? "bg-slate-700 text-white"
-                    : "bg-white text-slate-600"
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
+          <Segmented<RankingPeriod>
+            label="期間"
+            value={period}
+            onChange={setPeriod}
+            options={PERIODS.map((p) => ({
+              value: p.value,
+              label: p.label,
+              testId: `period-${p.value}`,
+              disabled: isStreak,
+            }))}
+          />
           {orgs.length > 0 && (
             <select
               value={orgId}
               onChange={(e) => setOrgId(e.target.value)}
               data-testid="ranking-scope"
               aria-label="集計範囲"
-              className="min-h-11 rounded-lg border border-slate-300 px-2 text-sm"
+              className={selectClass("w-auto")}
             >
               <option value="">全体</option>
               {orgs.map((o) => (
@@ -135,25 +134,30 @@ export function RankingPage() {
               ))}
             </select>
           )}
+          {isStreak && (
+            <p className="text-xs text-slate-500">
+              連続学習日数は「いまの連続」なので、期間では切りません。
+            </p>
+          )}
         </div>
-        {isStreak && (
-          <p className="text-xs text-slate-500">
-            連続学習日数は「いまの連続」なので、期間では切りません。
-          </p>
-        )}
-      </section>
+      </Card>
 
       {data?.me && (
         <section
           data-testid="ranking-me"
-          className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3"
+          className="dot-grid flex flex-wrap items-center gap-x-6 gap-y-2 rounded-2xl bg-slate-950 px-5 py-4 text-white"
         >
-          <p className="text-sm font-semibold text-sky-900">あなたのいま</p>
-          <p className="font-mono text-2xl font-bold text-sky-900" data-testid="ranking-me-value">
-            {data.me.value}
-            <span className="ml-1 font-sans text-sm font-normal text-sky-800">{unit}</span>
-          </p>
-          <p className="w-full text-xs text-sky-800">
+          <div className="flex flex-col">
+            <p className="text-xs font-semibold text-slate-300">あなたのいま</p>
+            <p
+              className="font-mono text-3xl font-bold tracking-tight text-amber-300"
+              data-testid="ranking-me-value"
+            >
+              {data.me.value}
+              <span className="ml-1 font-sans text-sm font-medium text-slate-300">{unit}</span>
+            </p>
+          </div>
+          <p className="max-w-md text-xs leading-relaxed text-slate-400">
             クリアした記録はすぐ残っています。下の順位表への反映は 1 日 1
             回なので、いまの値はここで確かめてください。
           </p>
@@ -161,7 +165,11 @@ export function RankingPage() {
       )}
 
       {data && (
-        <p className="text-xs text-slate-500" data-testid="ranking-computed-at">
+        <p
+          className="flex items-center gap-1.5 text-xs text-slate-500"
+          data-testid="ranking-computed-at"
+        >
+          <Icon name="clock" className="h-3.5 w-3.5" />
           {data.live
             ? "この順位はいま計算した結果です。"
             : `下の順位は ${new Date(data.computedAt).toLocaleString("ja-JP")} 時点のものです。全体ランキングは 1 日 1 回更新されます。`}
@@ -169,43 +177,65 @@ export function RankingPage() {
       )}
 
       {error && (
-        <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <Notice tone="danger" role="alert">
           {error}
-        </p>
+        </Notice>
+      )}
+
+      {!data && !error && (
+        <div className="flex flex-col gap-2" aria-hidden="true">
+          <Skeleton className="h-12" />
+          <Skeleton className="h-12" />
+          <Skeleton className="h-12" />
+        </div>
       )}
 
       {data && data.entries.length === 0 && (
-        <p
+        <EmptyState
+          icon="trophy"
           data-testid="ranking-empty"
-          className="rounded-lg bg-slate-100 px-3 py-3 text-sm text-slate-600"
-        >
-          {data.live
-            ? "まだ記録がありません。"
-            : "まだ順位表ができていません。全体ランキングは 1 日 1 回作られます。"}
-        </p>
+          title={data.live ? "まだ記録がありません。" : "まだ順位表ができていません。"}
+          body={
+            data.live ? "問題を解くと、ここに並びます。" : "全体ランキングは 1 日 1 回作られます。"
+          }
+        />
       )}
 
       {data && data.entries.length > 0 && (
-        <ol className="flex flex-col gap-1" data-testid="ranking-list">
-          {data.entries.map((e) => (
-            <li
-              key={e.userId}
-              data-testid={`rank-${e.userId}`}
-              className={`flex items-center gap-3 rounded-lg border px-3 py-2 ${
-                e.userId === user?.id ? "border-sky-400 bg-sky-50" : "border-slate-200 bg-white"
-              }`}
-            >
-              <span className="w-8 shrink-0 text-right font-mono text-sm text-slate-500">
-                {e.rank}
-              </span>
-              <span className="min-w-0 flex-1 truncate text-sm text-slate-800">{e.userName}</span>
-              <span className="shrink-0 font-mono text-sm font-medium text-slate-900">
-                {e.value}
-                <span className="ml-0.5 text-xs font-normal text-slate-500">{unit}</span>
-              </span>
-            </li>
-          ))}
-        </ol>
+        <Card>
+          <ol className="divide-y divide-slate-100" data-testid="ranking-list">
+            {data.entries.map((e) => {
+              const me = e.userId === user?.id;
+              return (
+                <li
+                  key={e.userId}
+                  data-testid={`rank-${e.userId}`}
+                  className={`flex items-center gap-3 px-4 py-2.5 ${me ? "bg-amber-50" : ""}`}
+                >
+                  <span
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full font-mono text-sm font-bold tabular-nums ${
+                      MEDAL[e.rank] ?? "bg-slate-100 text-slate-500"
+                    }`}
+                  >
+                    {e.rank}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
+                    {e.userName}
+                    {me && (
+                      <span className="ml-2 text-xs font-semibold text-amber-700">あなた</span>
+                    )}
+                  </span>
+                  <span className="shrink-0 font-mono text-sm font-bold tabular-nums text-slate-900">
+                    {e.value}
+                    <span className="ml-0.5 font-sans text-xs font-normal text-slate-500">
+                      {unit}
+                    </span>
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        </Card>
       )}
     </AppShell>
   );

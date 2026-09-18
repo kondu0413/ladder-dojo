@@ -183,7 +183,9 @@ test.describe("保存とテストケース(§3.4)", () => {
     await expect(page.getByTestId("sandbox-message")).toContainText("保存しました");
     await expect(page.getByText("消す回路")).toBeVisible();
 
-    await page.getByRole("button", { name: "削除" }).click();
+    // 取り消せない操作なので、もう一度押して初めて消える
+    await page.getByRole("button", { name: "削除", exact: true }).click();
+    await page.getByRole("button", { name: "削除する" }).click();
     await expect(page.getByTestId("sandbox-message")).toContainText("削除しました");
     await expect(page.getByText("消す回路")).toHaveCount(0);
   });

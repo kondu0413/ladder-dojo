@@ -22,3 +22,6 @@ blob-report/
 .vite/
 *.log
 .DS_Store
+
+# 作業用スクリプト(スクリーンショット取得など。リポジトリには入れない)
+.scratch/

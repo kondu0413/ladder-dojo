@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router";
+import { AccountMenu, AccountNotices } from "./AuthBar.js";
 import { OfflineNotice } from "./OfflineNotice.js";
+import { Icon, type IconName } from "./ui.js";
 
 /**
- * 全画面で共通の枠(S-020)。
+ * 全画面で共通の枠(S-020 / S-036)。
  *
  * ここを 1 つにしている理由は 2 つ。
  *
@@ -11,6 +13,10 @@ import { OfflineNotice } from "./OfflineNotice.js";
  *    640px 固定で、1440px のディスプレイでは左右が大きく空いて間延びしていた
  * 2. **ヘッダーを各ページが自前で組んでいた**。スマホでは題名と並んだリンクに
  *    押し出されて、題名が 3 行に折れていた
+ *
+ * 本文(`main`)は縦に並べて間隔を持たせる。以前は間隔が無く、各画面が
+ * 自前で余白を足していて、足し忘れた画面(サンドボックス・ランキングなど)は
+ * 部品同士がくっついていた。
  *
  * 幅は `width` で選ぶ。読み物は狭く、一覧や表は広く。
  */
@@ -32,8 +38,11 @@ export function AppShell({ children, width = "wide", bare = false }: AppShellPro
   return (
     <div className="flex min-h-dvh flex-col bg-slate-50 text-slate-900">
       {!bare && <AppHeader />}
-      <main className={`mx-auto w-full flex-1 px-4 py-6 sm:px-6 lg:py-10 ${WIDTH_CLASS[width]}`}>
+      <main
+        className={`mx-auto flex w-full flex-1 flex-col gap-6 px-4 py-6 sm:px-6 lg:py-8 ${WIDTH_CLASS[width]}`}
+      >
         <OfflineNotice />
+        <AccountNotices />
         {children}
       </main>
       <AppFooter />
@@ -41,16 +50,27 @@ export function AppShell({ children, width = "wide", bare = false }: AppShellPro
   );
 }
 
-const NAV = [
-  { to: "/problems", label: "公式問題" },
-  { to: "/community", label: "みんなの問題" },
-  { to: "/rankings", label: "ランキング" },
-  { to: "/orgs", label: "組織" },
-  { to: "/sandbox", label: "サンドボックス" },
-] as const;
+const NAV: ReadonlyArray<{ to: string; label: string; icon: IconName }> = [
+  { to: "/problems", label: "公式問題", icon: "grid" },
+  { to: "/community", label: "みんなの問題", icon: "users" },
+  { to: "/sandbox", label: "サンドボックス", icon: "flask" },
+  { to: "/samples", label: "サンプル", icon: "cpu" },
+  { to: "/rankings", label: "ランキング", icon: "trophy" },
+  { to: "/orgs", label: "組織", icon: "factory" },
+];
+
+/** ロゴと名前。ヘッダーと紹介画面で同じものを使う */
+export function Brand({ to = "/", onClick }: { to?: string; onClick?: () => void }) {
+  return (
+    <Link to={to} onClick={onClick} className="flex shrink-0 items-center gap-2.5 rounded-lg">
+      <img src="/icon.svg" alt="" aria-hidden="true" className="h-8 w-8 rounded-lg" />
+      <span className="text-[15px] font-bold tracking-tight text-white">ラダー道場</span>
+    </Link>
+  );
+}
 
 /**
- * 画面上部の帯。
+ * 画面上部の帯。紺地に白。母線とアイコンの色に合わせている。
  *
  * 狭い画面ではリンクを畳んでボタン 1 つにする。並べたままだと題名を押し出して、
  * 「ラダー図 / トレーニ / ング」のように折れてしまう。
@@ -58,16 +78,15 @@ const NAV = [
 function AppHeader() {
   const [open, setOpen] = useState(false);
   const { pathname } = useLocation();
+  // どこかへ移ったら畳む。開いたまま次の画面に行くと、上半分が隠れたままになる
+  const close = () => setOpen(false);
 
   return (
-    <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/90 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
-        <Link to="/" className="flex shrink-0 items-center gap-2" onClick={() => setOpen(false)}>
-          <img src="/icon.svg" alt="" aria-hidden="true" className="h-8 w-8 rounded-lg" />
-          <span className="text-base font-bold tracking-tight text-slate-900">ラダー道場</span>
-        </Link>
+    <header className="sticky top-0 z-30 border-b border-white/10 bg-slate-950 text-white">
+      <div className="mx-auto flex h-14 max-w-6xl items-center gap-2 px-4 sm:px-6">
+        <Brand onClick={close} />
 
-        <nav aria-label="メニュー" className="ml-auto hidden items-center gap-1 md:flex">
+        <nav aria-label="メニュー" className="ml-4 hidden h-full items-stretch gap-0.5 md:flex">
           {NAV.map((item) => (
             <NavLink key={item.to} to={item.to} active={pathname.startsWith(item.to)}>
               {item.label}
@@ -75,44 +94,50 @@ function AppHeader() {
           ))}
         </nav>
 
-        <button
-          type="button"
-          data-testid="nav-toggle"
-          aria-expanded={open}
-          aria-controls="mobile-nav"
-          onClick={() => setOpen((v) => !v)}
-          className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-600 md:hidden"
-        >
-          <span className="sr-only">メニューを開く</span>
-          <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" aria-hidden="true">
-            <title>メニュー</title>
-            {open ? (
-              <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth="1.8" />
-            ) : (
-              <path d="M3 6h14M3 10h14M3 14h14" stroke="currentColor" strokeWidth="1.8" />
-            )}
-          </svg>
-        </button>
+        <div className="ml-auto flex min-w-0 items-center gap-1.5">
+          <AccountMenu />
+          <button
+            type="button"
+            data-testid="nav-toggle"
+            aria-expanded={open}
+            aria-controls="mobile-nav"
+            onClick={() => setOpen((v) => !v)}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-200 transition-colors hover:bg-white/10 md:hidden"
+          >
+            <span className="sr-only">メニューを開く</span>
+            <Icon name={open ? "close" : "menu"} className="h-5 w-5" />
+          </button>
+        </div>
       </div>
 
       {open && (
         <nav
           id="mobile-nav"
           aria-label="メニュー"
-          className="border-t border-slate-200 bg-white px-4 pb-3 md:hidden"
+          className="border-t border-white/10 bg-slate-950 px-2 pb-2 pt-1 md:hidden"
         >
           <ul className="flex flex-col">
-            {NAV.map((item) => (
-              <li key={item.to}>
-                <Link
-                  to={item.to}
-                  onClick={() => setOpen(false)}
-                  className="block min-h-11 py-3 text-sm font-medium text-slate-700"
-                >
-                  {item.label}
-                </Link>
-              </li>
-            ))}
+            {NAV.map((item) => {
+              const active = pathname.startsWith(item.to);
+              return (
+                <li key={item.to}>
+                  <Link
+                    to={item.to}
+                    onClick={close}
+                    aria-current={active ? "page" : undefined}
+                    className={`flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors ${
+                      active ? "bg-white/10 text-white" : "text-slate-300 hover:bg-white/5"
+                    }`}
+                  >
+                    <Icon
+                      name={item.icon}
+                      className={`h-4 w-4 ${active ? "text-amber-300" : "text-slate-400"}`}
+                    />
+                    <span>{item.label}</span>
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         </nav>
       )}
@@ -133,13 +158,17 @@ function NavLink({
     <Link
       to={to}
       aria-current={active ? "page" : undefined}
-      className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
-        active
-          ? "bg-blue-50 text-blue-700"
-          : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+      className={`relative flex items-center rounded-lg px-3 text-[13px] font-medium transition-colors ${
+        active ? "text-white" : "text-slate-300 hover:bg-white/5 hover:text-white"
       }`}
     >
       {children}
+      {active && (
+        <span
+          aria-hidden="true"
+          className="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-amber-400"
+        />
+      )}
     </Link>
   );
 }
@@ -147,8 +176,12 @@ function NavLink({
 function AppFooter() {
   return (
     <footer className="border-t border-slate-200 bg-white">
-      <div className="mx-auto max-w-6xl px-4 py-6 text-xs text-slate-500 sm:px-6">
-        PLC のラダー図を「読む」→「直す」→「書く」の順に身につける練習アプリ。
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-6 text-xs text-slate-500 sm:px-6">
+        <span className="flex items-center gap-2">
+          <img src="/icon.svg" alt="" aria-hidden="true" className="h-5 w-5 rounded-md" />
+          PLC のラダー図を「読む」→「直す」→「書く」の順に身につける練習アプリ。
+        </span>
+        <span>無料で使えます ・ 登録は Google アカウントだけ</span>
       </div>
     </footer>
   );

@@ -29,11 +29,11 @@ export type LadderViewProps = {
   highlight?: ReadonlyArray<{ row: number; col: number }> | undefined;
 };
 
-/** 電流が流れている色 / 通電しているだけの色 / 無電圧の色 */
+/** 電流が流れている色 / 通電しているだけの色 / 無電圧の色 / 母線 */
 const FLOW = "#f59e0b";
-const LIVE = "#fcd34d";
+const LIVE = "#fbbf24";
 const DEAD = "#94a3b8";
-const RAIL = "#475569";
+const RAIL = "#1e293b";
 
 /**
  * ラダー図の SVG 描画(DECISIONS.md D-004)。
@@ -85,8 +85,24 @@ export function LadderView({
       aria-label={description}
     >
       <title>{description}</title>
-      <line x1={leftX} y1={4} x2={leftX} y2={height - 4} stroke={RAIL} strokeWidth={4} />
-      <line x1={rightX} y1={4} x2={rightX} y2={height - 4} stroke={RAIL} strokeWidth={4} />
+      <line
+        x1={leftX}
+        y1={6}
+        x2={leftX}
+        y2={height - 6}
+        stroke={RAIL}
+        strokeWidth={5}
+        strokeLinecap="round"
+      />
+      <line
+        x1={rightX}
+        y1={6}
+        x2={rightX}
+        y2={height - 6}
+        stroke={RAIL}
+        strokeWidth={5}
+        strokeLinecap="round"
+      />
 
       {Array.from({ length: circuit.rows }, (_, row) =>
         Array.from({ length: circuit.cols }, (_, col) => (
@@ -136,7 +152,7 @@ type CellViewProps = {
  * - 無電圧: 細い実線
  */
 function leadProps(on: boolean, flowing: boolean) {
-  if (flowing) return { stroke: FLOW, strokeWidth: 3.5 };
+  if (flowing) return { stroke: FLOW, strokeWidth: 3.5, strokeLinecap: "round" as const };
   if (on) return { stroke: LIVE, strokeWidth: 2, strokeDasharray: "5 3" };
   return { stroke: DEAD, strokeWidth: 2 };
 }
@@ -179,13 +195,27 @@ function CellView({
       data-flowing={flowing}
       data-highlighted={isHighlighted || undefined}
     >
+      {/* 編集中は空のマスにも薄い枠を出す。何も無い白い面では、どこを押せばよいか分からない */}
+      {onTapCell && !el && !isSelected && !isHighlighted && (
+        <rect
+          x={x + 4}
+          y={y + 4}
+          width={CELL_W - 8}
+          height={CELL_H - 8}
+          rx={8}
+          fill="none"
+          stroke="#e2e8f0"
+          strokeWidth={1}
+          strokeDasharray="3 4"
+        />
+      )}
       {isHighlighted && (
         <rect
           x={x + 1}
           y={y + 1}
           width={CELL_W - 2}
           height={CELL_H - 2}
-          rx={6}
+          rx={8}
           fill="#fef3c7"
           stroke="#d97706"
           strokeWidth={2}
@@ -198,9 +228,9 @@ function CellView({
           y={y + 2}
           width={CELL_W - 4}
           height={CELL_H - 4}
-          rx={6}
-          fill="#dbeafe"
-          stroke="#2563eb"
+          rx={8}
+          fill="#e0f2fe"
+          stroke="#0284c7"
           strokeWidth={2}
         />
       )}
@@ -228,7 +258,8 @@ function CellView({
           x2={nodeX(col + 1)}
           y2={wireY(row + 1)}
           stroke={rightOn ? FLOW : DEAD}
-          strokeWidth={rightOn ? 3 : 2}
+          strokeWidth={rightOn ? 3.5 : 2}
+          strokeLinecap="round"
         />
       )}
 
@@ -238,7 +269,7 @@ function CellView({
           y={y + 16}
           textAnchor="middle"
           data-testid={`cell-text-${row}-${col}`}
-          className={`fill-slate-700 font-medium ${
+          className={`fill-slate-800 font-mono font-semibold ${
             cellText.length > 8 ? "text-[10px]" : "text-[13px]"
           }`}
         >
@@ -262,8 +293,8 @@ function CellView({
           y={y}
           width={CELL_W}
           height={CELL_H}
-          fill="transparent"
-          className="cursor-pointer"
+          rx={8}
+          className="cursor-pointer fill-transparent transition-[fill] hover:fill-slate-900/[0.05] active:fill-slate-900/10"
           onPointerDown={handleDown}
           onPointerUp={handleUp}
           onPointerLeave={handleUp}
@@ -328,6 +359,7 @@ function Contact({
         y2={barBottom}
         stroke={body}
         strokeWidth={w}
+        strokeLinecap="round"
       />
       <line
         x1={x + half + gap}
@@ -336,6 +368,7 @@ function Contact({
         y2={barBottom}
         stroke={body}
         strokeWidth={w}
+        strokeLinecap="round"
       />
       {el.kind === "nc" && (
         <line
@@ -345,6 +378,7 @@ function Contact({
           y2={barTop + 2}
           stroke={body}
           strokeWidth={w}
+          strokeLinecap="round"
         />
       )}
       {el.kind === "rise" && (
@@ -352,7 +386,7 @@ function Contact({
           x={x + half}
           y={y + 5}
           textAnchor="middle"
-          className="fill-slate-600 text-[12px] font-bold"
+          className="fill-slate-700 text-[12px] font-bold"
         >
           {risingMark}
         </text>
@@ -392,25 +426,35 @@ function Coil({
   return (
     <g>
       <line x1={x} y1={y} x2={x + half - gap} y2={y} {...leadProps(leftOn, flowing)} />
-      <line x1={x + half + gap} y1={y} x2={x + CELL_W} y2={y} stroke={color} strokeWidth={w} />
+      <line
+        x1={x + half + gap}
+        y1={y}
+        x2={x + CELL_W}
+        y2={y}
+        stroke={color}
+        strokeWidth={w}
+        strokeLinecap="round"
+      />
       <path
         d={`M ${x + half - gap} ${y - 13} A 15 15 0 0 0 ${x + half - gap} ${y + 13}`}
         fill="none"
         stroke={color}
         strokeWidth={w}
+        strokeLinecap="round"
       />
       <path
         d={`M ${x + half + gap} ${y - 13} A 15 15 0 0 1 ${x + half + gap} ${y + 13}`}
         fill="none"
         stroke={color}
         strokeWidth={w}
+        strokeLinecap="round"
       />
       {mark && (
         <text
           x={x + half}
           y={y + 5}
           textAnchor="middle"
-          className="fill-slate-600 text-[12px] font-bold"
+          className="fill-slate-700 text-[12px] font-bold"
         >
           {mark}
         </text>

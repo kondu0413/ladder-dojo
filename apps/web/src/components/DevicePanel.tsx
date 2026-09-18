@@ -3,6 +3,7 @@ import { devicePresets } from "@ladder-dojo/core";
 import { useMemo } from "react";
 import type { InputControl } from "../hooks/useSimulator.js";
 import { useNotation } from "../lib/notation-context.jsx";
+import { Label } from "./ui.js";
 
 export type DevicePanelProps = {
   devices: DeviceId[];
@@ -31,25 +32,25 @@ export function DevicePanel({ devices, snapshot, circuit, deviceLabels, input }:
   const notation = useNotation();
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       {inputs.length > 0 && (
-        <section>
-          <h3 className="mb-1.5 text-xs font-semibold text-slate-500">
-            {input ? "入力(押している間だけ ON)" : "入力"}
-          </h3>
+        <section className="flex flex-col gap-2">
+          <Label>{input ? "入力(押している間だけ ON)" : "入力"}</Label>
           <div className="flex flex-wrap gap-2">
             {inputs.map((d) => {
               const on = snapshot.bits[d] ?? false;
-              const cls = `min-h-11 min-w-20 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+              const cls = `flex min-h-12 min-w-[5.5rem] flex-col items-start justify-center rounded-xl border-2 px-3 py-1.5 text-left transition-[background-color,border-color,box-shadow,transform] duration-100 ${
                 on
-                  ? "border-amber-500 bg-amber-400 text-amber-950"
-                  : "border-slate-300 bg-white text-slate-600"
+                  ? "border-amber-400 bg-amber-300 text-slate-950 shadow-glow"
+                  : "border-slate-300 bg-white text-slate-700"
               }`;
               const body = (
                 <>
-                  <span className="block font-mono">{notation.device(d)}</span>
+                  <span className="font-mono text-sm font-semibold leading-tight">
+                    {notation.device(d)}
+                  </span>
                   {deviceLabels?.[d] && (
-                    <span className="block text-[10px] font-normal opacity-70">
+                    <span className="text-[11px] font-normal leading-tight opacity-70">
                       {deviceLabels[d]}
                     </span>
                   )}
@@ -65,7 +66,14 @@ export function DevicePanel({ devices, snapshot, circuit, deviceLabels, input }:
                 );
               }
               return (
-                <InputButton key={d} device={d} on={on} input={input} className={cls} body={body} />
+                <InputButton
+                  key={d}
+                  device={d}
+                  on={on}
+                  input={input}
+                  className={`${cls} cursor-pointer select-none active:translate-y-px hover:border-slate-400`}
+                  body={body}
+                />
               );
             })}
           </div>
@@ -73,8 +81,8 @@ export function DevicePanel({ devices, snapshot, circuit, deviceLabels, input }:
       )}
 
       {outputs.length > 0 && (
-        <section>
-          <h3 className="mb-1.5 text-xs font-semibold text-slate-500">出力・内部</h3>
+        <section className="flex flex-col gap-2">
+          <Label>出力・内部</Label>
           <div className="flex flex-wrap gap-2">
             {outputs.map((d) => (
               <DeviceChip
@@ -143,13 +151,13 @@ function InputButton({
         aria-pressed={held}
         aria-label={`押したままにする(${device})`}
         onClick={() => input.toggleHold(device)}
-        className={`min-h-11 rounded-lg border px-2 text-[11px] font-medium ${
+        className={`min-h-9 rounded-lg border px-2 text-[11px] font-semibold transition-colors ${
           held
-            ? "border-amber-500 bg-amber-100 text-amber-900"
-            : "border-slate-200 bg-slate-50 text-slate-500"
+            ? "border-amber-400 bg-amber-100 text-amber-900"
+            : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100"
         }`}
       >
-        保持
+        {held ? "保持中" : "保持"}
       </button>
     </div>
   );
@@ -187,14 +195,22 @@ function DeviceChip({
     <div
       data-testid={`device-${device}`}
       data-on={on}
-      className={`min-h-11 min-w-20 rounded-lg border px-3 py-2 text-sm ${
+      className={`flex min-h-12 min-w-[5.5rem] items-center gap-2.5 rounded-xl border px-3 py-1.5 transition-colors ${
         on
-          ? "border-amber-500 bg-amber-100 text-amber-900"
+          ? "border-amber-300 bg-amber-50 text-amber-950"
           : "border-slate-200 bg-slate-50 text-slate-500"
       }`}
     >
-      <span className="block font-mono font-medium">{shown}</span>
-      {detail && <span className="block text-[10px] opacity-70">{detail}</span>}
+      <span
+        aria-hidden="true"
+        className={`h-2.5 w-2.5 shrink-0 rounded-full transition-[background-color,box-shadow] ${
+          on ? "bg-amber-400 shadow-[0_0_0_3px_rgb(251_191_36/0.3)]" : "bg-slate-300"
+        }`}
+      />
+      <span className="flex flex-col leading-tight">
+        <span className="font-mono text-sm font-semibold">{shown}</span>
+        {detail && <span className="text-[11px] tabular-nums opacity-70">{detail}</span>}
+      </span>
     </div>
   );
 }
