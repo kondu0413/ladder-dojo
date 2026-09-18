@@ -7,6 +7,10 @@ export type SimulatorControlsProps = {
   onSpeed: (speed: SimSpeed) => void;
   onRunning: (running: boolean) => void;
   onReset: () => void;
+  /** 一時停止中に 1 スキャン進める(S-038) */
+  onStep: () => void;
+  /** ここまでのスキャン数。1 スキャンずつ進めるときの目安 */
+  scans: number;
 };
 
 type SpeedKey = "1" | "5" | "instant";
@@ -28,6 +32,8 @@ export function SimulatorControls({
   onSpeed,
   onRunning,
   onReset,
+  onStep,
+  scans,
 }: SimulatorControlsProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -39,9 +45,27 @@ export function SimulatorControls({
       >
         {running ? "一時停止" : "再開"}
       </Button>
+      {/* 止めている間だけ押せる。上から下へ評価される順番を、1 スキャンずつ目で追える */}
+      <Button
+        tone="secondary"
+        icon="chevronRight"
+        data-testid="sim-step"
+        disabled={running}
+        title={running ? "一時停止すると 1 スキャンずつ進められます" : "1 スキャン進める"}
+        onClick={onStep}
+      >
+        1 スキャン
+      </Button>
       <Button tone="secondary" icon="reset" data-testid="sim-reset" onClick={onReset}>
         リセット
       </Button>
+      <span
+        className="rounded-md bg-slate-100 px-2 py-1 font-mono text-[11px] tabular-nums text-slate-500"
+        data-testid="sim-scans"
+        title="ここまでのスキャン数"
+      >
+        {scans} scan
+      </span>
       <div className="flex items-center gap-2">
         <span className="text-xs font-semibold text-slate-500">タイマ</span>
         <Segmented<SpeedKey>

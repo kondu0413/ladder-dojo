@@ -97,6 +97,26 @@ test("置いた部品を消せる", async ({ page }) => {
   await expect(page.getByTestId("cell-text-0-0")).toHaveCount(0);
 });
 
+test("置いた部品を元に戻せて、やり直せる(S-038)", async ({ page }) => {
+  await page.goto("/sandbox");
+  await expect(page.getByTestId("editor-undo")).toBeDisabled();
+
+  await page.getByTestId("cell-0-0").click();
+  await page.getByTestId("part-no").click();
+  await expect(page.getByTestId("cell-text-0-0")).toHaveText("X0");
+
+  await page.getByTestId("editor-undo").click();
+  await expect(page.getByTestId("cell-text-0-0")).toHaveCount(0);
+  await expect(page.getByTestId("editor-redo")).toBeEnabled();
+
+  await page.getByTestId("editor-redo").click();
+  await expect(page.getByTestId("cell-text-0-0")).toHaveText("X0");
+
+  // キーボードでも戻せる
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect(page.getByTestId("cell-text-0-0")).toHaveCount(0);
+});
+
 test("タイマの設定値を変えて置ける", async ({ page }) => {
   await page.goto("/sandbox");
   await page.getByTestId("cell-0-0").click();

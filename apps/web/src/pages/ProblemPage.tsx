@@ -33,11 +33,12 @@ import {
   Segmented,
 } from "../components/ui.js";
 import { useDiagnosis } from "../hooks/useDiagnosis.js";
+import { useHistory } from "../hooks/useHistory.js";
 import { useSimulator } from "../hooks/useSimulator.js";
 import { labelMap } from "../lib/describe.js";
 import { useNotation } from "../lib/notation-context.jsx";
 import { useProgress } from "../lib/progress-context.jsx";
-import { findProblem, MODE_LABELS, STAGE_LABELS } from "../problems/index.js";
+import { findProblem, MODE_LABELS, nextProblem, STAGE_LABELS } from "../problems/index.js";
 
 export function ProblemPage() {
   const { id } = useParams();
@@ -96,7 +97,8 @@ export function ProblemPage() {
 // ---------------------------------------------------------------------------
 
 function ReadMode({ problem }: { problem: Problem }) {
-  const { record } = useProgress();
+  const { record, get } = useProgress();
+  const next = nextProblem(problem.id, (id) => get(id).cleared);
   const questions = problem.read?.questions ?? [];
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
@@ -185,13 +187,21 @@ function ReadMode({ problem }: { problem: Problem }) {
                 ? "次の問題に進みましょう。"
                 : "解説を読んで、実際に動かして確かめてみてください。もう一度開き直せばやり直せます。"}
             </p>
-            <Link
-              to="/problems"
-              className="mt-2 inline-flex w-fit items-center gap-1 text-sm font-semibold underline-offset-4 hover:underline"
-            >
-              問題一覧に戻る
-              <Icon name="arrowRight" className="h-4 w-4" />
-            </Link>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {next && (
+                <Link
+                  to={`/problems/${next.id}`}
+                  data-testid="next-problem"
+                  className={buttonClass(allCorrect ? "accent" : "primary", "", "sm")}
+                >
+                  次の問題へ: {next.title}
+                  <Icon name="arrowRight" className="h-4 w-4" />
+                </Link>
+              )}
+              <Link to="/problems" className={buttonClass("secondary", "", "sm")}>
+                問題一覧に戻る
+              </Link>
+            </div>
           </div>
         </div>
       )}
@@ -411,6 +421,8 @@ function FreePlay({ problem }: { problem: Problem }) {
         onSpeed={sim.setSpeed}
         onRunning={sim.setRunning}
         onReset={sim.reset}
+        onStep={sim.step}
+        scans={sim.scans}
       />
       <DevicePanel
         devices={sim.devices}
@@ -428,13 +440,16 @@ function FreePlay({ problem }: { problem: Problem }) {
 // ---------------------------------------------------------------------------
 
 function BuildMode({ problem }: { problem: Problem }) {
-  const { record, recordSubmission } = useProgress();
+  const { record, recordSubmission, get } = useProgress();
   const notation = useNotation();
   const initial = useMemo<Circuit>(
     () => problem.fix?.initial ?? problem.write?.initial ?? emptyCircuit(6, 4),
     [problem],
   );
-  const [circuit, setCircuit] = useState<Circuit>(initial);
+  // 編集は「元に戻す / やり直す」つき(S-038)。誤タップで消した部品を取り戻せる
+  const history = useHistory<Circuit>(initial);
+  const circuit = history.value;
+  const setCircuit = history.set;
   const [tab, setTab] = useState<"edit" | "run">("edit");
   /**
    * 答え合わせしたときの回路と結果を 1 組で持つ。
@@ -503,7 +518,7 @@ function BuildMode({ problem }: { problem: Problem }) {
       />
 
       {tab === "edit" ? (
-        <LadderEditor circuit={circuit} onChange={setCircuit} />
+        <LadderEditor circuit={circuit} onChange={setCircuit} history={history} />
       ) : (
         <RunPanel circuit={circuit} labels={labels} />
       )}
@@ -526,7 +541,7 @@ function BuildMode({ problem }: { problem: Problem }) {
           icon="reset"
           data-testid="reset-circuit"
           onClick={() => {
-            setCircuit(initial);
+            history.reset(initial);
             setChecked(undefined);
             setFailures(0);
           }}
@@ -556,6 +571,9 @@ function BuildMode({ problem }: { problem: Problem }) {
       {checked && (
         <JudgeResultView result={checked.result} problem={problem} circuit={checked.circuit} />
       )}
+      {result?.passed && (
+        <NextProblemCard problemId={problem.id} isCleared={(id) => get(id).cleared} />
+      )}
       {checked && (
         <DiagnosisPanel
           circuit={checked.circuit}
@@ -582,6 +600,8 @@ function RunPanel({ circuit, labels }: { circuit: Circuit; labels: Record<string
         onSpeed={sim.setSpeed}
         onRunning={sim.setRunning}
         onReset={sim.reset}
+        onStep={sim.step}
+        scans={sim.scans}
       />
       {sim.devices.length === 0 ? (
         <EmptyState
@@ -597,6 +617,41 @@ function RunPanel({ circuit, labels }: { circuit: Circuit; labels: Record<string
           deviceLabels={labels}
           input={sim.input}
         />
+      )}
+    </div>
+  );
+}
+
+/** 正解のあとに次の 1 問へつなぐ(S-038)。一覧に戻らなくても続けられる */
+function NextProblemCard({
+  problemId,
+  isCleared,
+}: {
+  problemId: string;
+  isCleared: (id: string) => boolean;
+}) {
+  const next = nextProblem(problemId, isCleared);
+  return (
+    <div className="rise-in flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card">
+      <div className="min-w-0">
+        <p className="text-xs font-semibold text-slate-500">次はこれ</p>
+        <p className="truncate text-sm font-bold text-slate-900">
+          {next ? next.title : "公式問題はすべてクリアしました"}
+        </p>
+      </div>
+      {next ? (
+        <Link
+          to={`/problems/${next.id}`}
+          data-testid="next-problem"
+          className={buttonClass("accent")}
+        >
+          次の問題へ
+          <Icon name="arrowRight" className="h-4 w-4" />
+        </Link>
+      ) : (
+        <Link to="/community" className={buttonClass("secondary")}>
+          みんなの問題を見る
+        </Link>
       )}
     </div>
   );

@@ -31,6 +31,7 @@ import {
   SectionTitle,
   Segmented,
 } from "../components/ui.js";
+import { useHistory } from "../hooks/useHistory.js";
 import { useSimulator } from "../hooks/useSimulator.js";
 import { ApiError, api, type SandboxSummary } from "../lib/api.js";
 import { useProgress } from "../lib/progress-context.jsx";
@@ -42,7 +43,10 @@ export function SandboxPage() {
   const { user } = useProgress();
   const navigate = useNavigate();
   const [publishing, setPublishing] = useState(false);
-  const [circuit, setCircuit] = useState<Circuit>(() => emptyCircuit(6, 3));
+  // 編集は「元に戻す / やり直す」つき(S-038)
+  const history = useHistory<Circuit>(emptyCircuit(6, 3));
+  const circuit = history.value;
+  const setCircuit = history.set;
   const [testCases, setTestCases] = useState<TestCase[]>([]);
   const [title, setTitle] = useState("無題の回路");
   const [savedId, setSavedId] = useState<string | undefined>(undefined);
@@ -94,7 +98,7 @@ export function SandboxPage() {
     setMessage(undefined);
     try {
       const res = await api.getSandbox(id);
-      setCircuit(circuitSchema.parse(res.circuit.circuit));
+      history.reset(circuitSchema.parse(res.circuit.circuit));
       setTestCases(sandboxTestCasesSchema.catch([]).parse(res.circuit.testCases));
       setTitle(res.circuit.title);
       setSavedId(res.circuit.id);
@@ -132,7 +136,7 @@ export function SandboxPage() {
   };
 
   const reset = () => {
-    setCircuit(emptyCircuit(6, 3));
+    history.reset(emptyCircuit(6, 3));
     setTestCases([]);
     setTitle("無題の回路");
     setSavedId(undefined);
@@ -295,7 +299,7 @@ export function SandboxPage() {
         ]}
       />
 
-      {tab === "edit" && <LadderEditor circuit={circuit} onChange={setCircuit} />}
+      {tab === "edit" && <LadderEditor circuit={circuit} onChange={setCircuit} history={history} />}
       {tab === "run" && <RunPanel circuit={circuit} />}
       {tab === "test" && (
         <div className="flex flex-col gap-3">
@@ -351,6 +355,8 @@ function RunPanel({ circuit }: { circuit: Circuit }) {
         onSpeed={sim.setSpeed}
         onRunning={sim.setRunning}
         onReset={sim.reset}
+        onStep={sim.step}
+        scans={sim.scans}
       />
       {sim.devices.length === 0 ? (
         <EmptyState

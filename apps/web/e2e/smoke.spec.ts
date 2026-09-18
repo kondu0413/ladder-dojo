@@ -101,6 +101,21 @@ test.describe("シミュレータ", () => {
     await expect(y0).toHaveAttribute("data-on", "false", { timeout: 5000 });
   });
 
+  test("一時停止中は 1 スキャンずつ進められる(S-038)", async ({ page }) => {
+    await page.goto("/samples");
+    await expect(page.getByTestId("sim-step")).toBeDisabled();
+    await page.getByTestId("sim-toggle-run").click();
+    await expect(page.getByTestId("sim-step")).toBeEnabled();
+
+    // 止めている間は、押しても次のスキャンまで反映されない
+    await page.getByTestId("hold-X0").click();
+    await expect(page.getByTestId("input-X0")).toHaveAttribute("data-on", "true");
+    await expect(page.getByTestId("device-Y0")).toHaveAttribute("data-on", "false");
+
+    await page.getByTestId("sim-step").click();
+    await expect(page.getByTestId("device-Y0")).toHaveAttribute("data-on", "true");
+  });
+
   test("リセットで全デバイスが初期状態に戻る", async ({ page }) => {
     await page.goto("/samples");
     await page.getByTestId("sample-counter").click();

@@ -74,6 +74,8 @@ export function Brand({ to = "/", onClick }: { to?: string; onClick?: () => void
  *
  * 狭い画面ではリンクを畳んでボタン 1 つにする。並べたままだと題名を押し出して、
  * 「ラダー図 / トレーニ / ング」のように折れてしまう。
+ * 並べるのは 1024px から。768px では 6 つのリンクとログイン状態が入りきらず、
+ * 右端がはみ出していた。
  */
 function AppHeader() {
   const [open, setOpen] = useState(false);
@@ -86,7 +88,7 @@ function AppHeader() {
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-2 px-4 sm:px-6">
         <Brand onClick={close} />
 
-        <nav aria-label="メニュー" className="ml-4 hidden h-full items-stretch gap-0.5 md:flex">
+        <nav aria-label="メニュー" className="ml-4 hidden h-full items-stretch gap-0.5 lg:flex">
           {NAV.map((item) => (
             <NavLink key={item.to} to={item.to} active={pathname.startsWith(item.to)}>
               {item.label}
@@ -102,7 +104,7 @@ function AppHeader() {
             aria-expanded={open}
             aria-controls="mobile-nav"
             onClick={() => setOpen((v) => !v)}
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-200 transition-colors hover:bg-white/10 md:hidden"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-200 transition-colors hover:bg-white/10 lg:hidden"
           >
             <span className="sr-only">メニューを開く</span>
             <Icon name={open ? "close" : "menu"} className="h-5 w-5" />
@@ -114,7 +116,7 @@ function AppHeader() {
         <nav
           id="mobile-nav"
           aria-label="メニュー"
-          className="border-t border-white/10 bg-slate-950 px-2 pb-2 pt-1 md:hidden"
+          className="border-t border-white/10 bg-slate-950 px-2 pb-2 pt-1 lg:hidden"
         >
           <ul className="flex flex-col">
             {NAV.map((item) => {

@@ -2,12 +2,21 @@ import {
   type Circuit,
   diagnose,
   judge,
+  type Problem,
   problemSchema,
   replayScenario,
   runTestCase,
 } from "@ladder-dojo/core";
 import { describe, expect, it } from "vitest";
-import { findProblem, MODE_ORDER, PROBLEMS, STAGE_ORDER, sortedProblems } from "./index.js";
+import {
+  findProblem,
+  MODE_ORDER,
+  nextProblem,
+  PROBLEMS,
+  recommendedProblem,
+  STAGE_ORDER,
+  sortedProblems,
+} from "./index.js";
 
 /**
  * 公式問題の検証(SPEC.md §2.4「問題の判定ロジックはテスト必須。誤判定は学習アプリとして致命的」)。
@@ -289,5 +298,37 @@ describe("公式問題", () => {
     expect(first).toBeDefined();
     if (first) expect(findProblem(first.id)?.id).toBe(first.id);
     expect(findProblem("no-such-problem")).toBeUndefined();
+  });
+});
+
+describe("次の問題(S-038)", () => {
+  const order = sortedProblems();
+
+  it("いまの問題の後ろで、まだクリアしていない最初の問題を返す", () => {
+    const first = order[0] as (typeof order)[number];
+    const second = order[1] as (typeof order)[number];
+    expect(nextProblem(first.id, () => false)?.id).toBe(second.id);
+  });
+
+  it("クリア済みは飛ばす", () => {
+    const [a, b, c] = order as [Problem, Problem, Problem];
+    expect(nextProblem(a.id, (id) => id === b.id)?.id).toBe(c.id);
+  });
+
+  it("後ろに無ければ先頭に戻って探す", () => {
+    const last = order[order.length - 1] as Problem;
+    const first = order[0] as Problem;
+    expect(nextProblem(last.id, () => false)?.id).toBe(first.id);
+  });
+
+  it("全部クリア済みなら undefined", () => {
+    expect(nextProblem((order[0] as Problem).id, () => true)).toBeUndefined();
+    expect(recommendedProblem(() => true)).toBeUndefined();
+  });
+
+  it("勧める 1 問は出題順でいちばん手前の未クリア", () => {
+    const [a, b] = order as [Problem, Problem];
+    expect(recommendedProblem(() => false)?.id).toBe(a.id);
+    expect(recommendedProblem((id) => id === a.id)?.id).toBe(b.id);
   });
 });

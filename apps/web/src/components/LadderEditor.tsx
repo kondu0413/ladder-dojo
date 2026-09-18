@@ -15,7 +15,8 @@ import {
   removeRow,
   setVline,
 } from "@ladder-dojo/core";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { HistoryControls } from "../hooks/useHistory.js";
 import { useNotation } from "../lib/notation-context.jsx";
 import { LadderView } from "./LadderView.js";
 import { Button, Card, Icon, Label, Notice, Segmented } from "./ui.js";
@@ -88,14 +89,42 @@ const DEVICE_TYPES: DeviceType[] = ["X", "Y", "M", "T", "C"];
 export type LadderEditorProps = {
   circuit: Circuit;
   onChange: (circuit: Circuit) => void;
+  /** 「元に戻す / やり直す」(S-038)。渡すとボタンと Ctrl+Z / Ctrl+Shift+Z が効く */
+  history?: HistoryControls | undefined;
+  /** 図の右上に置く追加の操作(共有など) */
+  extra?: React.ReactNode;
 };
 
 /**
  * ラダー図の編集(SPEC.md §3.1: 部品パレットからグリッドに置く。スマホのタップ中心、ドラッグ非依存)。
  * セルを選んでから部品をタップすると、選択中のデバイスで配置する。
  */
-export function LadderEditor({ circuit, onChange }: LadderEditorProps) {
+export function LadderEditor({ circuit, onChange, history, extra }: LadderEditorProps) {
   const [selected, setSelected] = useState<{ row: number; col: number } | undefined>(undefined);
+
+  // キーボードでも戻せる(PC で編集する人向け)。入力欄の中では効かせない
+  useEffect(() => {
+    if (!history) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      const key = e.key.toLowerCase();
+      if (key === "z" && e.shiftKey) {
+        e.preventDefault();
+        history.redo();
+      } else if (key === "z") {
+        e.preventDefault();
+        history.undo();
+      } else if (key === "y") {
+        e.preventDefault();
+        history.redo();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [history]);
   const [deviceType, setDeviceType] = useState<DeviceType>("X");
   const [deviceNumber, setDeviceNumber] = useState(0);
   const [presetSec, setPresetSec] = useState(3);
@@ -145,19 +174,48 @@ export function LadderEditor({ circuit, onChange }: LadderEditorProps) {
         />
       </Card>
 
-      <p
-        className={`flex items-center gap-1.5 text-xs ${selected ? "font-semibold text-sky-700" : "text-slate-500"}`}
-        data-testid="editor-hint"
-      >
-        {selected ? (
-          <>
-            <Icon name="target" className="h-3.5 w-3.5" />
-            {`選択中: ${selected.row + 1} 行 ${selected.col + 1} 列`}
-          </>
-        ) : (
-          "編集したいマスをタップしてください"
+      <div className="flex flex-wrap items-center gap-2">
+        <p
+          className={`flex min-w-0 flex-1 items-center gap-1.5 text-xs ${selected ? "font-semibold text-sky-700" : "text-slate-500"}`}
+          data-testid="editor-hint"
+        >
+          {selected ? (
+            <>
+              <Icon name="target" className="h-3.5 w-3.5" />
+              {`選択中: ${selected.row + 1} 行 ${selected.col + 1} 列`}
+            </>
+          ) : (
+            "編集したいマスをタップしてください"
+          )}
+        </p>
+        {history && (
+          <div className="flex gap-1">
+            <Button
+              tone="secondary"
+              size="sm"
+              icon="undo"
+              data-testid="editor-undo"
+              disabled={!history.canUndo}
+              title="元に戻す(Ctrl+Z)"
+              onClick={history.undo}
+            >
+              元に戻す
+            </Button>
+            <Button
+              tone="secondary"
+              size="sm"
+              icon="redo"
+              data-testid="editor-redo"
+              disabled={!history.canRedo}
+              title="やり直す(Ctrl+Shift+Z)"
+              onClick={history.redo}
+            >
+              やり直す
+            </Button>
+          </div>
         )}
-      </p>
+        {extra}
+      </div>
       {error && (
         <Notice tone="danger" role="alert">
           {error}

@@ -38,8 +38,13 @@ export type SimulatorState = {
   setSpeed: (speed: SimSpeed) => void;
   setRunning: (running: boolean) => void;
   setInput: (device: DeviceId, value: boolean) => void;
+  /** 一時停止中に 1 スキャンだけ進める(S-038)。評価の順番を目で追うためのもの */
+  step: () => void;
   reset: () => void;
 };
+
+/** 手で 1 スキャン進めるときに進める時間(ms)。判定の 1 スキャンと同じ */
+const STEP_MS = 10;
 
 /**
  * 回路をブラウザ上で走らせる(SPEC.md §6: シミュレータはクライアント側)。
@@ -80,6 +85,22 @@ export function useSimulator(circuit: Circuit): SimulatorState {
   const devices = useMemo(() => listDevices(circuit), [circuit]);
   const inputs = useMemo(() => devices.filter((d) => d.startsWith("X")), [devices]);
 
+  /** 1 スキャン回して、押し終わった入力を離す。自動でも手動でも同じ道を通す */
+  const tick = useCallback(
+    (dt: number) => {
+      sim.scan(dt);
+      // 1 スキャン ON になったものから離していく
+      for (const device of [...pendingRelease.current]) {
+        if (sim.scans > (pressedAtScan.current.get(device) ?? 0)) {
+          sim.setInput(device, false);
+          pendingRelease.current.delete(device);
+        }
+      }
+      forceRender();
+    },
+    [sim],
+  );
+
   useEffect(() => {
     if (!running) return;
     let frame = 0;
@@ -90,20 +111,19 @@ export function useSimulator(circuit: Circuit): SimulatorState {
       // 上限は、タブが裏に回っていた間の時間が一気に入らないようにするため
       const dt = Math.min(Math.max(now - last, 0), 100) * factor;
       last = now;
-      sim.scan(dt);
-      // 1 スキャン ON になったものから離していく
-      for (const device of [...pendingRelease.current]) {
-        if (sim.scans > (pressedAtScan.current.get(device) ?? 0)) {
-          sim.setInput(device, false);
-          pendingRelease.current.delete(device);
-        }
-      }
-      forceRender();
+      tick(dt);
       frame = requestAnimationFrame(loop);
     };
     frame = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(frame);
-  }, [sim, running]);
+  }, [tick, running]);
+
+  /** 一時停止中に 1 スキャンだけ進める(S-038)。動いている間は自動で進むので何もしない */
+  const step = useCallback(() => {
+    if (running) return;
+    const factor = speedRef.current === "instant" ? 1 : speedRef.current;
+    tick(STEP_MS * factor);
+  }, [tick, running]);
 
   // 回路が差し替わったら押しっぱなしの記録も捨てる。
   // sim は本文で使わないが、**差し替わったこと**が起動条件なので依存に要る
@@ -176,6 +196,7 @@ export function useSimulator(circuit: Circuit): SimulatorState {
     setSpeed,
     setRunning,
     setInput,
+    step,
     reset,
   };
 }
