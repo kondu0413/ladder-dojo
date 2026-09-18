@@ -22,7 +22,19 @@ import { LadderView } from "./LadderView.js";
 import { Button, Card, Icon, Label, Notice, Segmented } from "./ui.js";
 
 /** パレットの部品。device が必要なものは選択中のデバイスを使う */
-type PartId = "wire" | "no" | "nc" | "rise" | "out" | "pulse" | "timer" | "counter" | "reset";
+type PartId =
+  | "wire"
+  | "no"
+  | "nc"
+  | "rise"
+  | "fall"
+  | "out"
+  | "set"
+  | "pulse"
+  | "timer"
+  | "offdelay"
+  | "counter"
+  | "reset";
 
 type Part = {
   id: PartId;
@@ -53,10 +65,22 @@ const PARTS: Part[] = [
     build: (device) => ({ type: "contact", kind: "rise", device }),
   },
   {
+    id: "fall",
+    label: "立下り",
+    types: ["X", "Y", "M", "T", "C"],
+    build: (device) => ({ type: "contact", kind: "fall", device }),
+  },
+  {
     id: "out",
     label: "出力",
     types: ["Y", "M"],
     build: (device) => ({ type: "coil", kind: "out", device }),
+  },
+  {
+    id: "set",
+    label: "SET",
+    types: ["Y", "M"],
+    build: (device) => ({ type: "coil", kind: "set", device }),
   },
   {
     id: "pulse",
@@ -71,6 +95,12 @@ const PARTS: Part[] = [
     build: (device, presetMs) => ({ type: "coil", kind: "timer", device, presetMs }),
   },
   {
+    id: "offdelay",
+    label: "オフディレイ",
+    types: ["T"],
+    build: (device, presetMs) => ({ type: "coil", kind: "offdelay", device, presetMs }),
+  },
+  {
     id: "counter",
     label: "カウンタ",
     types: ["C"],
@@ -79,7 +109,8 @@ const PARTS: Part[] = [
   {
     id: "reset",
     label: "RST",
-    types: ["C"],
+    // カウンタのほか、SET で保持した Y / M も戻せる(S-044)
+    types: ["C", "Y", "M"],
     build: (device) => ({ type: "coil", kind: "reset", device }),
   },
 ];
@@ -265,7 +296,11 @@ export function LadderEditor({ circuit, onChange, history, extra }: LadderEditor
                 onClick={() => place(part)}
                 className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white pl-2 pr-3 text-sm font-medium text-slate-800 transition-colors hover:border-slate-400 hover:bg-slate-50 active:bg-slate-100"
               >
-                <PartGlyph id={part.id} risingMark={notation.risingMark} />
+                <PartGlyph
+                  id={part.id}
+                  risingMark={notation.risingMark}
+                  fallingMark={notation.fallingMark}
+                />
                 {part.label}
               </button>
             ))}
@@ -376,7 +411,24 @@ export function LadderEditor({ circuit, onChange, history, extra }: LadderEditor
 }
 
 /** パレットのボタンに描く小さな記号。ラダー図と同じ形にして、置く前に何が置かれるか分かるように */
-function PartGlyph({ id, risingMark }: { id: PartId; risingMark: string }) {
+const GLYPH_MARKS: Partial<Record<PartId, string>> = {
+  pulse: "P",
+  set: "S",
+  timer: "T",
+  offdelay: "TOF",
+  counter: "C",
+  reset: "R",
+};
+
+function PartGlyph({
+  id,
+  risingMark,
+  fallingMark,
+}: {
+  id: PartId;
+  risingMark: string;
+  fallingMark: string;
+}) {
   const stroke = "currentColor";
   const w = 2;
   let body: React.ReactNode;
@@ -387,6 +439,7 @@ function PartGlyph({ id, risingMark }: { id: PartId; risingMark: string }) {
     case "no":
     case "nc":
     case "rise":
+    case "fall":
       body = (
         <>
           <line x1={2} y1={10} x2={11} y2={10} stroke={stroke} strokeWidth={w} />
@@ -420,25 +473,16 @@ function PartGlyph({ id, risingMark }: { id: PartId; risingMark: string }) {
               strokeLinecap="round"
             />
           )}
-          {id === "rise" && (
+          {(id === "rise" || id === "fall") && (
             <text x={16} y={13.5} textAnchor="middle" fontSize={9} fontWeight={700} fill={stroke}>
-              {risingMark}
+              {id === "rise" ? risingMark : fallingMark}
             </text>
           )}
         </>
       );
       break;
     default: {
-      const mark =
-        id === "pulse"
-          ? "P"
-          : id === "timer"
-            ? "T"
-            : id === "counter"
-              ? "C"
-              : id === "reset"
-                ? "R"
-                : "";
+      const mark = GLYPH_MARKS[id] ?? "";
       body = (
         <>
           <line x1={2} y1={10} x2={9} y2={10} stroke={stroke} strokeWidth={w} />
@@ -446,7 +490,14 @@ function PartGlyph({ id, risingMark }: { id: PartId; risingMark: string }) {
           <path d="M 10 3 A 8 8 0 0 0 10 17" fill="none" stroke={stroke} strokeWidth={w} />
           <path d="M 22 3 A 8 8 0 0 1 22 17" fill="none" stroke={stroke} strokeWidth={w} />
           {mark && (
-            <text x={16} y={13.5} textAnchor="middle" fontSize={9} fontWeight={700} fill={stroke}>
+            <text
+              x={16}
+              y={mark.length > 1 ? 12.5 : 13.5}
+              textAnchor="middle"
+              fontSize={mark.length > 1 ? 6.5 : 9}
+              fontWeight={700}
+              fill={stroke}
+            >
               {mark}
             </text>
           )}

@@ -1,5 +1,6 @@
 import {
   counter,
+  fall,
   ladder,
   nc,
   no,
@@ -218,6 +219,47 @@ const lotCases = [
   },
 ];
 
+const FALL_LABELS = { X0: "ボタン", X1: "リセット", Y0: "完了ランプ" } as const;
+
+/** 立ち下がり接点で「離した瞬間」を数える(S-044) */
+const fallCount = ladder(4)
+  .row(fall("X0"), counter("C0", 3))
+  .row(no("X1"), reset("C0"))
+  .row(no("C0"), out("Y0"))
+  .build();
+
+const fallCountCases = [
+  {
+    id: "initial",
+    title: "最初は消えている",
+    steps: [{ type: "expect" as const, outputs: { Y0: false } }],
+  },
+  {
+    id: "count-on-release",
+    title: "3 回目は離した瞬間に数える",
+    steps: [
+      { type: "press" as const, device: "X0" as const },
+      { type: "press" as const, device: "X0" as const },
+      { type: "set" as const, inputs: { X0: true } },
+      { type: "expect" as const, outputs: { Y0: false }, note: "押しただけでは数えない" },
+      { type: "set" as const, inputs: { X0: false } },
+      { type: "expect" as const, outputs: { Y0: true }, note: "離した瞬間に 3 回目" },
+    ],
+  },
+  {
+    id: "reset",
+    title: "リセットで消える",
+    steps: [
+      { type: "press" as const, device: "X0" as const },
+      { type: "press" as const, device: "X0" as const },
+      { type: "press" as const, device: "X0" as const },
+      { type: "expect" as const, outputs: { Y0: true } },
+      { type: "press" as const, device: "X1" as const },
+      { type: "expect" as const, outputs: { Y0: false } },
+    ],
+  },
+];
+
 export const counterProblems: Problem[] = [
   {
     schemaVersion: SCHEMA_VERSION,
@@ -237,8 +279,8 @@ export const counterProblems: Problem[] = [
           id: "q1",
           prompt: "X0 を 2 回押した時点で、C0 は完了していますか?",
           scenario: [
-            { type: "press", device: "X0" },
-            { type: "press", device: "X0" },
+            { type: "press", device: "X0" as const },
+            { type: "press", device: "X0" as const },
           ],
           choices: ["完了している", "まだ完了していない", "1 回目で完了している"],
           answerIndex: 1,
@@ -249,10 +291,10 @@ export const counterProblems: Problem[] = [
           id: "q2",
           prompt: "3 回押して完了したあと、さらに 4 回目を押すとどうなりますか?",
           scenario: [
-            { type: "press", device: "X0" },
-            { type: "press", device: "X0" },
-            { type: "press", device: "X0" },
-            { type: "press", device: "X0" },
+            { type: "press", device: "X0" as const },
+            { type: "press", device: "X0" as const },
+            { type: "press", device: "X0" as const },
+            { type: "press", device: "X0" as const },
           ],
           choices: ["完了が取り消される", "完了のまま変わらない", "0 に戻って数え直す"],
           answerIndex: 1,
@@ -317,7 +359,7 @@ export const counterProblems: Problem[] = [
         {
           id: "q1",
           prompt: "5 回押して点灯させたあと X1 を押し、続けて X0 を 4 回押しました。Y0 は?",
-          scenario: [...pressX0(5), { type: "press", device: "X1" }, ...pressX0(4)],
+          scenario: [...pressX0(5), { type: "press", device: "X1" as const }, ...pressX0(4)],
           choices: ["点灯している(合計 9 回押したから)", "消えている(リセット後 4 回だから)"],
           answerIndex: 1,
           explanation:
@@ -432,6 +474,51 @@ export const counterProblems: Problem[] = [
     testCases: lotCases,
     write: {
       hint: "カウンタを 2 つ使います。個数の a 接点で箱数を 1 つ進め、同じ a 接点で個数をリセットします。**並べる順番が大事**で、リセットを箱数より上に置くと、箱数が数える前に 0 に戻ってしまいます。",
+    },
+  },
+  {
+    schemaVersion: SCHEMA_VERSION,
+    id: "counter-read-4",
+    title: "離した瞬間を数える",
+    mode: "read",
+    stage: "counter",
+    difficulty: 3,
+    tags: ["カウンタ", "立ち下がり"],
+    spec: "押しボタン X0 でカウンタ C0(設定 3 回)を数え、3 回で完了ランプ Y0 が点く回路です。ただし C0 を動かす接点は立ち下がり接点(ON → OFF になった瞬間だけ通す)になっています。X1 でリセットします。",
+    deviceLabels: FALL_LABELS,
+    solution: fallCount,
+    testCases: fallCountCases,
+    read: {
+      questions: [
+        {
+          id: "q1",
+          prompt:
+            "X0 を 2 回押して離したあと、3 回目を押したまま(まだ離していない)。Y0 はどうなっていますか?",
+          scenario: [
+            { type: "press", device: "X0" as const },
+            { type: "press", device: "X0" as const },
+            { type: "set", inputs: { X0: true } },
+          ],
+          choices: ["消えている(離すまで数えない)", "点いている", "点いたり消えたりする"],
+          answerIndex: 0,
+          explanation:
+            "立ち下がり接点は、X0 が ON → OFF になったスキャンだけ通します。押しただけではカウンタに通電しないので、2 回のままです。",
+        },
+        {
+          id: "q2",
+          prompt: "そのあと 3 回目を離すと、Y0 はどうなりますか?",
+          scenario: [
+            { type: "press", device: "X0" as const },
+            { type: "press", device: "X0" as const },
+            { type: "set", inputs: { X0: true } },
+            { type: "set", inputs: { X0: false } },
+          ],
+          choices: ["点く", "消えたまま", "リセットされる"],
+          answerIndex: 0,
+          explanation:
+            "離した瞬間に立ち下がり接点が 1 スキャンだけ通り、カウンタが 3 回目を数えて完了します。立ち上がり接点と比べると、数えるタイミングが「押した瞬間」から「離した瞬間」に変わっています。",
+        },
+      ],
     },
   },
 ];

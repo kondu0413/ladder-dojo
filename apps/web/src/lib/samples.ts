@@ -1,4 +1,16 @@
-import { type Circuit, counter, ladder, nc, no, out, reset, rise, timer } from "@ladder-dojo/core";
+import {
+  type Circuit,
+  counter,
+  ladder,
+  nc,
+  no,
+  out,
+  reset,
+  rise,
+  set,
+  timer,
+  tof,
+} from "@ladder-dojo/core";
 
 export type Sample = {
   id: string;
@@ -30,6 +42,13 @@ export const SAMPLES: Sample[] = [
     deviceLabels: { X0: "起動", Y0: "ランプ", T0: "3秒" },
   },
   {
+    id: "offdelay",
+    title: "オフディレイタイマ",
+    description: "X0 を押している間は点き、離してから 2 秒後に消える。",
+    circuit: ladder(4).row(no("X0"), tof("T0", 2000)).row(no("T0"), out("Y0")).build(),
+    deviceLabels: { X0: "ボタン", T0: "2秒", Y0: "ランプ" },
+  },
+  {
     id: "counter",
     title: "カウンタ",
     description: "X0 を 3 回押すと Y0 が点灯する。X1 でリセット。",
@@ -53,6 +72,13 @@ export const SAMPLES: Sample[] = [
       .v(2, 0)
       .build(),
     deviceLabels: { X0: "正転", X1: "逆転", X2: "停止", Y0: "正転出力", Y1: "逆転出力" },
+  },
+  {
+    id: "setreset",
+    title: "SET / RST",
+    description: "X0 で Y0 をセット(点いたまま)、X1 でリセット。自己保持の接点なしで保持できる。",
+    circuit: ladder(4).row(no("X0"), set("Y0")).row(no("X1"), reset("Y0")).build(),
+    deviceLabels: { X0: "セット", X1: "リセット", Y0: "ランプ" },
   },
   {
     id: "pulse",

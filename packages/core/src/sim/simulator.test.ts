@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { counter, ladder, nc, no, out, pulse, reset, rise, timer } from "../builder.js";
+import {
+  counter,
+  fall,
+  ladder,
+  nc,
+  no,
+  out,
+  pulse,
+  reset,
+  rise,
+  set,
+  timer,
+  tof,
+} from "../builder.js";
 import type { Circuit } from "../schema/circuit.js";
 import type { DeviceId } from "../schema/device.js";
 import { devicePresets, Simulator, splitRungs } from "./simulator.js";
@@ -487,5 +500,138 @@ describe("タイマの進め方の切り替え(S-029)", () => {
     sim.scan(0);
     sim.scan(500);
     expect(sim.timer("T0")).toEqual({ elapsedMs: 500, done: false });
+  });
+});
+
+describe("SET / RST(ビット、S-044)", () => {
+  const latch: Circuit = ladder(4).row(no("X0"), set("Y0")).row(no("X1"), reset("Y0")).build();
+
+  it("SET は通電した瞬間に ON にして、切れても保つ", () => {
+    const sim = new Simulator(latch);
+    settle(sim);
+    expect(sim.read("Y0")).toBe(false);
+    press(sim, "X0");
+    expect(sim.read("Y0")).toBe(true);
+    scans(sim, 5);
+    expect(sim.read("Y0")).toBe(true);
+  });
+
+  it("RST で OFF に戻り、離しても OFF のまま", () => {
+    const sim = new Simulator(latch);
+    press(sim, "X0");
+    press(sim, "X1");
+    expect(sim.read("Y0")).toBe(false);
+    press(sim, "X0");
+    expect(sim.read("Y0")).toBe(true);
+  });
+
+  it("両方通電しているときは下のラング(RST)が勝つ", () => {
+    const sim = new Simulator(latch);
+    sim.setInput("X0", true);
+    sim.setInput("X1", true);
+    settle(sim);
+    expect(sim.read("Y0")).toBe(false);
+    sim.setInput("X1", false);
+    settle(sim);
+    expect(sim.read("Y0")).toBe(true);
+  });
+
+  it("RST でカウンタも従来どおり戻せる", () => {
+    const c: Circuit = ladder(4)
+      .row(no("X0"), counter("C0", 2))
+      .row(no("X1"), reset("C0"))
+      .row(no("C0"), out("Y0"))
+      .build();
+    const sim = new Simulator(c);
+    press(sim, "X0");
+    press(sim, "X0");
+    expect(sim.read("Y0")).toBe(true);
+    press(sim, "X1");
+    expect(sim.read("Y0")).toBe(false);
+    expect(sim.counter("C0")?.count).toBe(0);
+  });
+});
+
+describe("立ち下がり接点(S-044)", () => {
+  it("ON → OFF になったスキャンだけ導通する", () => {
+    const c: Circuit = ladder(3).row(fall("X0"), out("Y0")).build();
+    const sim = new Simulator(c);
+    sim.setInput("X0", true);
+    sim.scan();
+    sim.scan();
+    expect(sim.read("Y0")).toBe(false); // 押しただけでは通らない
+    sim.setInput("X0", false);
+    sim.scan();
+    expect(sim.read("Y0")).toBe(true); // 離した瞬間の 1 スキャン
+    sim.scan();
+    expect(sim.read("Y0")).toBe(false);
+  });
+
+  it("離した回数を数えられる", () => {
+    const c: Circuit = ladder(4).row(fall("X0"), counter("C0", 2)).row(no("C0"), out("Y0")).build();
+    const sim = new Simulator(c);
+    press(sim, "X0");
+    expect(sim.counter("C0")?.count).toBe(1);
+    press(sim, "X0");
+    expect(sim.read("Y0")).toBe(true);
+  });
+});
+
+describe("オフディレイタイマ(S-044)", () => {
+  const c: Circuit = ladder(4).row(no("X0"), tof("T0", 1000)).row(no("T0"), out("Y0")).build();
+
+  it("電源投入直後は OFF、通電した瞬間に ON", () => {
+    const sim = new Simulator(c);
+    settle(sim);
+    expect(sim.read("T0")).toBe(false);
+    sim.setInput("X0", true);
+    settle(sim);
+    expect(sim.read("T0")).toBe(true);
+    expect(sim.read("Y0")).toBe(true);
+  });
+
+  it("通電が切れてから設定時間のあいだ ON を保ち、そのあと OFF", () => {
+    const sim = new Simulator(c);
+    sim.setInput("X0", true);
+    settle(sim);
+    sim.setInput("X0", false);
+    settle(sim);
+    expect(sim.read("Y0")).toBe(true);
+    for (let i = 0; i < 9; i++) sim.scan(100); // 0.9 秒
+    expect(sim.read("Y0")).toBe(true);
+    sim.scan(100); // 1.0 秒
+    settle(sim);
+    expect(sim.read("Y0")).toBe(false);
+  });
+
+  it("切れている途中で通電し直すと、また最初から数える", () => {
+    const sim = new Simulator(c);
+    sim.setInput("X0", true);
+    settle(sim);
+    sim.setInput("X0", false);
+    settle(sim);
+    for (let i = 0; i < 8; i++) sim.scan(100);
+    sim.setInput("X0", true);
+    settle(sim);
+    sim.setInput("X0", false);
+    settle(sim);
+    for (let i = 0; i < 8; i++) sim.scan(100);
+    expect(sim.read("Y0")).toBe(true);
+    for (let i = 0; i < 3; i++) sim.scan(100);
+    expect(sim.read("Y0")).toBe(false);
+  });
+
+  it("instant モードでは切れた瞬間に OFF", () => {
+    const sim = new Simulator(c, { timerMode: "instant" });
+    sim.setInput("X0", true);
+    settle(sim);
+    expect(sim.read("T0")).toBe(true);
+    sim.setInput("X0", false);
+    settle(sim);
+    expect(sim.read("T0")).toBe(false);
+  });
+
+  it("設定値の一覧にオフディレイも入る", () => {
+    expect(devicePresets(c).timers).toEqual({ T0: 1000 });
   });
 });

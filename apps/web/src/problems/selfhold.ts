@@ -1,4 +1,14 @@
-import { ladder, nc, no, out, type Problem, SCHEMA_VERSION, wire } from "@ladder-dojo/core";
+import {
+  ladder,
+  nc,
+  no,
+  out,
+  type Problem,
+  reset,
+  SCHEMA_VERSION,
+  set,
+  wire,
+} from "@ladder-dojo/core";
 
 const LABELS = { X0: "起動", X1: "停止", X2: "非常停止", Y0: "ランプ" } as const;
 
@@ -167,6 +177,50 @@ const alwaysOnCases = [
   },
 ];
 
+/** SET / RST で保持する(S-044)。自己保持の接点を組まない書き方 */
+const setReset = ladder(4).row(no("X0"), set("Y0")).row(no("X1"), reset("Y0")).build();
+
+const setResetCases = [
+  {
+    id: "initial",
+    title: "最初は消えている",
+    steps: [{ type: "expect" as const, outputs: { Y0: false } }],
+  },
+  {
+    id: "start",
+    title: "起動ボタンを押して離しても点いたまま",
+    steps: [
+      { type: "press" as const, device: "X0" as const },
+      { type: "expect" as const, outputs: { Y0: true } },
+      { type: "wait" as const, ms: 500 },
+      { type: "expect" as const, outputs: { Y0: true }, note: "覚えておく仕組みが無い" },
+    ],
+  },
+  {
+    id: "stop",
+    title: "停止ボタンで消え、離しても消えたまま",
+    steps: [
+      { type: "press" as const, device: "X0" as const },
+      { type: "press" as const, device: "X1" as const },
+      { type: "expect" as const, outputs: { Y0: false } },
+      { type: "wait" as const, ms: 300 },
+      { type: "expect" as const, outputs: { Y0: false } },
+    ],
+  },
+  {
+    id: "both",
+    title: "両方押している間は停止が勝つ",
+    steps: [
+      { type: "set" as const, inputs: { X0: true, X1: true } },
+      { type: "expect" as const, outputs: { Y0: false }, note: "停止が優先" },
+      { type: "set" as const, inputs: { X1: false } },
+      { type: "expect" as const, outputs: { Y0: true }, note: "起動を押したままなら点く" },
+      { type: "set" as const, inputs: { X0: false } },
+      { type: "expect" as const, outputs: { Y0: true } },
+    ],
+  },
+];
+
 export const selfholdProblems: Problem[] = [
   {
     schemaVersion: SCHEMA_VERSION,
@@ -223,7 +277,7 @@ export const selfholdProblems: Problem[] = [
         {
           id: "q1",
           prompt: "起動ボタン X0 を押して、すぐに離しました。ランプ Y0 はどうなりますか?",
-          scenario: [{ type: "press", device: "X0" }],
+          scenario: [{ type: "press", device: "X0" as const }],
           choices: ["押している間だけ点灯し、離すと消える", "点灯したままになる", "何も起きない"],
           answerIndex: 1,
           explanation:
@@ -233,8 +287,8 @@ export const selfholdProblems: Problem[] = [
           id: "q2",
           prompt: "Y0 が点灯している状態で、停止ボタン X1 を押すとどうなりますか?",
           scenario: [
-            { type: "press", device: "X0" },
-            { type: "press", device: "X1" },
+            { type: "press", device: "X0" as const },
+            { type: "press", device: "X1" as const },
           ],
           choices: ["消灯する", "点灯したまま変わらない", "一瞬消えてまた点く"],
           answerIndex: 0,
@@ -262,7 +316,7 @@ export const selfholdProblems: Problem[] = [
           id: "q1",
           prompt: "運転中(Y0 点灯中)に非常停止 X2 を押し続けると、Y0 はどうなりますか?",
           scenario: [
-            { type: "press", device: "X0" },
+            { type: "press", device: "X0" as const },
             { type: "set", inputs: { X2: true } },
           ],
           choices: ["消灯する", "点灯したまま", "点滅する"],
@@ -273,7 +327,7 @@ export const selfholdProblems: Problem[] = [
           id: "q2",
           prompt: "非常停止 X2 を離すと、Y0 はどうなりますか?",
           scenario: [
-            { type: "press", device: "X0" },
+            { type: "press", device: "X0" as const },
             { type: "set", inputs: { X2: true } },
             { type: "set", inputs: { X2: false } },
           ],
@@ -407,6 +461,73 @@ export const selfholdProblems: Problem[] = [
       initial: ladder(6).row(no("X0"), nc("X1"), no("X2"), out("Y0")).row(no("Y0")).v(0, 0).build(),
       bugCount: 1,
       hint: "非常停止は「押したときに切れる」ものです。いまの接点は、押していないときに通っているか確かめてください。",
+    },
+  },
+  {
+    schemaVersion: SCHEMA_VERSION,
+    id: "selfhold-read-4",
+    title: "SET と RST で覚える",
+    mode: "read",
+    stage: "selfhold",
+    difficulty: 2,
+    tags: ["自己保持", "SET/RST"],
+    spec: "起動ボタン X0 でランプ Y0 を点け、停止ボタン X1 で消す回路です。自己保持の接点は無く、代わりに SET コイルと RST コイルを使っています。",
+    deviceLabels: LABELS,
+    solution: setReset,
+    testCases: setResetCases,
+    read: {
+      questions: [
+        {
+          id: "q1",
+          prompt: "X0 を押して離すと、Y0 はどうなりますか?",
+          scenario: [{ type: "press", device: "X0" as const }],
+          choices: ["点いたままになる", "押している間だけ点く", "点かない"],
+          answerIndex: 0,
+          explanation:
+            "SET コイルは通電した瞬間に Y0 を ON にし、通電が切れても ON のまま保ちます。自己保持の接点を組まなくても覚えていられます。",
+        },
+        {
+          id: "q2",
+          prompt: "そのあと X1 を押して離すと、Y0 はどうなりますか?",
+          scenario: [
+            { type: "press", device: "X0" as const },
+            { type: "press", device: "X1" as const },
+          ],
+          choices: ["消える", "点いたまま", "点滅する"],
+          answerIndex: 0,
+          explanation:
+            "RST コイルに通電すると Y0 は OFF に戻ります。離しても OFF のままです。SET で覚えたものは RST でしか消えません。",
+        },
+        {
+          id: "q3",
+          prompt: "X0 と X1 を両方押したままにしている間、Y0 はどうなりますか?",
+          scenario: [{ type: "set", inputs: { X0: true, X1: true } }],
+          choices: [
+            "消えている(下のラングの RST が勝つ)",
+            "点いている(上のラングの SET が勝つ)",
+            "点いたり消えたりする",
+          ],
+          answerIndex: 0,
+          explanation:
+            "1 スキャンの中で SET と RST の両方に通電すると、あとに評価される下のラングの結果が残ります。RST を下に置くと「停止が優先」になります。",
+        },
+      ],
+    },
+  },
+  {
+    schemaVersion: SCHEMA_VERSION,
+    id: "selfhold-write-3",
+    title: "SET と RST で自己保持を作る",
+    mode: "write",
+    stage: "selfhold",
+    difficulty: 2,
+    tags: ["自己保持", "SET/RST"],
+    spec: "起動ボタン X0 を押すとランプ Y0 が点灯し、離しても点いたまま。停止ボタン X1 で消灯する。両方押している間は消えていること。自己保持の接点を使わず、SET コイルと RST コイルで作ってみてください(接点は 2 つで足ります)。",
+    deviceLabels: LABELS,
+    solution: setReset,
+    testCases: setResetCases,
+    write: {
+      hint: "X0 の a 接点で Y0 の SET を、X1 の a 接点で Y0 の RST を動かします。RST のラングを下に置くと、両方押したとき停止が勝ちます。",
     },
   },
 ];

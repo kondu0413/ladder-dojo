@@ -1,4 +1,18 @@
-import { counter, ladder, nc, no, out, pulse, reset, rise, timer, wire } from "@ladder-dojo/core";
+import {
+  counter,
+  fall,
+  ladder,
+  nc,
+  no,
+  out,
+  pulse,
+  reset,
+  rise,
+  set,
+  timer,
+  tof,
+  wire,
+} from "@ladder-dojo/core";
 import { describe, expect, it } from "vitest";
 import { decodeCircuit, encodeCircuit, readSharedCircuit, shareUrl } from "./share.js";
 
@@ -10,12 +24,15 @@ describe("回路の共有リンク(S-039)", () => {
     .row(no("T0"), wire, wire, wire, wire, counter("C0", 3))
     .row(no("C0"), wire, wire, wire, wire, reset("C0"))
     .row(no("X3"), wire, wire, wire, wire, pulse("M0"))
+    .row(fall("X4"), wire, wire, wire, wire, set("M1"))
+    .row(no("M1"), wire, wire, wire, wire, tof("T1", 500))
+    .row(no("X5"), wire, wire, wire, wire, reset("M1"))
     .v(0, 0)
     .build();
 
   it("すべての部品と縦線が往復で失われない", () => {
     const text = encodeCircuit(circuit);
-    expect(text.startsWith("v1.6.6.")).toBe(true);
+    expect(text.startsWith("v1.6.9.")).toBe(true);
     // URL のハッシュにそのまま書ける文字だけを使う
     expect(text).toMatch(/^[A-Za-z0-9.,;-]+$/);
     expect(decodeCircuit(text)).toEqual(circuit);
@@ -45,7 +62,7 @@ describe("回路の共有リンク(S-039)", () => {
 
   it("URL のハッシュに回路と名前を載せて、読み戻せる", () => {
     const url = shareUrl(circuit, "  自己保持の例  ", "https://example.test");
-    expect(url.startsWith("https://example.test/sandbox#c=v1.6.6.")).toBe(true);
+    expect(url.startsWith("https://example.test/sandbox#c=v1.6.9.")).toBe(true);
     const hash = url.slice(url.indexOf("#"));
     const shared = readSharedCircuit(hash);
     expect(shared?.circuit).toEqual(circuit);

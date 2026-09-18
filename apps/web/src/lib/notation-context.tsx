@@ -1,6 +1,7 @@
 import type { DeviceId } from "@ladder-dojo/core";
 import {
   DEFAULT_NOTATION,
+  fallingMark,
   formatCounterPreset,
   formatDevice,
   formatDeviceNames,
@@ -30,6 +31,7 @@ export type NotationContextValue = {
   timerPreset: (presetMs: number) => string;
   counterPreset: (preset: number) => string;
   risingMark: string;
+  fallingMark: string;
 };
 
 const NotationContext = createContext<NotationContextValue | undefined>(undefined);
@@ -70,6 +72,7 @@ export function NotationProvider({ children }: { children: ReactNode }) {
       timerPreset: (presetMs) => formatTimerPreset(presetMs, notation),
       counterPreset: (preset) => formatCounterPreset(preset, notation),
       risingMark: risingMark(notation),
+      fallingMark: fallingMark(notation),
     }),
     [notation, setNotation],
   );

@@ -33,6 +33,7 @@ const CONTACT_LABELS: Record<ContactElement["kind"], string> = {
   no: "a 接点",
   nc: "b 接点",
   rise: "立ち上がり接点",
+  fall: "立ち下がり接点",
 };
 
 /** 接点 1 つを読む。「X0 の a 接点」 */
@@ -48,8 +49,12 @@ function describeCoil(el: CoilElement, labels: Labels, notation: Notation): stri
       return ja(device, "の出力コイル");
     case "pulse":
       return ja(device, "の立ち上がり微分コイル");
+    case "set":
+      return ja(device, "のセットコイル");
     case "timer":
       return ja(device, `のタイマコイル、設定 ${formatSeconds(el.presetMs)} 秒`);
+    case "offdelay":
+      return ja(device, `のオフディレイタイマコイル、設定 ${formatSeconds(el.presetMs)} 秒`);
     case "counter":
       return ja(device, `のカウンタコイル、設定 ${el.preset} 回`);
     case "reset":

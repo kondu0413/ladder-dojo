@@ -191,6 +191,56 @@ test("動かしながら操作を記録して、そのままテストにでき�
   await expect(page.getByTestId("judge-result")).toHaveAttribute("data-passed", "true");
 });
 
+test("SET / RST・立ち下がり・オフディレイを置いて動かせる(S-044)", async ({ page }) => {
+  await page.goto("/sandbox");
+  // 1 行目: X0 の a 接点 → SET Y0
+  await page.getByTestId("cell-0-0").click();
+  await page.getByTestId("part-no").click();
+  await page.getByTestId("cell-0-5").click();
+  await page.getByTestId("device-type-Y").click();
+  await page.getByTestId("part-set").click();
+  await expect(page.getByTestId("cell-text-0-5")).toHaveText("Y0");
+  await page.getByTestId("connect-row").click();
+
+  // 2 行目: X1 の a 接点 → RST Y0
+  await page.getByTestId("cell-1-0").click();
+  await page.getByTestId("device-type-X").click();
+  await page.getByTestId("device-number-inc").click();
+  await page.getByTestId("part-no").click();
+  await page.getByTestId("cell-1-5").click();
+  await page.getByTestId("device-type-Y").click();
+  await page.getByTestId("device-number-dec").click();
+  await page.getByTestId("part-reset").click();
+  await page.getByTestId("connect-row").click();
+
+  // 3 行目: X1 の立ち下がり → オフディレイ T0(3 秒)
+  await page.getByTestId("cell-2-0").click();
+  await page.getByTestId("device-type-X").click();
+  await page.getByTestId("device-number-inc").click();
+  await page.getByTestId("part-fall").click();
+  await page.getByTestId("cell-2-5").click();
+  await page.getByTestId("device-type-T").click();
+  await page.getByTestId("device-number-dec").click();
+  await page.getByTestId("part-offdelay").click();
+  await expect(page.getByTestId("cell-text-2-5")).toHaveText("T0 K30");
+  await page.getByTestId("connect-row").click();
+
+  await page.getByTestId("mode-run").click();
+  const y0 = page.getByTestId("device-Y0");
+  const t0 = page.getByTestId("device-T0");
+  await page.getByTestId("input-X0").click();
+  await expect(y0).toHaveAttribute("data-on", "true"); // SET で点いたまま
+  await expect(t0).toHaveAttribute("data-on", "false");
+
+  await page.getByTestId("input-X1").click();
+  await expect(y0).toHaveAttribute("data-on", "false"); // RST で消える
+  // 離した瞬間の立ち下がりでオフディレイが動き、3 秒のあいだ ON を保つ
+  await expect(t0).toHaveAttribute("data-on", "true");
+  await page.waitForTimeout(1000);
+  await expect(t0).toHaveAttribute("data-on", "true");
+  await expect(t0).toHaveAttribute("data-on", "false", { timeout: 5000 });
+});
+
 test("壊れた共有リンクは無視して、白紙のサンドボックスになる", async ({ page }) => {
   await page.goto("/sandbox#c=v1.6.3.0,0,zzz");
   await expect(page.getByRole("heading", { name: "サンドボックス" })).toBeVisible();

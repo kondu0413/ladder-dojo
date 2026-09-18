@@ -37,6 +37,8 @@ export const bitCoilDeviceSchema = deviceSchemaOf(["Y", "M"], "コイルの対�
 export const timerDeviceSchema = deviceSchemaOf(["T"], "タイマ");
 /** カウンタ */
 export const counterDeviceSchema = deviceSchemaOf(["C"], "カウンタ");
+/** RST の対象。カウンタのほか、SET で保持したビット(Y / M)も戻せる(S-044) */
+export const resettableDeviceSchema = deviceSchemaOf(["Y", "M", "C"], "リセットの対象");
 /** 期待値として指定できるデバイス(X 以外) */
 export const observableDeviceSchema = deviceSchemaOf(["Y", "M", "T", "C"], "観測デバイス");
 

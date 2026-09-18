@@ -10,7 +10,8 @@ import { type Circuit, circuitSchema, type Element, SCHEMA_VERSION } from "@ladd
  *
  * 形式: `v1.<cols>.<rows>.<cell>;<cell>;...`
  * cell: `<row>,<col>,<code>[,<device>][,<preset>][,v]`
- * code: w 横線 / a a接点 / b b接点 / r 立上り / o 出力 / p PLS / t タイマ / c カウンタ / s RST
+ * code: w 横線 / a a接点 / b b接点 / r 立上り / f 立下り / o 出力 / e SET / p PLS /
+ *       t タイマ / d オフディレイ / c カウンタ / s RST
  *       `-` は要素なし(縦線だけのマス)。末尾の `v` は下への縦線。
  * 使う文字は英数字と `. , ; -` だけなので、URL のハッシュにそのまま書ける。
  */
@@ -22,9 +23,12 @@ const CODE_OF: Record<string, string> = {
   "contact:no": "a",
   "contact:nc": "b",
   "contact:rise": "r",
+  "contact:fall": "f",
   "coil:out": "o",
+  "coil:set": "e",
   "coil:pulse": "p",
   "coil:timer": "t",
+  "coil:offdelay": "d",
   "coil:counter": "c",
   "coil:reset": "s",
 };
@@ -46,7 +50,9 @@ export function encodeCircuit(circuit: Circuit): string {
       } else {
         fields.push(CODE_OF[keyOf(el)] ?? "-");
         if (el.type !== "wire") fields.push(el.device);
-        if (el.type === "coil" && el.kind === "timer") fields.push(el.presetMs);
+        if (el.type === "coil" && (el.kind === "timer" || el.kind === "offdelay")) {
+          fields.push(el.presetMs);
+        }
         if (el.type === "coil" && el.kind === "counter") fields.push(el.preset);
       }
       if (c.vline) fields.push("v");
@@ -82,10 +88,13 @@ const KIND_OF: Record<string, { type: "contact" | "coil"; kind: string }> = {
   a: { type: "contact", kind: "no" },
   b: { type: "contact", kind: "nc" },
   r: { type: "contact", kind: "rise" },
+  f: { type: "contact", kind: "fall" },
   o: { type: "coil", kind: "out" },
+  e: { type: "coil", kind: "set" },
   p: { type: "coil", kind: "pulse" },
   s: { type: "coil", kind: "reset" },
   t: { type: "coil", kind: "timer" },
+  d: { type: "coil", kind: "offdelay" },
   c: { type: "coil", kind: "counter" },
 };
 
@@ -106,10 +115,10 @@ function decodeCell(item: string): Record<string, unknown> | undefined {
     const device = fields[index++];
     if (!device) return undefined;
     element = { type: known.type, kind: known.kind, device };
-    if (code === "t" || code === "c") {
+    if (code === "t" || code === "d" || code === "c") {
       const preset = toInt(fields[index++] ?? "");
       if (preset === undefined) return undefined;
-      element[code === "t" ? "presetMs" : "preset"] = preset;
+      element[code === "c" ? "preset" : "presetMs"] = preset;
     }
   }
 

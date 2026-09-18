@@ -171,8 +171,8 @@ function diagnoseStructure(
   for (const c of coils) {
     const el = c.element;
     if (el?.type !== "coil") continue;
-    // RST は同じカウンタを別に扱ってよいので二重コイルに数えない
-    if (el.kind === "reset") continue;
+    // RST / SET は同じデバイスを複数のラングから触ってよいので二重コイルに数えない
+    if (el.kind === "reset" || el.kind === "set") continue;
     const list = byDevice.get(el.device) ?? [];
     list.push(c);
     byDevice.set(el.device, list);
@@ -193,6 +193,8 @@ function diagnoseStructure(
   for (const device of selfHoldExpectedDevices(testCases)) {
     const coil = coils.find((c) => c.element?.type === "coil" && c.element.device === device);
     if (!coil) continue;
+    // SET で保持しているなら、自分の接点は要らない(S-044)
+    if (coil.element?.type === "coil" && coil.element.kind === "set") continue;
     const rung = splitRungs(circuit).find((r) => r.rows.includes(coil.row));
     if (!rung) continue;
     const readsItself = circuit.cells.some(
@@ -375,7 +377,7 @@ function* singleEditCandidates(
   for (const cell of circuit.cells) {
     const el = cell.element;
     if (el?.type !== "coil") continue;
-    if (el.kind === "timer") {
+    if (el.kind === "timer" || el.kind === "offdelay") {
       for (const presetMs of timerPresetGuesses(el.presetMs, waits)) {
         yield {
           circuit: replaceElement(circuit, cell, { ...el, presetMs }),
@@ -409,7 +411,7 @@ function* singleEditCandidates(
   for (const cell of circuit.cells) {
     const el = cell.element;
     if (el?.type !== "contact") continue;
-    for (const kind of ["no", "nc", "rise"] as const) {
+    for (const kind of ["no", "nc", "rise", "fall"] as const) {
       if (kind === el.kind) continue;
       yield {
         circuit: replaceElement(circuit, cell, { ...el, kind }),
@@ -543,12 +545,15 @@ function withDevice(element: Element, device: DeviceId): Element | undefined {
   switch (element.kind) {
     case "out":
     case "pulse":
+    case "set":
       return device.startsWith("Y") || device.startsWith("M") ? { ...element, device } : undefined;
     case "timer":
+    case "offdelay":
       return device.startsWith("T") ? { ...element, device } : undefined;
     case "counter":
-    case "reset":
       return device.startsWith("C") ? { ...element, device } : undefined;
+    case "reset":
+      return /^[YMC]/.test(device) ? { ...element, device } : undefined;
   }
 }
 
@@ -646,6 +651,8 @@ function contactLabel(kind: ContactKind): string {
       return "b 接点(OFF のとき通る)";
     case "rise":
       return "立ち上がり接点(OFF → ON の一瞬だけ通る)";
+    case "fall":
+      return "立ち下がり接点(ON → OFF の一瞬だけ通る)";
   }
 }
 

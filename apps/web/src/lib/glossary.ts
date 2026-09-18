@@ -1,4 +1,17 @@
-import { type Circuit, counter, ladder, nc, no, out, reset, rise, timer } from "@ladder-dojo/core";
+import {
+  type Circuit,
+  counter,
+  fall,
+  ladder,
+  nc,
+  no,
+  out,
+  reset,
+  rise,
+  set,
+  timer,
+  tof,
+} from "@ladder-dojo/core";
 
 /**
  * 用語集(S-041)。SPEC.md §7 の用語に、問題文とヒントに出てくる言葉を足したもの。
@@ -148,6 +161,16 @@ export const GLOSSARY: GlossaryEntry[] = [
     related: ["flicker", "counter"],
   },
   {
+    id: "offdelay",
+    term: "オフディレイタイマ(TOF)",
+    aliases: ["オフディレイタイマ", "オフディレイ", "TOF"],
+    short: "通電中は ON。通電が切れてから設定時間のあいだ ON を保ち、そのあと OFF になる。",
+    body: "オンディレイが「通電してから遅れて ON」なのに対し、オフディレイは「切れてから遅れて OFF」です。ボタンを離してから数秒だけ照明を残す、装置が止まってから少しファンを回し続ける、といった動きに使います。切れている途中でまた通電すると、時間は最初から数え直します。",
+    circuit: ladder(4).row(no("X0"), tof("T0", 2000)).row(no("T0"), out("Y0")).build(),
+    deviceLabels: { X0: "ボタン", T0: "2 秒", Y0: "ランプ" },
+    related: ["timer"],
+  },
+  {
     id: "counter",
     term: "カウンタ",
     aliases: ["カウンタ"],
@@ -184,6 +207,31 @@ export const GLOSSARY: GlossaryEntry[] = [
     circuit: ladder(4).row(rise("X0"), out("M0")).row(no("M0"), out("Y0")).build(),
     deviceLabels: { X0: "ボタン", M0: "パルス", Y0: "出力" },
     related: ["scan", "alternate", "counter"],
+  },
+  {
+    id: "fall",
+    term: "立ち下がり接点",
+    aliases: ["立ち下がり接点", "立ち下がり", "立下り"],
+    short: "ON から OFF に変わった瞬間の 1 スキャンだけ通す。ボタンを離した瞬間を拾う。",
+    body: "立ち上がりの逆で、デバイスが ON → OFF になったスキャンだけ閉じます。「押したとき」ではなく「離したとき」に 1 回だけ動かしたいときに使います。この回路は離した回数を数えます。",
+    circuit: ladder(4)
+      .row(fall("X0"), counter("C0", 2))
+      .row(no("X1"), reset("C0"))
+      .row(no("C0"), out("Y0"))
+      .build(),
+    deviceLabels: { X0: "ボタン", X1: "リセット", Y0: "2 回離すと点く" },
+    related: ["rise", "counter"],
+  },
+  {
+    id: "set-reset",
+    term: "SET / RST(セット・リセット)",
+    aliases: ["SET / RST", "SET/RST", "SET", "セット"],
+    short:
+      "SET は通電した瞬間に ON にして保ち、RST で OFF に戻す。接点で自己保持を組まない書き方。",
+    body: "SET コイルは通電した瞬間に対象を ON にし、通電が切れても ON のまま保ちます。戻すには同じデバイスの RST コイルに通電します。両方に同時に通電したときは、あとに評価される下のラングの結果が残ります(RST を下に置けば停止が優先)。RST は SET で保持した Y / M のほか、カウンタも戻せます。",
+    circuit: ladder(4).row(no("X0"), set("Y0")).row(no("X1"), reset("Y0")).build(),
+    deviceLabels: { X0: "起動", X1: "停止", Y0: "ランプ" },
+    related: ["selfhold", "reset", "scan"],
   },
   {
     id: "scan",

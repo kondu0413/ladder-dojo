@@ -287,6 +287,7 @@ function CellView({
           leftOn={leftOn}
           rightOn={rightOn}
           risingMark={notation.risingMark}
+          fallingMark={notation.fallingMark}
         />
       )}
       {el?.type === "coil" && <Coil x={x} y={y0} el={el} flowing={flowing} leftOn={leftOn} />}
@@ -358,12 +359,14 @@ function CellView({
 function cellLabel(el: ContactElement | CoilElement, notation: NotationContextValue): string {
   const name = notation.device(el.device);
   if (el.type !== "coil") return name;
-  if (el.kind === "timer") return `${name} ${notation.timerPreset(el.presetMs)}`;
+  if (el.kind === "timer" || el.kind === "offdelay") {
+    return `${name} ${notation.timerPreset(el.presetMs)}`;
+  }
   if (el.kind === "counter") return `${name} ${notation.counterPreset(el.preset)}`;
   return name;
 }
 
-/** 接点: 縦棒 2 本。b 接点は斜線、立ち上がりは中に記号(↑ / P、S-028) */
+/** 接点: 縦棒 2 本。b 接点は斜線、立ち上がり / 立ち下がりは中に記号(↑↓ / P N、S-028) */
 function Contact({
   x,
   y,
@@ -372,6 +375,7 @@ function Contact({
   leftOn,
   rightOn,
   risingMark,
+  fallingMark,
 }: {
   x: number;
   y: number;
@@ -380,6 +384,7 @@ function Contact({
   leftOn: boolean;
   rightOn: boolean;
   risingMark: string;
+  fallingMark: string;
 }) {
   const gap = 12;
   const half = CELL_W / 2;
@@ -421,21 +426,32 @@ function Contact({
           strokeLinecap="round"
         />
       )}
-      {el.kind === "rise" && (
+      {(el.kind === "rise" || el.kind === "fall") && (
         <text
           x={x + half}
           y={y + 5}
           textAnchor="middle"
           className="fill-slate-700 text-[12px] font-bold"
         >
-          {risingMark}
+          {el.kind === "rise" ? risingMark : fallingMark}
         </text>
       )}
     </g>
   );
 }
 
-/** コイル: 開いた括弧。種別を中に 1 文字で示す(P / T / C / R) */
+/** コイルの中に描く記号。out は何も書かない */
+const COIL_MARKS: Record<CoilElement["kind"], string> = {
+  out: "",
+  pulse: "P",
+  set: "S",
+  timer: "T",
+  offdelay: "TOF",
+  counter: "C",
+  reset: "R",
+};
+
+/** コイル: 開いた括弧。種別を中に記号で示す(P / S / T / TOF / C / R) */
 function Coil({
   x,
   y,
@@ -453,16 +469,7 @@ function Coil({
   const gap = 13;
   const color = flowing ? FLOW : DEAD;
   const w = flowing ? 3.5 : 2;
-  const mark =
-    el.kind === "pulse"
-      ? "P"
-      : el.kind === "timer"
-        ? "T"
-        : el.kind === "counter"
-          ? "C"
-          : el.kind === "reset"
-            ? "R"
-            : "";
+  const mark = COIL_MARKS[el.kind];
   return (
     <g>
       <Lead x1={x} x2={x + half - gap} y={y} on={leftOn} flowing={flowing} />
@@ -484,9 +491,9 @@ function Coil({
       {mark && (
         <text
           x={x + half}
-          y={y + 5}
+          y={mark.length > 1 ? y + 3.5 : y + 5}
           textAnchor="middle"
-          className="fill-slate-700 text-[12px] font-bold"
+          className={`fill-slate-700 font-bold ${mark.length > 1 ? "text-[8px]" : "text-[12px]"}`}
         >
           {mark}
         </text>
