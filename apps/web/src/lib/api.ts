@@ -115,7 +115,8 @@ export const api = {
     request<SubmissionOneDto>("/submissions", { method: "POST", body: JSON.stringify(input) }),
 
   /** 「みんながつまずくところ」。ログイン不要 */
-  mistakes: (problemId: string) => request<MistakeListDto>(`/mistakes/${problemId}`),
+  mistakes: (problemId: string, signal?: AbortSignal) =>
+    request<MistakeListDto>(`/mistakes/${problemId}`, signal ? { signal } : undefined),
 
   // --- 投稿問題(フェーズ2、SPEC.md §3.6)---
 
@@ -237,9 +238,12 @@ export const api = {
   deleteAssignment: (orgId: string, assignmentId: string) =>
     request<{ deleted: true }>(`/orgs/${orgId}/assignments/${assignmentId}`, { method: "DELETE" }),
 
-  ranking: (params: { metric: RankingMetric; period: RankingPeriod; orgId?: string }) => {
+  ranking: (
+    params: { metric: RankingMetric; period: RankingPeriod; orgId?: string },
+    signal?: AbortSignal,
+  ) => {
     const search = new URLSearchParams({ metric: params.metric, period: params.period });
     if (params.orgId) search.set("orgId", params.orgId);
-    return request<RankingDto>(`/rankings?${search.toString()}`);
+    return request<RankingDto>(`/rankings?${search.toString()}`, signal ? { signal } : undefined);
   },
 };

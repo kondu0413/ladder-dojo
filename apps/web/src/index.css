@@ -1,5 +1,30 @@
 @import "tailwindcss";
 
+/*
+ * 見た目の土台(S-036)。
+ *
+ * - 書体は端末に入っているものだけを使う。Web フォントを取りに行かない。
+ *   オフラインでも同じ見た目で動くこと(S-013)と、外部サービスに頼らないこと
+ *   (SPEC.md §2.3)を優先する。日本語の書体を先に並べて、環境で崩れないようにする
+ * - 色は「紺(母線・ヘッダー)」と「橙(通電)」の 2 つを軸にする。
+ *   アイコン(icon.svg)と同じ組み合わせで、画面全体をラダー図の見た目に寄せる
+ */
+@theme {
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Sans",
+    "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", "Meiryo", sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji";
+  --font-mono:
+    ui-monospace, "SFMono-Regular", Menlo, Consolas, "Roboto Mono", "Noto Sans Mono CJK JP",
+    "Liberation Mono", monospace;
+
+  /* 白い箱の影。輪郭は線で見せ、影はごく薄く */
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.05), 0 6px 20px -12px rgb(15 23 42 / 0.12);
+  --shadow-float: 0 12px 40px -12px rgb(15 23 42 / 0.25);
+  /* 通電しているボタンの光 */
+  --shadow-glow: 0 0 0 3px rgb(251 191 36 / 0.35), 0 4px 16px -4px rgb(245 158 11 / 0.5);
+}
+
 :root {
   color-scheme: light;
 }
@@ -14,6 +39,36 @@ body,
 html,
 body {
   overflow-x: clip;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* 見出しは日本語の字間を詰める(palt)。本文には効かせない。小さい字で詰めると読みにくい */
+h1,
+h2,
+h3 {
+  font-feature-settings: "palt" 1;
+  text-wrap: balance;
+}
+
+/* キーボードで操作している人にだけ、今どこにいるかを橙の輪で示す */
+:focus-visible {
+  outline: 2px solid var(--color-amber-400);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ネイティブの select に矢印を付ける(見た目を input と揃えるために appearance を切るので) */
+.select-chevron {
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+  background-size: 1rem 1rem;
+  padding-right: 2.25rem;
 }
 
 /*
@@ -38,8 +93,53 @@ body {
   animation: question-enter 220ms ease-out;
 }
 
+/* 箱がふわっと出る。判定結果や通知に使う */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rise-in {
+  animation: rise-in 200ms ease-out;
+}
+
+/* 読み込み中の灰色の箱 */
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-slate-200) 0%,
+    var(--color-slate-100) 40%,
+    var(--color-slate-200) 80%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+/* 紹介画面の紺の背景に敷く、うっすらした点のグリッド */
+.dot-grid {
+  background-image: radial-gradient(circle at 1px 1px, rgb(255 255 255 / 0.09) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .question-enter {
+  .question-enter,
+  .rise-in,
+  .skeleton {
     animation: none;
   }
 }

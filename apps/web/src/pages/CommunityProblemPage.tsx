@@ -20,12 +20,31 @@ import { LadderEditor } from "../components/LadderEditor.js";
 import { LadderView } from "../components/LadderView.js";
 import { NotationTabs } from "../components/NotationTabs.js";
 import { SimulatorControls } from "../components/SimulatorControls.js";
+import {
+  Badge,
+  Button,
+  buttonClass,
+  Card,
+  Difficulty,
+  EmptyState,
+  Field,
+  Icon,
+  inputClass,
+  Label,
+  Notice,
+  PageHeader,
+  SectionTitle,
+  Segmented,
+  Skeleton,
+} from "../components/ui.js";
 import { useDiagnosis } from "../hooks/useDiagnosis.js";
 import { useSimulator } from "../hooks/useSimulator.js";
 import { api, type PostedProblemDetail } from "../lib/api.js";
 import { circuitMetricsRows } from "../lib/metrics-view.js";
 import { useNotation } from "../lib/notation-context.jsx";
 import { useProgress } from "../lib/progress-context.jsx";
+
+type Vote = "1" | "2" | "3" | "4" | "5";
 
 /** 投稿問題を解く画面(SPEC.md §3.6) */
 export function CommunityProblemPage() {
@@ -46,6 +65,11 @@ export function CommunityProblemPage() {
   const [failures, setFailures] = useState(0);
   const [error, setError] = useState<string | undefined>(undefined);
   const [notice, setNotice] = useState<string | undefined>(undefined);
+  /** 通報の理由を書く欄を開いているか。ブラウザの prompt() は使わない(見た目が揃わないうえ、閉じられると消える) */
+  const [reporting, setReporting] = useState(false);
+  const [reason, setReason] = useState("");
+  /** 「投稿を削除」を押した状態。もう一度押して初めて消す */
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const reload = useCallback(async () => {
     if (!id) return;
@@ -81,13 +105,11 @@ export function CommunityProblemPage() {
   if (error) {
     return (
       <AppShell width="narrow">
-        <p
-          data-testid="problem-error"
-          className="rounded-lg bg-red-50 px-3 py-3 text-sm text-red-700"
-        >
+        <Notice tone="danger" data-testid="problem-error">
           {error}
-        </p>
-        <Link to="/community" className="text-sm text-slate-500 underline">
+        </Notice>
+        <Link to="/community" className={buttonClass("secondary", "self-start")}>
+          <Icon name="arrowLeft" className="h-4 w-4" />
           みんなの問題に戻る
         </Link>
       </AppShell>
@@ -97,7 +119,13 @@ export function CommunityProblemPage() {
   if (!problem) {
     return (
       <AppShell width="narrow">
-        <p className="text-sm text-slate-500">読み込み中…</p>
+        <p className="sr-only" role="status">
+          読み込み中
+        </p>
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-8 w-2/3" />
+        <Skeleton className="h-28" />
+        <Skeleton className="h-64" />
       </AppShell>
     );
   }
@@ -146,15 +174,21 @@ export function CommunityProblemPage() {
     }
   };
 
-  const report = async () => {
+  const openReport = () => {
     if (!user) {
       setNotice("通報するにはログインしてください。");
       return;
     }
-    const reason = window.prompt("通報の理由を教えてください(不適切な内容、解けないなど)");
-    if (!reason) return;
+    setReporting((v) => !v);
+  };
+
+  const report = async () => {
+    const text = reason.trim();
+    if (!text) return;
     try {
-      const res = await api.reportPosted(problem.id, reason.slice(0, 200));
+      const res = await api.reportPosted(problem.id, text.slice(0, 200));
+      setReporting(false);
+      setReason("");
       setNotice(
         res.hidden ? "通報を受け付け、この問題は非表示になりました。" : "通報を受け付けました。",
       );
@@ -165,11 +199,11 @@ export function CommunityProblemPage() {
   };
 
   const removeProblem = async () => {
-    if (!window.confirm("この投稿を削除しますか?")) return;
     try {
       await api.deletePosted(problem.id);
       await navigate("/community");
     } catch {
+      setConfirmDelete(false);
       setNotice("削除できませんでした。");
     }
   };
@@ -178,59 +212,56 @@ export function CommunityProblemPage() {
 
   return (
     <AppShell width="narrow">
-      <header className="flex flex-col gap-1">
-        <Link to="/community" className="text-sm text-slate-500 underline">
-          ← みんなの問題
-        </Link>
-        <h1 className="text-lg font-bold text-slate-900">{problem.title}</h1>
-        <p className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-          <span>難易度 {problem.votedDifficulty ?? problem.difficulty}</span>
-          <span>♥ {problem.likes}</span>
-          <span data-testid="clear-rate">
+      <PageHeader title={problem.title} back={{ to: "/community", label: "みんなの問題" }}>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-slate-500">
+          <Difficulty level={problem.votedDifficulty ?? problem.difficulty} />
+          <span className="inline-flex items-center gap-1">
+            <Icon name="heart" className="h-3.5 w-3.5 text-rose-400" />
+            {problem.likes}
+          </span>
+          <span data-testid="clear-rate" className="inline-flex items-center gap-1">
+            <Icon name="target" className="h-3.5 w-3.5 text-slate-400" />
             クリア率 {problem.clearRate === null ? "—" : `${problem.clearRate}%`}({problem.clears}/
             {problem.attempts} 人)
           </span>
-          {problem.isAuthor && <span className="rounded bg-slate-200 px-1">自分の投稿</span>}
+          {problem.isAuthor && <Badge tone="navy">自分の投稿</Badge>}
+          {problem.visibility === "org" && <Badge icon="factory">組織限定</Badge>}
+          {problem.visibility === "private" && <Badge icon="lock">非公開</Badge>}
+        </div>
+      </PageHeader>
+
+      <Card padded className="flex flex-col gap-4">
+        <p className="whitespace-pre-wrap text-[15px] leading-7 text-slate-800">
+          {notation.text(problem.spec)}
         </p>
-      </header>
-
-      <p className="whitespace-pre-wrap rounded-lg bg-slate-100 px-3 py-3 text-sm text-slate-700">
-        {notation.text(problem.spec)}
-      </p>
-
-      <NotationTabs />
+        {problem.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {problem.tags.map((t) => (
+              <Badge key={t}>{t}</Badge>
+            ))}
+          </div>
+        )}
+        <div className="border-t border-slate-100 pt-3">
+          <NotationTabs />
+        </div>
+      </Card>
 
       {notice && (
-        <p
-          data-testid="notice"
-          role="status"
-          className="rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-900"
-        >
+        <Notice tone="info" role="status" data-testid="notice">
           {notice}
-        </p>
+        </Notice>
       )}
 
-      <div className="flex overflow-hidden rounded-lg border border-slate-300">
-        {(
-          [
-            { value: "edit", label: "編集" },
-            { value: "run", label: "動かす" },
-          ] as const
-        ).map((t) => (
-          <button
-            key={t.value}
-            type="button"
-            data-testid={`mode-${t.value}`}
-            aria-pressed={tab === t.value}
-            onClick={() => setTab(t.value)}
-            className={`min-h-11 flex-1 text-sm font-medium ${
-              tab === t.value ? "bg-slate-700 text-white" : "bg-white text-slate-600"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <Segmented<"edit" | "run">
+        fill
+        label="回路の見方"
+        value={tab}
+        onChange={setTab}
+        options={[
+          { value: "edit", label: "編集", testId: "mode-edit" },
+          { value: "run", label: "動かす", testId: "mode-run" },
+        ]}
+      />
 
       {tab === "edit" ? (
         <LadderEditor circuit={circuit} onChange={setCircuit} />
@@ -238,14 +269,18 @@ export function CommunityProblemPage() {
         <RunPanel circuit={circuit} />
       )}
 
-      <button
-        type="button"
-        data-testid="check-answer"
-        onClick={check}
-        className="min-h-11 rounded-lg bg-emerald-600 px-4 text-sm font-bold text-white"
-      >
-        答え合わせ
-      </button>
+      <div className="sticky bottom-3 z-10 flex gap-2 rounded-2xl border border-slate-200/80 bg-white/90 p-2 shadow-float backdrop-blur">
+        <Button
+          tone="accent"
+          size="lg"
+          icon="bolt"
+          className="flex-1"
+          data-testid="check-answer"
+          onClick={check}
+        >
+          答え合わせ
+        </Button>
+      </div>
 
       <CommonMistakes problemId={problem.id} />
 
@@ -261,75 +296,116 @@ export function CommunityProblemPage() {
       )}
 
       {solution?.success && (
-        <section className="flex flex-col gap-2" data-testid="posted-solution">
-          <h2 className="text-sm font-semibold text-slate-700">投稿者の模範解答</h2>
-          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-2">
+        <section className="flex flex-col gap-3" data-testid="posted-solution">
+          <SectionTitle icon="layers">投稿者の模範解答</SectionTitle>
+          <Card className="overflow-x-auto border-amber-200 p-2">
             <LadderView circuit={solution.data} />
-          </div>
-          <MetricsTable yours={circuit} model={solution.data} />
+          </Card>
+          <Card padded>
+            <MetricsTable yours={circuit} model={solution.data} />
+          </Card>
         </section>
       )}
 
-      <section className="flex flex-col gap-2 border-t border-slate-200 pt-3">
+      <Card padded className="flex flex-col gap-4">
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
+          <Button
+            tone="secondary"
             data-testid="like-button"
             aria-pressed={problem.liked}
+            className={
+              problem.liked ? "border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100" : ""
+            }
             onClick={() => void toggleLike()}
-            className={`min-h-11 rounded-lg border px-4 text-sm font-medium ${
-              problem.liked
-                ? "border-rose-400 bg-rose-50 text-rose-700"
-                : "border-slate-300 bg-white text-slate-700"
-            }`}
           >
-            {problem.liked ? "♥ いいね済み" : "♡ いいね"}
-          </button>
-          <button
-            type="button"
+            <Icon
+              name="heart"
+              className={`h-4 w-4 ${problem.liked ? "fill-rose-500 text-rose-500" : ""}`}
+            />
+            {problem.liked ? "いいね済み" : "いいね"}
+          </Button>
+          <Button
+            tone="ghost"
+            icon="flag"
             data-testid="report-button"
-            onClick={() => void report()}
-            className="min-h-11 rounded-lg border border-slate-300 bg-white px-4 text-sm text-slate-600"
+            aria-expanded={reporting}
+            onClick={openReport}
           >
             通報
-          </button>
-          {problem.isAuthor && (
-            <button
-              type="button"
-              data-testid="delete-posted"
-              onClick={() => void removeProblem()}
-              className="min-h-11 rounded-lg border border-red-300 bg-white px-4 text-sm text-red-600"
-            >
-              投稿を削除
-            </button>
-          )}
+          </Button>
+          {problem.isAuthor &&
+            (confirmDelete ? (
+              <span className="inline-flex flex-wrap items-center gap-2">
+                <span className="text-xs font-medium text-rose-700">本当に削除しますか?</span>
+                <Button
+                  tone="danger"
+                  data-testid="delete-posted-confirm"
+                  onClick={() => void removeProblem()}
+                >
+                  削除する
+                </Button>
+                <Button tone="ghost" onClick={() => setConfirmDelete(false)}>
+                  やめる
+                </Button>
+              </span>
+            ) : (
+              <Button
+                tone="danger"
+                icon="trash"
+                data-testid="delete-posted"
+                className="sm:ml-auto"
+                onClick={() => setConfirmDelete(true)}
+              >
+                投稿を削除
+              </Button>
+            ))}
         </div>
 
-        <div>
-          <p className="mb-1 text-xs font-semibold text-slate-500">
+        {reporting && (
+          <div className="rise-in flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <Field label="通報の理由(不適切な内容、解けない など)">
+              <input
+                value={reason}
+                onChange={(e) => setReason(e.target.value.slice(0, 200))}
+                data-testid="report-reason"
+                className={inputClass()}
+              />
+            </Field>
+            <div className="flex gap-2">
+              <Button
+                tone="danger"
+                size="sm"
+                data-testid="report-submit"
+                disabled={reason.trim().length === 0}
+                onClick={() => void report()}
+              >
+                通報する
+              </Button>
+              <Button tone="ghost" size="sm" onClick={() => setReporting(false)}>
+                やめる
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-2">
+          <Label>
             難易度を投票({problem.difficultyVotes} 票
             {problem.votedDifficulty !== null ? ` / 平均 ${problem.votedDifficulty}` : ""})
-          </p>
-          <div className="flex gap-1">
-            {[1, 2, 3, 4, 5].map((d) => (
-              <button
-                key={d}
-                type="button"
-                data-testid={`vote-${d}`}
-                aria-pressed={problem.myDifficulty === d}
-                onClick={() => void vote(d)}
-                className={`min-h-11 w-11 rounded-lg border text-sm font-medium ${
-                  problem.myDifficulty === d
-                    ? "border-slate-700 bg-slate-700 text-white"
-                    : "border-slate-300 bg-white text-slate-600"
-                }`}
-              >
-                {d}
-              </button>
-            ))}
-          </div>
+          </Label>
+          <Segmented<Vote>
+            label="難易度の投票"
+            mono
+            value={String(problem.myDifficulty ?? "") as Vote}
+            onChange={(v) => void vote(Number(v))}
+            options={(["1", "2", "3", "4", "5"] as const).map((d) => ({
+              value: d,
+              label: d,
+              testId: `vote-${d}`,
+            }))}
+          />
         </div>
-      </section>
+      </Card>
     </AppShell>
   );
 }
@@ -339,18 +415,22 @@ function MetricsTable({ yours, model }: { yours: Circuit; model: Circuit }) {
   return (
     <table className="w-full text-sm">
       <thead>
-        <tr className="text-left text-xs text-slate-500">
-          <th className="py-1">指標</th>
-          <th className="py-1">あなた</th>
-          <th className="py-1">投稿者</th>
+        <tr className="text-left text-[11px] font-semibold text-slate-500">
+          <th className="pb-1.5 font-semibold">指標</th>
+          <th className="pb-1.5 text-right font-semibold">あなた</th>
+          <th className="pb-1.5 text-right font-semibold">投稿者</th>
         </tr>
       </thead>
       <tbody>
         {rows.map((r) => (
-          <tr key={r.label} className="border-t border-slate-100">
-            <td className="py-1 text-slate-600">{r.label}</td>
-            <td className="py-1 font-mono">{r.mine}</td>
-            <td className="py-1 font-mono">{r.model}</td>
+          <tr key={r.label}>
+            <td className="border-t border-slate-100 py-1.5 text-slate-600">{r.label}</td>
+            <td className="border-t border-slate-100 py-1.5 text-right font-mono tabular-nums">
+              {r.mine}
+            </td>
+            <td className="border-t border-slate-100 py-1.5 text-right font-mono tabular-nums">
+              {r.model}
+            </td>
           </tr>
         ))}
       </tbody>
@@ -377,9 +457,9 @@ function RunPanel({ circuit }: { circuit: Circuit }) {
   const sim = useSimulator(circuit);
   return (
     <div className="flex flex-col gap-3">
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-2">
+      <Card className="overflow-x-auto p-2">
         <LadderView circuit={circuit} power={sim.power} input={sim.input} />
-      </div>
+      </Card>
       <SimulatorControls
         speed={sim.speed}
         running={sim.running}
@@ -388,9 +468,11 @@ function RunPanel({ circuit }: { circuit: Circuit }) {
         onReset={sim.reset}
       />
       {sim.devices.length === 0 ? (
-        <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-600">
-          まだ部品が置かれていません。
-        </p>
+        <EmptyState
+          icon="flask"
+          title="まだ部品が置かれていません"
+          body="「編集」に切り替えて回路を作ってください。"
+        />
       ) : (
         <DevicePanel
           devices={sim.devices}

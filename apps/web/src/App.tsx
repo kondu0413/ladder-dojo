@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect } from "react";
 import { Route, Routes } from "react-router";
+import { Skeleton } from "./components/ui.js";
 import { NotationProvider } from "./lib/notation-context.jsx";
 import { ProgressProvider, useProgress } from "./lib/progress-context.jsx";
 import { LandingPage } from "./pages/LandingPage.js";
@@ -106,11 +107,20 @@ function Home() {
 
 function PageLoading() {
   return (
-    <main
-      data-testid="page-loading"
-      className="mx-auto flex min-h-dvh max-w-screen-sm flex-col px-4 py-6"
-    >
-      <p className="text-sm text-slate-500">読み込み中…</p>
-    </main>
+    <div data-testid="page-loading" className="flex min-h-dvh flex-col bg-slate-50">
+      <p className="sr-only" role="status">
+        読み込み中
+      </p>
+      <div className="h-14 bg-slate-950" aria-hidden="true" />
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="mt-3 h-4 w-72 max-w-full" />
+        <div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {["a", "b", "c", "d", "e", "f"].map((k) => (
+            <Skeleton key={k} className="h-24" />
+          ))}
+        </div>
+      </main>
+    </div>
   );
 }

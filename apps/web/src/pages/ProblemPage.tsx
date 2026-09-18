@@ -19,7 +19,19 @@ import { NotationTabs } from "../components/NotationTabs.js";
 import { ScenarioReplay } from "../components/ScenarioReplay.js";
 import { SimulatorControls } from "../components/SimulatorControls.js";
 import { SolutionCompare } from "../components/SolutionCompare.js";
-import { Badge, buttonClass, Card, PageHeader } from "../components/ui.js";
+import {
+  Badge,
+  Button,
+  buttonClass,
+  Card,
+  Difficulty,
+  EmptyState,
+  Icon,
+  MODE_STYLE,
+  Notice,
+  PageHeader,
+  Segmented,
+} from "../components/ui.js";
 import { useDiagnosis } from "../hooks/useDiagnosis.js";
 import { useSimulator } from "../hooks/useSimulator.js";
 import { labelMap } from "../lib/describe.js";
@@ -35,31 +47,43 @@ export function ProblemPage() {
   if (!problem) {
     return (
       <AppShell width="narrow">
-        <p className="text-slate-700">問題が見つかりませんでした。</p>
-        <Link to="/problems" className="text-sm text-slate-500 underline">
-          一覧に戻る
-        </Link>
+        <EmptyState
+          icon="search"
+          title="問題が見つかりませんでした"
+          action={
+            <Link to="/problems" className={buttonClass("secondary", "", "sm")}>
+              一覧に戻る
+            </Link>
+          }
+        />
       </AppShell>
     );
   }
 
+  const mode = MODE_STYLE[problem.mode];
+
   return (
     <AppShell width="narrow">
-      <PageHeader title={problem.title} back={{ to: "/problems", label: "問題一覧" }} />
-      <div className="mb-5 flex flex-wrap gap-1.5">
-        <Badge>{STAGE_LABELS[problem.stage]}</Badge>
-        <Badge tone="blue">{MODE_LABELS[problem.mode]}</Badge>
-        <Badge>難易度 {problem.difficulty}</Badge>
-      </div>
+      <PageHeader title={problem.title} back={{ to: "/problems", label: "問題一覧" }}>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge>{STAGE_LABELS[problem.stage]}</Badge>
+          <Badge tone={mode.tone} icon={mode.icon}>
+            {MODE_LABELS[problem.mode]}
+          </Badge>
+          <Difficulty level={problem.difficulty} />
+        </div>
+      </PageHeader>
 
-      <Card className="mb-5 flex flex-col gap-4 p-5">
+      <Card padded className="flex flex-col gap-4">
         <p
           data-testid="problem-spec"
-          className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700"
+          className="whitespace-pre-wrap text-[15px] leading-7 text-slate-800"
         >
           {notation.text(problem.spec)}
         </p>
-        <NotationTabs />
+        <div className="border-t border-slate-100 pt-3">
+          <NotationTabs />
+        </div>
       </Card>
 
       {problem.mode === "read" ? <ReadMode problem={problem} /> : <BuildMode problem={problem} />}
@@ -94,27 +118,27 @@ function ReadMode({ problem }: { problem: Problem }) {
   const allCorrect = questions.every((q) => answers[q.id] === q.answerIndex);
 
   const choose = (questionId: string, choiceIndex: number) => {
-    setAnswers((prev) => {
-      if (prev[questionId] !== undefined) return prev;
-      const next = { ...prev, [questionId]: choiceIndex };
-      // 全設問に答えた時点で、問題としてのクリア判定を記録する(全問正解でクリア)
-      if (Object.keys(next).length === questions.length) {
-        record(
-          problem.id,
-          questions.every((q) => next[q.id] === q.answerIndex),
-        );
-      }
-      return next;
-    });
+    // state の更新関数の中で record() を呼ばない。StrictMode では更新関数が
+    // 2 回呼ばれるので、記録が二重になる。先に次の値を作ってから記録する
+    if (answers[questionId] !== undefined) return;
+    const next = { ...answers, [questionId]: choiceIndex };
+    setAnswers(next);
+    // 全設問に答えた時点で、問題としてのクリア判定を記録する(全問正解でクリア)
+    if (Object.keys(next).length === questions.length) {
+      record(
+        problem.id,
+        questions.every((q) => next[q.id] === q.answerIndex),
+      );
+    }
   };
 
   if (!question) return null;
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-2">
+      <Card className="overflow-x-auto p-2">
         <LadderView circuit={problem.solution} deviceLabels={labels} />
-      </div>
+      </Card>
 
       {/*
         設問が変わったら、そこまで画面を運ぶ(S-024)。
@@ -139,26 +163,43 @@ function ReadMode({ problem }: { problem: Problem }) {
         <div
           data-testid="read-complete"
           data-cleared={allCorrect}
-          className={`rounded-xl border p-4 text-sm ${
+          className={`rise-in flex items-start gap-4 rounded-2xl border p-4 text-sm sm:p-5 ${
             allCorrect
-              ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-              : "border-slate-300 bg-slate-50 text-slate-700"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+              : "border-slate-200 bg-white text-slate-700"
           }`}
         >
-          <p className="font-bold">{allCorrect ? "この問題はクリアです" : "全問に答えました"}</p>
-          <p className="mt-1">
-            {allCorrect
-              ? "次の問題に進みましょう。"
-              : "解説を読んで、実際に動かして確かめてみてください。もう一度開き直せばやり直せます。"}
-          </p>
-          <Link to="/problems" className="mt-2 inline-block underline">
-            問題一覧に戻る
-          </Link>
+          <span
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${
+              allCorrect ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500"
+            }`}
+          >
+            <Icon name={allCorrect ? "check" : "book"} className="h-6 w-6" strokeWidth={2.5} />
+          </span>
+          <div className="flex flex-col gap-1">
+            <p className="text-base font-bold">
+              {allCorrect ? "この問題はクリアです" : "全問に答えました"}
+            </p>
+            <p>
+              {allCorrect
+                ? "次の問題に進みましょう。"
+                : "解説を読んで、実際に動かして確かめてみてください。もう一度開き直せばやり直せます。"}
+            </p>
+            <Link
+              to="/problems"
+              className="mt-2 inline-flex w-fit items-center gap-1 text-sm font-semibold underline-offset-4 hover:underline"
+            >
+              問題一覧に戻る
+              <Icon name="arrowRight" className="h-4 w-4" />
+            </Link>
+          </div>
         </div>
       )}
     </div>
   );
 }
+
+const CHOICE_LETTERS = ["A", "B", "C", "D", "E"] as const;
 
 function ReadQuestionView({
   ref,
@@ -192,9 +233,9 @@ function ReadQuestionView({
     // key が変わると作り直されるので、入場の動きがそのたびに再生される
     <section
       ref={ref}
-      className="question-enter flex scroll-mt-20 flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+      className="question-enter flex scroll-mt-20 flex-col gap-4 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card sm:p-5"
     >
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2.5">
         {/* 丸の並びで「何問目か」を形でも示す。数字だけだと変化に気づけない */}
         <span
           className="flex gap-1"
@@ -205,15 +246,15 @@ function ReadQuestionView({
           {questionIds.map((id) => (
             <span
               key={id}
-              className={`h-2 w-2 rounded-full ${
-                id === question.id ? "bg-blue-600" : "bg-slate-200"
+              className={`h-2 rounded-full transition-[width,background-color] ${
+                id === question.id ? "w-5 bg-amber-400" : "w-2 bg-slate-200"
               }`}
             />
           ))}
         </span>
-        <p className="text-xs font-semibold text-blue-700">設問 {position}</p>
+        <p className="text-xs font-semibold text-slate-500">設問 {position}</p>
       </div>
-      <p className="text-base font-medium leading-relaxed text-slate-800">
+      <p className="text-base font-semibold leading-relaxed text-slate-900">
         {notation.text(question.prompt)}
       </p>
 
@@ -229,15 +270,37 @@ function ReadQuestionView({
                 data-state={state}
                 disabled={answered}
                 onClick={() => onChoose(i)}
-                className={`w-full rounded-xl border px-4 py-3.5 text-left text-sm font-medium transition ${
+                className={`group flex w-full items-center gap-3 rounded-xl border px-3.5 py-3 text-left text-sm font-medium transition-colors ${
                   state === "answer"
                     ? "border-emerald-400 bg-emerald-50 text-emerald-900"
                     : state === "wrong"
-                      ? "border-red-400 bg-red-50 text-red-900"
-                      : "border-slate-200 bg-white text-slate-700"
+                      ? "border-rose-400 bg-rose-50 text-rose-900"
+                      : answered
+                        ? "border-slate-200 bg-white text-slate-400"
+                        : "border-slate-200 bg-white text-slate-800 hover:border-slate-900 hover:bg-slate-50 active:bg-slate-100"
                 }`}
               >
-                {notation.text(choice)}
+                <span
+                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors ${
+                    state === "answer"
+                      ? "bg-emerald-600 text-white"
+                      : state === "wrong"
+                        ? "bg-rose-600 text-white"
+                        : answered
+                          ? "bg-slate-100 text-slate-400"
+                          : "bg-slate-100 text-slate-600 group-hover:bg-slate-900 group-hover:text-white"
+                  }`}
+                  aria-hidden="true"
+                >
+                  {state === "answer" ? (
+                    <Icon name="check" className="h-4 w-4" strokeWidth={2.5} />
+                  ) : state === "wrong" ? (
+                    <Icon name="close" className="h-4 w-4" strokeWidth={2.5} />
+                  ) : (
+                    (CHOICE_LETTERS[i] ?? i + 1)
+                  )}
+                </span>
+                <span className="flex-1">{notation.text(choice)}</span>
               </button>
             </li>
           );
@@ -248,36 +311,34 @@ function ReadQuestionView({
         <div
           data-testid="read-result"
           data-correct={correct}
-          className={`rounded-xl border p-3 text-sm ${
+          className={`rise-in rounded-xl border p-3.5 text-sm leading-relaxed ${
             correct
-              ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-              : "border-red-300 bg-red-50 text-red-800"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+              : "border-rose-200 bg-rose-50 text-rose-900"
           }`}
         >
-          <p className="font-bold">{correct ? "正解" : "残念、ちがいます"}</p>
+          <p className="flex items-center gap-1.5 font-bold">
+            <Icon name={correct ? "check" : "close"} className="h-4 w-4" strokeWidth={2.5} />
+            {correct ? "正解" : "残念、ちがいます"}
+          </p>
           {question.explanation && <p className="mt-1">{notation.text(question.explanation)}</p>}
         </div>
       )}
 
       {answered && (
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
+          <Button
+            tone={verifying ? "secondary" : "accent"}
+            icon={verifying ? "close" : "play"}
             data-testid="verify-with-simulator"
             onClick={() => setVerifying((v) => !v)}
-            className="min-h-11 rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700"
           >
             {verifying ? "閉じる" : "実際に動かして確かめる"}
-          </button>
+          </Button>
           {!isLast && (
-            <button
-              type="button"
-              data-testid="next-question"
-              onClick={onNext}
-              className="min-h-11 rounded-lg bg-slate-700 px-4 text-sm font-medium text-white"
-            >
+            <Button tone="primary" icon="arrowRight" data-testid="next-question" onClick={onNext}>
               次の設問へ
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -302,28 +363,16 @@ function VerifyPanel({ problem, question }: { problem: Problem; question: ReadQu
   const labels = labelMap(problem.deviceLabels);
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-      <fieldset className="flex gap-2 border-0 p-0">
-        <legend className="sr-only">確かめ方</legend>
-        <button
-          type="button"
-          data-testid="verify-mode-replay"
-          aria-pressed={mode === "replay"}
-          onClick={() => setMode("replay")}
-          className={buttonClass(mode === "replay" ? "primary" : "secondary", "px-3 text-xs")}
-        >
-          この設問の操作を再生
-        </button>
-        <button
-          type="button"
-          data-testid="verify-mode-free"
-          aria-pressed={mode === "free"}
-          onClick={() => setMode("free")}
-          className={buttonClass(mode === "free" ? "primary" : "secondary", "px-3 text-xs")}
-        >
-          自分で動かす
-        </button>
-      </fieldset>
+    <div className="rise-in flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <Segmented<"replay" | "free">
+        label="確かめ方"
+        value={mode}
+        onChange={setMode}
+        options={[
+          { value: "replay", label: "この設問の操作を再生", testId: "verify-mode-replay" },
+          { value: "free", label: "自分で動かす", testId: "verify-mode-free" },
+        ]}
+      />
 
       {mode === "replay" ? (
         <ScenarioReplay
@@ -344,11 +393,11 @@ function FreePlay({ problem }: { problem: Problem }) {
   const labels = labelMap(problem.deviceLabels);
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-xs text-slate-500">
+      <p className="text-xs leading-relaxed text-slate-500">
         入力は押しボタンです。押している間だけ ON になり、離すと OFF に戻ります。センサのように
         ずっと ON にしたいときは「保持」を使ってください。
       </p>
-      <div className="overflow-x-auto rounded-lg bg-white p-2">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-2">
         <LadderView
           circuit={problem.solution}
           power={sim.power}
@@ -435,37 +484,23 @@ function BuildMode({ problem }: { problem: Problem }) {
         // 直すマスの数ではない。9 問中 5 問は 1 つの不具合を直すのに 2〜4 マス
         // 触る必要がある。「1 か所」と言うと、1 マス直せば通ると読めてしまい、
         // 通らなかった学習者を「1 か所と言ったのに」で止めてしまう
-        <p
-          data-testid="fix-hint"
-          className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900"
-        >
+        <Notice tone="warning" data-testid="fix-hint">
           {problem.fix.bugCount === 1
             ? "この回路には直すべきところが 1 つあります。直すマスは 1 つとは限りません。"
             : `この回路には直すべきところが ${problem.fix.bugCount} つあります。`}
-        </p>
+        </Notice>
       )}
 
-      <div className="flex overflow-hidden rounded-lg border border-slate-300">
-        {(
-          [
-            { value: "edit", label: "編集" },
-            { value: "run", label: "動かす" },
-          ] as const
-        ).map((t) => (
-          <button
-            key={t.value}
-            type="button"
-            data-testid={`mode-${t.value}`}
-            aria-pressed={tab === t.value}
-            onClick={() => setTab(t.value)}
-            className={`min-h-11 flex-1 text-sm font-medium ${
-              tab === t.value ? "bg-slate-700 text-white" : "bg-white text-slate-600"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <Segmented<"edit" | "run">
+        fill
+        label="回路の見方"
+        value={tab}
+        onChange={setTab}
+        options={[
+          { value: "edit", label: "編集", testId: "mode-edit" },
+          { value: "run", label: "動かす", testId: "mode-run" },
+        ]}
+      />
 
       {tab === "edit" ? (
         <LadderEditor circuit={circuit} onChange={setCircuit} />
@@ -473,33 +508,46 @@ function BuildMode({ problem }: { problem: Problem }) {
         <RunPanel circuit={circuit} labels={labels} />
       )}
 
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
+      {/* いちばん押すボタンは、長い編集画面でも指の届くところに留める */}
+      <div className="sticky bottom-3 z-10 flex gap-2 rounded-2xl border border-slate-200/80 bg-white/90 p-2 shadow-float backdrop-blur">
+        <Button
+          tone="accent"
+          size="lg"
+          icon="bolt"
+          className="flex-1"
           data-testid="check-answer"
           onClick={check}
-          className="min-h-11 flex-1 rounded-lg bg-emerald-600 px-4 text-sm font-bold text-white"
         >
           答え合わせ
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          tone="secondary"
+          size="lg"
+          icon="reset"
           data-testid="reset-circuit"
           onClick={() => {
             setCircuit(initial);
             setChecked(undefined);
             setFailures(0);
           }}
-          className="min-h-11 rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700"
         >
           最初から
-        </button>
+        </Button>
       </div>
 
       {hint && (
-        <details className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-          <summary className="cursor-pointer text-sm text-slate-600">ヒントを見る</summary>
-          <p className="mt-2 text-sm text-slate-700">{notation.text(hint)}</p>
+        <details className="group rounded-2xl border border-slate-200/80 bg-white shadow-card">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-4 text-sm font-medium text-slate-700 [&::-webkit-details-marker]:hidden">
+            <Icon name="info" className="h-4 w-4 text-slate-400" />
+            ヒントを見る
+            <Icon
+              name="chevronDown"
+              className="ml-auto h-4 w-4 text-slate-400 transition-transform group-open:rotate-180"
+            />
+          </summary>
+          <p className="border-t border-slate-100 px-4 py-3 text-sm leading-relaxed text-slate-700">
+            {notation.text(hint)}
+          </p>
         </details>
       )}
 
@@ -525,9 +573,9 @@ function RunPanel({ circuit, labels }: { circuit: Circuit; labels: Record<string
   const sim = useSimulator(circuit);
   return (
     <div className="flex flex-col gap-3">
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-2">
+      <Card className="overflow-x-auto p-2">
         <LadderView circuit={circuit} power={sim.power} deviceLabels={labels} input={sim.input} />
-      </div>
+      </Card>
       <SimulatorControls
         speed={sim.speed}
         running={sim.running}
@@ -536,9 +584,11 @@ function RunPanel({ circuit, labels }: { circuit: Circuit; labels: Record<string
         onReset={sim.reset}
       />
       {sim.devices.length === 0 ? (
-        <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-600">
-          まだ部品が置かれていません。
-        </p>
+        <EmptyState
+          icon="flask"
+          title="まだ部品が置かれていません"
+          body="「編集」に切り替えて回路を作ってください。"
+        />
       ) : (
         <DevicePanel
           devices={sim.devices}

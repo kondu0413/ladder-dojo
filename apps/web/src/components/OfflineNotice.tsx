@@ -1,4 +1,5 @@
 import { useOnline } from "../hooks/useOnline.js";
+import { Notice } from "./ui.js";
 
 /**
  * オフラインの案内(改善候補 6)。
@@ -11,12 +12,8 @@ export function OfflineNotice() {
   if (online) return null;
 
   return (
-    <p
-      data-testid="offline-notice"
-      role="status"
-      className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900"
-    >
+    <Notice tone="warning" role="status" data-testid="offline-notice">
       オフラインです。公式問題とサンドボックスはこのまま使えます。保存・投稿・ランキングは、つながってからになります。
-    </p>
+    </Notice>
   );
 }

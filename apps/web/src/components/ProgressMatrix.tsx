@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api.js";
 import { downloadCsv, safeFilePart } from "../lib/csv.js";
 import { MODE_LABELS, STAGE_LABELS, STAGE_ORDER, sortedProblems } from "../problems/index.js";
+import { Button, Card, Notice, Skeleton } from "./ui.js";
 
 export type ProgressMatrixProps = {
   orgId: string;
@@ -47,12 +48,19 @@ export function ProgressMatrix({ orgId, orgName }: ProgressMatrixProps) {
 
   if (error) {
     return (
-      <p data-testid="matrix-error" className="text-sm text-red-700">
+      <Notice tone="danger" data-testid="matrix-error">
         {error}
-      </p>
+      </Notice>
     );
   }
-  if (!data) return <p className="text-sm text-slate-500">読み込み中…</p>;
+  if (!data) {
+    return (
+      <div className="flex flex-col gap-2">
+        <Skeleton className="h-4 w-64" />
+        <Skeleton className="h-40" />
+      </div>
+    );
+  }
 
   /**
    * CSV に落とす(改善候補 10)。
@@ -84,31 +92,35 @@ export function ProgressMatrix({ orgId, orgName }: ProgressMatrixProps) {
   };
 
   return (
-    <section className="flex flex-col gap-2" data-testid="progress-matrix">
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-xs text-slate-500">
-          ○ クリア ・ △ 挑戦したがまだ ・ 空欄 未着手。横に長いので、スクロールしてください。
+    <section className="flex flex-col gap-3" data-testid="progress-matrix">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+          <Legend state="cleared">クリア</Legend>
+          <Legend state="stuck">挑戦したがまだ</Legend>
+          <Legend state="untouched">未着手</Legend>
+          <span className="text-slate-400">横に長いので、スクロールしてください。</span>
         </p>
-        <button
-          type="button"
+        <Button
+          tone="secondary"
+          size="sm"
+          icon="download"
           data-testid="matrix-export"
           onClick={exportCsv}
-          className="min-h-11 shrink-0 rounded-lg border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700"
         >
           CSV で保存
-        </button>
+        </Button>
       </div>
       {data.truncated && (
-        <p data-testid="matrix-truncated" className="text-xs text-amber-800">
+        <Notice tone="warning" data-testid="matrix-truncated">
           人数が多いため、一部だけを表示しています。
-        </p>
+        </Notice>
       )}
 
-      <div className="overflow-x-auto">
+      <Card className="overflow-x-auto p-2">
         <table className="border-collapse text-xs">
           <thead>
             <tr>
-              <th className="sticky left-0 z-10 bg-white px-2 py-1 text-left font-semibold text-slate-600">
+              <th className="sticky left-0 z-10 bg-white px-2 py-1.5 text-left font-semibold text-slate-600">
                 メンバー
               </th>
               {STAGE_ORDER.map((stage) => {
@@ -118,13 +130,13 @@ export function ProgressMatrix({ orgId, orgName }: ProgressMatrixProps) {
                   <th
                     key={stage}
                     colSpan={count}
-                    className="border-l border-slate-200 px-1 py-1 text-center font-semibold text-slate-500"
+                    className="border-l border-slate-200 px-1 py-1.5 text-center font-semibold text-slate-500"
                   >
                     {STAGE_LABELS[stage]}
                   </th>
                 );
               })}
-              <th className="border-l border-slate-200 px-2 py-1 text-right font-semibold text-slate-600">
+              <th className="border-l border-slate-200 px-2 py-1.5 text-right font-semibold text-slate-600">
                 クリア
               </th>
             </tr>
@@ -159,13 +171,17 @@ export function ProgressMatrix({ orgId, orgName }: ProgressMatrixProps) {
                         title={`${member.name} / ${problem.title}${
                           cell && !cell.cleared ? ` (失敗 ${cell.failures} 回)` : ""
                         }`}
-                        className={`h-6 w-6 border border-white text-center align-middle ${CELL_CLASS[state]}`}
+                        className="p-[2px]"
                       >
-                        {CELL_MARK[state]}
+                        <span
+                          className={`flex h-6 w-6 items-center justify-center rounded-md text-[11px] font-bold ${CELL_CLASS[state]}`}
+                        >
+                          {CELL_MARK[state]}
+                        </span>
                       </td>
                     );
                   })}
-                  <td className="border-l border-slate-200 px-2 py-1 text-right tabular-nums text-slate-700">
+                  <td className="border-l border-slate-200 px-2 py-1 text-right font-mono tabular-nums text-slate-700">
                     {cleared} / {problems.length}
                   </td>
                 </tr>
@@ -173,14 +189,14 @@ export function ProgressMatrix({ orgId, orgName }: ProgressMatrixProps) {
             })}
           </tbody>
         </table>
-      </div>
+      </Card>
     </section>
   );
 }
 
 const CELL_CLASS: Record<CellState, string> = {
   cleared: "bg-emerald-500 text-white",
-  stuck: "bg-amber-200 text-amber-900",
+  stuck: "bg-amber-300 text-amber-950",
   untouched: "bg-slate-100 text-slate-300",
 };
 
@@ -190,3 +206,17 @@ const CELL_MARK: Record<CellState, string> = {
   stuck: "△",
   untouched: "",
 };
+
+function Legend({ state, children }: { state: CellState; children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span
+        className={`flex h-4 w-4 items-center justify-center rounded text-[9px] font-bold ${CELL_CLASS[state]}`}
+        aria-hidden="true"
+      >
+        {CELL_MARK[state]}
+      </span>
+      {children}
+    </span>
+  );
+}

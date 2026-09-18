@@ -8,6 +8,7 @@ import {
 import { useMemo, useState } from "react";
 import { describeStep } from "../lib/describe.js";
 import { useNotation } from "../lib/notation-context.jsx";
+import { Button, Card, EmptyState, Icon, inputClass, Label, selectClass } from "./ui.js";
 
 export type TestCaseEditorProps = {
   circuit: Circuit;
@@ -46,76 +47,94 @@ export function TestCaseEditor({ circuit, testCases, onChange }: TestCaseEditorP
 
   if (devices.length === 0) {
     return (
-      <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-600">
-        先に回路を作ってください。回路で使っているデバイスがテストの対象になります。
-      </p>
+      <EmptyState
+        icon="flask"
+        title="先に回路を作ってください"
+        body="回路で使っているデバイスがテストの対象になります。"
+      />
     );
   }
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs text-slate-500">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs leading-relaxed text-slate-500">
           入力の操作を並べて、途中や最後に「出力を確認」を入れます。
         </p>
-        <button
-          type="button"
-          data-testid="add-test-case"
-          onClick={addCase}
-          className="min-h-11 shrink-0 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700"
-        >
+        <Button tone="secondary" icon="plus" data-testid="add-test-case" onClick={addCase}>
           テストを追加
-        </button>
+        </Button>
       </div>
 
       {testCases.length === 0 && (
-        <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-600">
-          まだテストがありません。
-        </p>
+        <EmptyState
+          icon="flask"
+          title="まだテストがありません"
+          body="「テストを追加」から、期待する動きを 1 つずつ書いていきます。"
+        />
       )}
 
       <ul className="flex flex-col gap-2">
-        {testCases.map((tc, index) => (
-          <li key={tc.id} className="rounded-xl border border-slate-200 bg-white">
-            <div className="flex items-center gap-2 px-3 py-2">
-              <input
-                value={tc.title}
-                onChange={(e) => update(index, { title: e.target.value.slice(0, 100) })}
-                data-testid={`test-title-${index}`}
-                aria-label={`テスト ${index + 1} の名前`}
-                className="min-h-11 min-w-0 flex-1 rounded-lg border border-slate-200 px-2 text-sm"
-              />
-              <button
-                type="button"
-                data-testid={`open-test-${index}`}
-                onClick={() => setOpenIndex(openIndex === index ? -1 : index)}
-                className="min-h-11 shrink-0 rounded-lg border border-slate-300 px-3 text-xs text-slate-600"
-              >
-                {openIndex === index ? "閉じる" : "開く"}
-              </button>
-              <button
-                type="button"
-                data-testid={`remove-test-${index}`}
-                onClick={() => remove(index)}
-                className="min-h-11 shrink-0 rounded-lg border border-red-300 px-3 text-xs text-red-600"
-              >
-                削除
-              </button>
-            </div>
+        {testCases.map((tc, index) => {
+          const open = openIndex === index;
+          return (
+            <li key={tc.id}>
+              <Card className={open ? "border-slate-300" : ""}>
+                <div className="flex items-center gap-2 px-3 py-2">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-100 font-mono text-xs font-bold text-slate-600">
+                    {index + 1}
+                  </span>
+                  <input
+                    value={tc.title}
+                    onChange={(e) => update(index, { title: e.target.value.slice(0, 100) })}
+                    data-testid={`test-title-${index}`}
+                    aria-label={`テスト ${index + 1} の名前`}
+                    className={inputClass(
+                      "min-h-10 border-transparent bg-transparent px-2 font-medium shadow-none hover:border-slate-300",
+                    )}
+                  />
+                  <span className="hidden shrink-0 text-xs text-slate-400 sm:inline">
+                    {tc.steps.length} 手
+                  </span>
+                  <Button
+                    tone="ghost"
+                    size="sm"
+                    data-testid={`open-test-${index}`}
+                    onClick={() => setOpenIndex(open ? -1 : index)}
+                    aria-expanded={open}
+                  >
+                    {open ? "閉じる" : "開く"}
+                    <Icon
+                      name="chevronDown"
+                      className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`}
+                    />
+                  </Button>
+                  <Button
+                    tone="danger"
+                    size="sm"
+                    icon="trash"
+                    data-testid={`remove-test-${index}`}
+                    onClick={() => remove(index)}
+                  >
+                    削除
+                  </Button>
+                </div>
 
-            {openIndex === index && (
-              <div className="border-t border-slate-100 px-3 py-3">
-                <StepList
-                  steps={tc.steps}
-                  onChange={(steps) => update(index, { steps })}
-                  inputs={inputs}
-                  observables={observables}
-                  testIdPrefix={`case-${index}`}
-                />
-              </div>
-            )}
-          </li>
-        ))}
+                {open && (
+                  <div className="border-t border-slate-100 px-3 py-3">
+                    <StepList
+                      steps={tc.steps}
+                      onChange={(steps) => update(index, { steps })}
+                      inputs={inputs}
+                      observables={observables}
+                      testIdPrefix={`case-${index}`}
+                    />
+                  </div>
+                )}
+              </Card>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -153,134 +172,152 @@ function StepList({
   const append = (step: Step) => onChange([...steps, step]);
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       <ol className="flex flex-col gap-1">
         {rows.map(({ key, step }, i) => (
           <li
             key={key}
             data-testid={`${testIdPrefix}-step-${i}`}
-            className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-2 py-1 text-sm"
+            className={`flex items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-sm ${
+              step.type === "expect"
+                ? "bg-emerald-50 text-emerald-900"
+                : "bg-slate-50 text-slate-700"
+            }`}
           >
-            <span className="min-w-0 truncate">
-              {i + 1}. {describeStep(step, undefined, notation.notation)}
-              {step.type === "expect" && (
-                <span className="ml-1 text-slate-500">
-                  (
-                  {Object.entries(step.outputs)
-                    .map(([d, on]) => `${notation.device(d)}=${on ? "ON" : "OFF"}`)
-                    .join(", ")}
-                  )
-                </span>
-              )}
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="shrink-0 font-mono text-[11px] font-semibold tabular-nums text-slate-400">
+                {i + 1}
+              </span>
+              <span className="min-w-0 truncate">
+                {describeStep(step, undefined, notation.notation)}
+                {step.type === "expect" && (
+                  <span className="ml-1 font-mono text-xs text-emerald-700">
+                    (
+                    {Object.entries(step.outputs)
+                      .map(([d, on]) => `${notation.device(d)}=${on ? "ON" : "OFF"}`)
+                      .join(", ")}
+                    )
+                  </span>
+                )}
+              </span>
             </span>
             <button
               type="button"
               onClick={() => onChange(steps.filter((_, j) => j !== i))}
-              className="shrink-0 px-2 text-xs text-red-600"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
               aria-label={`${i + 1} 番目の操作を削除`}
             >
-              ✕
+              <Icon name="close" className="h-3.5 w-3.5" />
             </button>
           </li>
         ))}
-        {steps.length === 0 && <li className="text-sm text-slate-400">操作がありません</li>}
+        {steps.length === 0 && (
+          <li className="rounded-lg border border-dashed border-slate-200 px-3 py-2 text-sm text-slate-400">
+            操作がありません。下のボタンで足していきます
+          </li>
+        )}
       </ol>
 
       {inputs.length > 0 && (
-        <section className="flex flex-wrap items-center gap-2">
-          <select
-            value={device ?? ""}
-            onChange={(e) => setDevice(e.target.value as DeviceId)}
-            data-testid={`${testIdPrefix}-input-device`}
-            aria-label="操作する入力"
-            className="min-h-11 rounded-lg border border-slate-300 px-2 font-mono text-sm"
-          >
-            {inputs.map((d) => (
-              <option key={d} value={d}>
-                {notation.device(d)}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            data-testid={`${testIdPrefix}-add-press`}
-            onClick={() => device && append({ type: "press", device })}
-            className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700"
-          >
-            押して離す
-          </button>
-          <button
-            type="button"
-            data-testid={`${testIdPrefix}-add-on`}
-            onClick={() => device && append({ type: "set", inputs: { [device]: true } })}
-            className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700"
-          >
-            ON にする
-          </button>
-          <button
-            type="button"
-            data-testid={`${testIdPrefix}-add-off`}
-            onClick={() => device && append({ type: "set", inputs: { [device]: false } })}
-            className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700"
-          >
-            OFF にする
-          </button>
+        <section className="flex flex-col gap-1.5">
+          <Label>入力を操作する</Label>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={device ?? ""}
+              onChange={(e) => setDevice(e.target.value as DeviceId)}
+              data-testid={`${testIdPrefix}-input-device`}
+              aria-label="操作する入力"
+              className={selectClass("w-auto font-mono")}
+            >
+              {inputs.map((d) => (
+                <option key={d} value={d}>
+                  {notation.device(d)}
+                </option>
+              ))}
+            </select>
+            <Button
+              tone="secondary"
+              data-testid={`${testIdPrefix}-add-press`}
+              onClick={() => device && append({ type: "press", device })}
+            >
+              押して離す
+            </Button>
+            <Button
+              tone="secondary"
+              data-testid={`${testIdPrefix}-add-on`}
+              onClick={() => device && append({ type: "set", inputs: { [device]: true } })}
+            >
+              ON にする
+            </Button>
+            <Button
+              tone="secondary"
+              data-testid={`${testIdPrefix}-add-off`}
+              onClick={() => device && append({ type: "set", inputs: { [device]: false } })}
+            >
+              OFF にする
+            </Button>
+          </div>
         </section>
       )}
 
-      <section className="flex flex-wrap items-center gap-2">
-        <input
-          type="number"
-          min={0.1}
-          max={120}
-          step={0.5}
-          value={seconds}
-          onChange={(e) => setSeconds(Number(e.target.value))}
-          data-testid={`${testIdPrefix}-wait-seconds`}
-          aria-label="待つ秒数"
-          className="min-h-11 w-20 rounded-lg border border-slate-300 px-2 text-sm"
-        />
-        <button
-          type="button"
-          data-testid={`${testIdPrefix}-add-wait`}
-          onClick={() => append({ type: "wait", ms: Math.max(1, Math.round(seconds * 1000)) })}
-          className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700"
-        >
-          秒待つ
-        </button>
+      <section className="flex flex-col gap-1.5">
+        <Label>時間を進める</Label>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="number"
+            min={0.1}
+            max={120}
+            step={0.5}
+            value={seconds}
+            onChange={(e) => setSeconds(Number(e.target.value))}
+            data-testid={`${testIdPrefix}-wait-seconds`}
+            aria-label="待つ秒数"
+            className={inputClass("w-24 font-mono")}
+          />
+          <Button
+            tone="secondary"
+            icon="clock"
+            data-testid={`${testIdPrefix}-add-wait`}
+            onClick={() => append({ type: "wait", ms: Math.max(1, Math.round(seconds * 1000)) })}
+          >
+            秒待つ
+          </Button>
+        </div>
       </section>
 
       {observables.length > 0 && (
-        <section className="flex flex-wrap items-center gap-2">
-          <select
-            value={target ?? ""}
-            onChange={(e) => setTarget(e.target.value as DeviceId)}
-            data-testid={`${testIdPrefix}-expect-device`}
-            aria-label="確認する出力"
-            className="min-h-11 rounded-lg border border-slate-300 px-2 font-mono text-sm"
-          >
-            {observables.map((d) => (
-              <option key={d} value={d}>
-                {notation.device(d)}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            data-testid={`${testIdPrefix}-expect-on`}
-            onClick={() => target && append({ type: "expect", outputs: { [target]: true } })}
-            className="min-h-11 rounded-lg border border-emerald-300 bg-white px-3 text-sm text-emerald-700"
-          >
-            ON を期待
-          </button>
-          <button
-            type="button"
-            data-testid={`${testIdPrefix}-expect-off`}
-            onClick={() => target && append({ type: "expect", outputs: { [target]: false } })}
-            className="min-h-11 rounded-lg border border-emerald-300 bg-white px-3 text-sm text-emerald-700"
-          >
-            OFF を期待
-          </button>
+        <section className="flex flex-col gap-1.5">
+          <Label>出力を確認する</Label>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={target ?? ""}
+              onChange={(e) => setTarget(e.target.value as DeviceId)}
+              data-testid={`${testIdPrefix}-expect-device`}
+              aria-label="確認する出力"
+              className={selectClass("w-auto font-mono")}
+            >
+              {observables.map((d) => (
+                <option key={d} value={d}>
+                  {notation.device(d)}
+                </option>
+              ))}
+            </select>
+            <Button
+              tone="success"
+              data-testid={`${testIdPrefix}-expect-on`}
+              onClick={() => target && append({ type: "expect", outputs: { [target]: true } })}
+            >
+              ON を期待
+            </Button>
+            <Button
+              tone="secondary"
+              className="border-emerald-300 text-emerald-800 hover:bg-emerald-50"
+              data-testid={`${testIdPrefix}-expect-off`}
+              onClick={() => target && append({ type: "expect", outputs: { [target]: false } })}
+            >
+              OFF を期待
+            </Button>
+          </div>
         </section>
       )}
     </div>

@@ -126,3 +126,24 @@ test("セッション確認中に答え合わせしても、進捗と提出が�
   await page.reload();
   await expect(page.getByTestId("problem-selfhold-fix-1")).toContainText("1 回挑戦中");
 });
+
+/**
+ * 進捗の取得は 1 回で済むこと(S-036 の不具合の再発防止)。
+ *
+ * 以前は描画のたびにユーザーの情報を作り直していて、取得 → 描画 → 取得 … と
+ * **ログインしている間ずっと** `GET /api/progress` が飛び続けていた
+ * (実測 4 秒で 427 回)。Workers Free の 10 万リクエスト/日を 1 人で使い切る量。
+ */
+test("ログイン後、進捗の取得を繰り返さない", async ({ page }) => {
+  await signUp(page);
+  let gets = 0;
+  page.on("request", (req) => {
+    if (req.method() === "GET" && new URL(req.url()).pathname === "/api/progress") gets += 1;
+  });
+  await page.goto("/problems");
+  await expect(page.getByTestId("auth-bar")).toHaveAttribute("data-signed-in", "true");
+  await expect(page.getByTestId("cleared-count")).toContainText(/0 \/ \d+ 問クリア/);
+  // 描画が落ち着くまで待ってから数える。ループしていれば数百回になる
+  await page.waitForTimeout(1500);
+  expect(gets).toBeLessThanOrEqual(2);
+});

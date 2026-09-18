@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -23,10 +24,12 @@ import {
 /** 1 回のマージで送れる件数(API 側 MAX_MERGE_ENTRIES と合わせる) */
 const MAX_MERGE_ENTRIES = 45;
 
+export type SessionUser = { id: string; name: string; email: string; image: string | null };
+
 export type ProgressContextValue = {
   progress: ProgressMap;
   /** ログイン中のユーザー。未ログインは null */
-  user: { id: string; name: string; email: string; image: string | null } | null;
+  user: SessionUser | null;
   loading: boolean;
   /** サーバーとの同期が失敗している場合の説明(未ログイン時は undefined) */
   syncError?: string;
@@ -69,19 +72,35 @@ export function useProgress(): ProgressContextValue {
 
 export function ProgressProvider({ children }: { children: ReactNode }) {
   const { data: session, isPending } = useSession();
-  const user = session?.user
-    ? {
-        id: session.user.id,
-        name: session.user.name,
-        email: session.user.email,
-        image: session.user.image ?? null,
-      }
-    : null;
+  const sessionUser = session?.user;
+  const userId = sessionUser?.id;
+  const userName = sessionUser?.name;
+  const userEmail = sessionUser?.email;
+  const userImage = sessionUser?.image ?? null;
+
+  /**
+   * **ユーザーは中身が同じなら同じオブジェクトにする**(S-036)。
+   *
+   * 以前は描画のたびに `{ id, name, ... }` を作り直していて、それを下の
+   * 取得の effect が依存に持っていた。取得が済むと `setProgress` で描画され、
+   * 描画されると新しいユーザーオブジェクトができ、effect がまた走って取得する。
+   * ログインしている間、`GET /api/progress` が**毎秒 100 回**飛び続けていた
+   * (実測 4 秒で 427 回)。Workers Free の 10 万リクエスト/日を 1 人で
+   * 20 分ほどで使い切る量で、0 円運用(SPEC.md §2.3)が成り立たない
+   */
+  const user = useMemo<SessionUser | null>(
+    () =>
+      userId !== undefined && userName !== undefined && userEmail !== undefined
+        ? { id: userId, name: userName, email: userEmail, image: userImage }
+        : null,
+    [userId, userName, userEmail, userImage],
+  );
 
   const [progress, setProgress] = useState<ProgressMap>(() => loadProgress());
   const [pendingMerge, setPendingMerge] = useState<ProgressMap | undefined>(undefined);
   const [syncError, setSyncError] = useState<string | undefined>(undefined);
-  const [askedFor, setAskedFor] = useState<string | undefined>(undefined);
+  /** 引き継ぎを聞いたユーザー。描画を起こさないよう ref に持つ(state だと effect がもう一度走る) */
+  const askedFor = useRef<string | undefined>(undefined);
 
   /**
    * セッション確認中(`isPending`)に発生した書き込みの控え。
@@ -93,7 +112,7 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
    */
   const deferred = useRef<PendingWrite[]>([]);
 
-  // ログイン状態が変わったら、進捗の取得元を切り替える
+  // ログイン状態が変わったら、進捗の取得元を切り替える。ここは**ユーザーが変わったときだけ**走る
   useEffect(() => {
     if (isPending) return;
     if (!user) {
@@ -110,9 +129,9 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
         setProgress(fromServer(rows));
         setSyncError(undefined);
         const local = loadProgress();
-        if (Object.keys(local).length > 0 && askedFor !== user.id) {
+        if (Object.keys(local).length > 0 && askedFor.current !== user.id) {
+          askedFor.current = user.id;
           setPendingMerge(local);
-          setAskedFor(user.id);
         }
       } catch {
         if (!cancelled)
@@ -122,7 +141,7 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [user, isPending, askedFor]);
+  }, [user, isPending]);
 
   /** サーバーへの送信。投げっぱなしで、失敗しても学習の流れは止めない(S-002 / S-007) */
   const sendAttempt = useCallback((problemId: string, passed: boolean) => {
@@ -246,18 +265,32 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
 
   const dismissMerge = useCallback(() => setPendingMerge(undefined), []);
 
-  const value: ProgressContextValue = {
-    progress,
-    user,
-    loading: isPending,
-    get: (problemId) => getProblemProgress(progress, problemId),
-    record,
-    recordSubmission,
-    acceptMerge,
-    dismissMerge,
-    ...(syncError ? { syncError } : {}),
-    ...(pendingMerge ? { pendingMerge } : {}),
-  };
+  // 値も作り直さない。作り直すと、進捗を読むだけの画面まで毎回描き直される
+  const value = useMemo<ProgressContextValue>(
+    () => ({
+      progress,
+      user,
+      loading: isPending,
+      get: (problemId) => getProblemProgress(progress, problemId),
+      record,
+      recordSubmission,
+      acceptMerge,
+      dismissMerge,
+      ...(syncError ? { syncError } : {}),
+      ...(pendingMerge ? { pendingMerge } : {}),
+    }),
+    [
+      progress,
+      user,
+      isPending,
+      record,
+      recordSubmission,
+      acceptMerge,
+      dismissMerge,
+      syncError,
+      pendingMerge,
+    ],
+  );
 
   return <ProgressContext.Provider value={value}>{children}</ProgressContext.Provider>;
 }

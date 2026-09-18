@@ -2,6 +2,7 @@ import type { Circuit, Problem } from "@ladder-dojo/core";
 import { labelMap } from "../lib/describe.js";
 import { circuitMetricsRows } from "../lib/metrics-view.js";
 import { LadderView } from "./LadderView.js";
+import { Card, Icon, SectionTitle } from "./ui.js";
 
 export type SolutionCompareProps = {
   problem: Problem;
@@ -18,52 +19,61 @@ export function SolutionCompare({ problem, yours }: SolutionCompareProps) {
   const leaner = rows.some((r) => r.mine > r.model);
 
   return (
-    <section className="flex flex-col gap-3" data-testid="solution-compare">
-      <div>
-        <h3 className="mb-1 text-sm font-semibold text-slate-700">あなたの回路</h3>
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-2">
-          <LadderView circuit={yours} deviceLabels={labels} />
+    <section className="rise-in flex flex-col gap-4" data-testid="solution-compare">
+      <SectionTitle icon="layers">回路をくらべる</SectionTitle>
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="flex flex-col gap-1.5">
+          <h3 className="text-sm font-semibold text-slate-700">あなたの回路</h3>
+          <Card className="overflow-x-auto p-2">
+            <LadderView circuit={yours} deviceLabels={labels} />
+          </Card>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <h3 className="text-sm font-semibold text-slate-700">模範解答</h3>
+          <Card className="overflow-x-auto border-amber-200 p-2">
+            <LadderView circuit={problem.solution} deviceLabels={labels} />
+          </Card>
         </div>
       </div>
 
-      <div>
-        <h3 className="mb-1 text-sm font-semibold text-slate-700">模範解答</h3>
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-2">
-          <LadderView circuit={problem.solution} deviceLabels={labels} />
-        </div>
-      </div>
-
-      <div>
-        <h3 className="mb-1 text-sm font-semibold text-slate-700">くらべてみる</h3>
+      <Card padded className="flex flex-col gap-3">
+        <h3 className="text-sm font-semibold text-slate-700">指標でくらべる</h3>
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-xs text-slate-500">
-              <th className="py-1">指標</th>
-              <th className="py-1">あなた</th>
-              <th className="py-1">模範解答</th>
+            <tr className="text-left text-[11px] font-semibold text-slate-500">
+              <th className="pb-1.5 font-semibold">指標</th>
+              <th className="pb-1.5 text-right font-semibold">あなた</th>
+              <th className="pb-1.5 text-right font-semibold">模範解答</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.label} className="border-t border-slate-100">
-                <td className="py-1 text-slate-600">{r.label}</td>
+              <tr key={r.label}>
+                <td className="border-t border-slate-100 py-1.5 text-slate-600">{r.label}</td>
                 <td
-                  className={`py-1 font-mono ${r.mine > r.model ? "text-amber-700" : "text-slate-800"}`}
+                  className={`border-t border-slate-100 py-1.5 text-right font-mono tabular-nums ${
+                    r.mine > r.model ? "font-bold text-amber-700" : "text-slate-800"
+                  }`}
                   data-testid={`metric-mine-${r.label}`}
                 >
                   {r.mine}
                 </td>
-                <td className="py-1 font-mono text-slate-800">{r.model}</td>
+                <td className="border-t border-slate-100 py-1.5 text-right font-mono tabular-nums text-slate-800">
+                  {r.model}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
-        <p className="mt-2 text-xs text-slate-500">
-          {leaner
-            ? "模範解答の方が少ない部品で書けています。どこを減らせるか見てみましょう(正誤には影響しません)。"
-            : "模範解答と同じか、それよりコンパクトに書けています。"}
+        <p className="flex items-start gap-2 text-xs leading-relaxed text-slate-500">
+          <Icon name="info" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            {leaner
+              ? "模範解答の方が少ない部品で書けています。どこを減らせるか見てみましょう(正誤には影響しません)。"
+              : "模範解答と同じか、それよりコンパクトに書けています。"}
+          </span>
         </p>
-      </div>
+      </Card>
     </section>
   );
 }
