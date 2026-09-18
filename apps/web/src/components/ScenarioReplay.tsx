@@ -53,7 +53,7 @@ export function ScenarioReplay({ circuit, steps, deviceLabels }: ScenarioReplayP
           data-testid="replay-caption"
         >
           <span
-            className="rounded-md bg-slate-900 px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-amber-300"
+            className="theme-fixed rounded-md bg-slate-900 px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-amber-300"
             data-testid="replay-position"
           >
             {index + 1} / {frames.length}

@@ -29,11 +29,15 @@ export type LadderViewProps = {
   highlight?: ReadonlyArray<{ row: number; col: number }> | undefined;
 };
 
-/** 電流が流れている色 / 通電しているだけの色 / 無電圧の色 / 母線 */
-const FLOW = "#f59e0b";
-const LIVE = "#fbbf24";
-const DEAD = "#94a3b8";
-const RAIL = "#1e293b";
+/**
+ * 電流が流れている色 / 通電しているだけの色 / 無電圧の色 / 母線。
+ * 値は index.css にあり、ダークモードで変わる(S-043)。SVG の属性は Tailwind の
+ * クラスを受け取れないので、style で変数を渡す
+ */
+const FLOW = "var(--ladder-flow)";
+const LIVE = "var(--ladder-live)";
+const DEAD = "var(--ladder-dead)";
+const RAIL = "var(--ladder-rail)";
 
 /**
  * ラダー図の SVG 描画(DECISIONS.md D-004)。
@@ -90,7 +94,7 @@ export function LadderView({
         y1={6}
         x2={leftX}
         y2={height - 6}
-        stroke={RAIL}
+        style={{ stroke: RAIL }}
         strokeWidth={5}
         strokeLinecap="round"
       />
@@ -99,7 +103,7 @@ export function LadderView({
         y1={6}
         x2={rightX}
         y2={height - 6}
-        stroke={RAIL}
+        style={{ stroke: RAIL }}
         strokeWidth={5}
         strokeLinecap="round"
       />
@@ -152,9 +156,10 @@ type CellViewProps = {
  * - 無電圧: 細い実線
  */
 function leadProps(on: boolean, flowing: boolean) {
-  if (flowing) return { stroke: FLOW, strokeWidth: 3.5, strokeLinecap: "round" as const };
-  if (on) return { stroke: LIVE, strokeWidth: 2, strokeDasharray: "5 3" };
-  return { stroke: DEAD, strokeWidth: 2 };
+  if (flowing)
+    return { style: { stroke: FLOW }, strokeWidth: 3.5, strokeLinecap: "round" as const };
+  if (on) return { style: { stroke: LIVE }, strokeWidth: 2, strokeDasharray: "5 3" };
+  return { style: { stroke: DEAD }, strokeWidth: 2 };
 }
 
 /**
@@ -185,7 +190,7 @@ function Lead({
           x2={x2}
           y2={y}
           className="flow-dash"
-          stroke="#fffbeb"
+          style={{ stroke: "var(--ladder-flow-dash)" }}
           strokeOpacity={0.9}
           strokeWidth={1.5}
           strokeDasharray="4 10"
@@ -243,7 +248,7 @@ function CellView({
           height={CELL_H - 8}
           rx={8}
           fill="none"
-          stroke="#e2e8f0"
+          style={{ stroke: "var(--ladder-empty)" }}
           strokeWidth={1}
           strokeDasharray="3 4"
         />
@@ -255,8 +260,7 @@ function CellView({
           width={CELL_W - 2}
           height={CELL_H - 2}
           rx={8}
-          fill="#fef3c7"
-          stroke="#d97706"
+          style={{ fill: "var(--ladder-highlight-fill)", stroke: "var(--ladder-highlight-stroke)" }}
           strokeWidth={2}
           strokeDasharray="4 3"
         />
@@ -268,8 +272,7 @@ function CellView({
           width={CELL_W - 4}
           height={CELL_H - 4}
           rx={8}
-          fill="#e0f2fe"
-          stroke="#0284c7"
+          style={{ fill: "var(--ladder-select-fill)", stroke: "var(--ladder-select-stroke)" }}
           strokeWidth={2}
         />
       )}
@@ -294,7 +297,7 @@ function CellView({
           y1={y0}
           x2={nodeX(col + 1)}
           y2={wireY(row + 1)}
-          stroke={rightOn ? FLOW : DEAD}
+          style={{ stroke: rightOn ? FLOW : DEAD }}
           strokeWidth={rightOn ? 3.5 : 2}
           strokeLinecap="round"
         />
@@ -394,7 +397,7 @@ function Contact({
         y1={barTop}
         x2={x + half - gap}
         y2={barBottom}
-        stroke={body}
+        style={{ stroke: body }}
         strokeWidth={w}
         strokeLinecap="round"
       />
@@ -403,7 +406,7 @@ function Contact({
         y1={barTop}
         x2={x + half + gap}
         y2={barBottom}
-        stroke={body}
+        style={{ stroke: body }}
         strokeWidth={w}
         strokeLinecap="round"
       />
@@ -413,7 +416,7 @@ function Contact({
           y1={barBottom - 2}
           x2={x + half + gap + 3}
           y2={barTop + 2}
-          stroke={body}
+          style={{ stroke: body }}
           strokeWidth={w}
           strokeLinecap="round"
         />
@@ -467,14 +470,14 @@ function Coil({
       <path
         d={`M ${x + half - gap} ${y - 13} A 15 15 0 0 0 ${x + half - gap} ${y + 13}`}
         fill="none"
-        stroke={color}
+        style={{ stroke: color }}
         strokeWidth={w}
         strokeLinecap="round"
       />
       <path
         d={`M ${x + half + gap} ${y - 13} A 15 15 0 0 1 ${x + half + gap} ${y + 13}`}
         fill="none"
-        stroke={color}
+        style={{ stroke: color }}
         strokeWidth={w}
         strokeLinecap="round"
       />

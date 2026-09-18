@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "react-router";
 import { AccountMenu, AccountNotices } from "./AuthBar.js";
 import { OfflineNotice } from "./OfflineNotice.js";
+import { ThemeToggle } from "./ThemeToggle.js";
 import { Icon, type IconName } from "./ui.js";
 
 /**
@@ -85,7 +86,7 @@ function AppHeader() {
   const close = () => setOpen(false);
 
   return (
-    <header className="sticky top-0 z-30 border-b border-white/10 bg-slate-950 text-white">
+    <header className="theme-fixed sticky top-0 z-30 border-b border-white/10 bg-slate-950 text-white">
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-2 px-4 sm:px-6">
         <Brand onClick={close} />
 
@@ -98,6 +99,7 @@ function AppHeader() {
         </nav>
 
         <div className="ml-auto flex min-w-0 items-center gap-1.5">
+          <ThemeToggle />
           <AccountMenu />
           <button
             type="button"

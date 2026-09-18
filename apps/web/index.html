@@ -4,6 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0f172a" />
+    <!-- 描画前にテーマを決める。React が動いてから切り替えると、一瞬だけ白い画面が見える -->
+    <script>
+      (() => {
+        var theme = "light";
+        try {
+          theme = localStorage.getItem("ladder-dojo:theme");
+          if (theme !== "dark" && theme !== "light") {
+            theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+          }
+        } catch {
+          theme = "light";
+        }
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
     <meta
       name="description"
       content="PLC のラダー図を「読む」→「直す」→「書く」の順に身につける練習アプリ。"

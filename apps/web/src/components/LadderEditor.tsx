@@ -246,7 +246,7 @@ export function LadderEditor({ circuit, onChange, history, extra }: LadderEditor
               testId="device-number"
             />
             <span
-              className="inline-flex min-h-9 items-center rounded-lg bg-slate-900 px-3 font-mono text-sm font-semibold text-amber-300"
+              className="theme-fixed inline-flex min-h-9 items-center rounded-lg bg-slate-900 px-3 font-mono text-sm font-semibold text-amber-300"
               data-testid="current-device"
             >
               {notation.device(device)}
@@ -377,7 +377,7 @@ export function LadderEditor({ circuit, onChange, history, extra }: LadderEditor
 
 /** パレットのボタンに描く小さな記号。ラダー図と同じ形にして、置く前に何が置かれるか分かるように */
 function PartGlyph({ id, risingMark }: { id: PartId; risingMark: string }) {
-  const stroke = "#334155";
+  const stroke = "currentColor";
   const w = 2;
   let body: React.ReactNode;
   switch (id) {

@@ -72,6 +72,8 @@ const ICONS = {
   wifiOff:
     "M2 2l20 20M8.5 16.5a5 5 0 0 1 7 0M5 12.5a10 10 0 0 1 5.5-2.8M2 8.5a15 15 0 0 1 4-2.5M22 8.5a15 15 0 0 0-10-3.5M12 20h.01",
   copy: "M8 8h12v12H8zM16 8V4H4v12h4",
+  sun: "M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4M8 12a4 4 0 1 0 8 0 4 4 0 1 0-8 0",
+  moon: "M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z",
   record: "M2 12a10 10 0 1 0 20 0 10 10 0 1 0-20 0M8 12a4 4 0 1 0 8 0 4 4 0 1 0-8 0",
   share:
     "M15 5a3 3 0 1 0 6 0 3 3 0 1 0-6 0M3 12a3 3 0 1 0 6 0 3 3 0 1 0-6 0M15 19a3 3 0 1 0 6 0 3 3 0 1 0-6 0M8.6 13.5l6.8 4M15.4 6.5l-6.8 4",
@@ -196,7 +198,7 @@ export function SectionTitle({
   return (
     <div className="flex items-center gap-2">
       {icon && (
-        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-900 text-amber-300">
+        <span className="theme-fixed flex h-7 w-7 items-center justify-center rounded-lg bg-slate-900 text-amber-300">
           <Icon name={icon} className="h-4 w-4" />
         </span>
       )}
@@ -232,7 +234,7 @@ export type ButtonSize = "sm" | "md" | "lg";
 const TONE: Record<ButtonTone, string> = {
   primary: "bg-slate-900 text-white hover:bg-slate-800 active:bg-slate-950 disabled:bg-slate-300",
   accent:
-    "bg-amber-400 text-slate-950 hover:bg-amber-300 active:bg-amber-500 disabled:bg-amber-200 disabled:text-slate-500",
+    "bg-amber-400 text-ink hover:bg-amber-300 active:bg-amber-500 disabled:bg-amber-200 disabled:text-slate-500",
   secondary:
     "border border-slate-300 bg-white text-slate-800 hover:border-slate-400 hover:bg-slate-50 active:bg-slate-100 disabled:bg-slate-50 disabled:text-slate-400",
   ghost: "text-slate-700 hover:bg-slate-200/60 active:bg-slate-200",

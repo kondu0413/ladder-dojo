@@ -318,7 +318,7 @@ function MembersPanel({
           >
             <span
               aria-hidden="true"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-900 text-sm font-bold text-amber-300"
+              className="theme-fixed flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-900 text-sm font-bold text-amber-300"
             >
               {[...m.name.trim()][0]?.toUpperCase() ?? "?"}
             </span>

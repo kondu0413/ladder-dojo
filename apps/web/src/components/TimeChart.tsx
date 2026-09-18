@@ -66,7 +66,7 @@ export function TimeChart({ timeline, deviceLabels, mismatched }: TimeChartProps
             y1={HEAD_H - 4}
             x2={x(m.t)}
             y2={height - 12}
-            stroke="#cbd5e1"
+            className="stroke-slate-300"
             strokeWidth={1}
             strokeDasharray="3 3"
           />
@@ -82,7 +82,14 @@ export function TimeChart({ timeline, deviceLabels, mismatched }: TimeChartProps
               data-mismatched={isBad || undefined}
             >
               {isBad && (
-                <rect x={0} y={y - 1} width={width} height={ROW_H - 2} rx={4} fill="#ffe4e6" />
+                <rect
+                  x={0}
+                  y={y - 1}
+                  width={width}
+                  height={ROW_H - 2}
+                  rx={4}
+                  className="fill-rose-100"
+                />
               )}
               <text
                 x={4}
@@ -90,7 +97,7 @@ export function TimeChart({ timeline, deviceLabels, mismatched }: TimeChartProps
                 fontSize={11}
                 fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
                 fontWeight={isBad ? 700 : 600}
-                fill={isBad ? "#be123c" : "#475569"}
+                className={isBad ? "fill-rose-700" : "fill-slate-600"}
               >
                 {notation.device(device)}
               </text>
@@ -103,13 +110,13 @@ export function TimeChart({ timeline, deviceLabels, mismatched }: TimeChartProps
                 y1={y + 2 + WAVE_H}
                 x2={x(span)}
                 y2={y + 2 + WAVE_H}
-                stroke="#e2e8f0"
+                className="stroke-slate-200"
                 strokeWidth={1}
               />
               <path
                 d={wavePath(samples, device, x, y, span)}
                 fill="none"
-                stroke={isBad ? "#e11d48" : "#0f172a"}
+                className={isBad ? "stroke-rose-600" : "stroke-slate-900"}
                 strokeWidth={2}
                 strokeLinejoin="miter"
               />
@@ -118,10 +125,16 @@ export function TimeChart({ timeline, deviceLabels, mismatched }: TimeChartProps
         })}
 
         {/* 目盛り: 変化が起きた時刻 */}
-        <text x={LABEL_W} y={height - 2} fontSize={9} fill="#94a3b8">
+        <text x={LABEL_W} y={height - 2} fontSize={9} className="fill-slate-400">
           0
         </text>
-        <text x={LABEL_W + PLOT_W} y={height - 2} fontSize={9} fill="#94a3b8" textAnchor="end">
+        <text
+          x={LABEL_W + PLOT_W}
+          y={height - 2}
+          fontSize={9}
+          className="fill-slate-400"
+          textAnchor="end"
+        >
           {formatMs(durationMs)}
         </text>
       </svg>

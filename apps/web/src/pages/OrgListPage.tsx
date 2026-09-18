@@ -123,7 +123,7 @@ export function OrgListPage() {
                     data-testid={`org-${o.id}`}
                     className="group flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-card transition-[box-shadow,border-color] hover:border-slate-300 hover:shadow-float"
                   >
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-amber-300">
+                    <span className="theme-fixed flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-amber-300">
                       <Icon name="factory" className="h-4 w-4" />
                     </span>
                     <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">
