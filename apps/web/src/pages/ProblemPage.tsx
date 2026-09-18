@@ -104,21 +104,39 @@ function ReadMode({ problem }: { problem: Problem }) {
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const question = questions[index];
-  const labels = labelMap(problem.deviceLabels);
 
   const questionRef = useRef<HTMLElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
   const answered = Object.keys(answers).length;
   const allAnswered = answered === questions.length && questions.length > 0;
+
+  /**
+   * 答え合わせ(S-046)。**図は 1 つだけ**で、上の図そのものを動かす。
+   * 以前は設問カードの中にもう 1 つ図を出していて、同じ図が 2 つ並び、
+   * スマホでは押した先が画面の外に出ていた
+   */
+  const [verifying, setVerifying] = useState(false);
+  const [verifyMode, setVerifyMode] = useState<"replay" | "free">("replay");
 
   useEffect(() => {
     // 最初の表示では動かさない。設問を進めたときだけ運ぶ
     if (index === 0) return;
-    questionRef.current?.scrollIntoView({
-      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
-      block: "start",
-    });
+    questionRef.current?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
   }, [index]);
+
+  useEffect(() => {
+    // 「動かして確かめる」を押したら、図と操作ボタンが同じ画面に入るところまで運ぶ
+    if (!verifying) return;
+    stageRef.current?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
+  }, [verifying]);
   const allCorrect = questions.every((q) => answers[q.id] === q.answerIndex);
+
+  const goNext = () => {
+    // 次の設問は、まず予測してから。答え合わせは閉じて図を静止に戻す
+    setVerifying(false);
+    setVerifyMode("replay");
+    setIndex((i) => Math.min(i + 1, questions.length - 1));
+  };
 
   const choose = (questionId: string, choiceIndex: number) => {
     // state の更新関数の中で record() を呼ばない。StrictMode では更新関数が
@@ -136,12 +154,23 @@ function ReadMode({ problem }: { problem: Problem }) {
   };
 
   if (!question) return null;
+  const isLast = index === questions.length - 1;
 
   return (
     <div className="flex flex-col gap-4">
-      <Card className="overflow-x-auto p-2">
-        <LadderView circuit={problem.solution} deviceLabels={labels} />
-      </Card>
+      {/* 図は 1 つだけ。答え合わせ中はここが動く(S-046) */}
+      <div ref={stageRef} className="scroll-mt-20" data-testid="read-stage" data-live={verifying}>
+        <ReadStage
+          key={question.id}
+          problem={problem}
+          question={question}
+          verifying={verifying}
+          mode={verifyMode}
+          onMode={setVerifyMode}
+          onClose={() => setVerifying(false)}
+          onNextQuestion={isLast ? undefined : goNext}
+        />
+      </div>
 
       {/*
         設問が変わったら、そこまで画面を運ぶ(S-024)。
@@ -155,9 +184,11 @@ function ReadMode({ problem }: { problem: Problem }) {
         problem={problem}
         question={question}
         chosen={answers[question.id]}
-        isLast={index === questions.length - 1}
+        isLast={isLast}
         onChoose={(i) => choose(question.id, i)}
-        onNext={() => setIndex((i) => Math.min(i + 1, questions.length - 1))}
+        onNext={goNext}
+        verifying={verifying}
+        onVerify={() => setVerifying((v) => !v)}
         position={`${index + 1} / ${questions.length}`}
         questionIds={questions.map((q) => q.id)}
       />
@@ -212,6 +243,11 @@ function ReadMode({ problem }: { problem: Problem }) {
 
 const CHOICE_LETTERS = ["A", "B", "C", "D", "E"] as const;
 
+/** 動きを減らす設定の人には、なめらかに運ばない */
+function scrollBehavior(): ScrollBehavior {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+}
+
 function ReadQuestionView({
   ref,
   problem,
@@ -220,6 +256,8 @@ function ReadQuestionView({
   isLast,
   onChoose,
   onNext,
+  verifying,
+  onVerify,
   position,
   questionIds,
 }: {
@@ -231,11 +269,13 @@ function ReadQuestionView({
   isLast: boolean;
   onChoose: (index: number) => void;
   onNext: () => void;
+  /** 上の図で答え合わせ中か(S-046)。図はこのカードの外にある */
+  verifying: boolean;
+  onVerify: () => void;
   position: string;
   /** 丸の並び用。設問の並び順 */
   questionIds: string[];
 }) {
-  const [verifying, setVerifying] = useState(false);
   const notation = useNotation();
   const answered = chosen !== undefined;
   const correct = chosen === question.answerIndex;
@@ -342,9 +382,9 @@ function ReadQuestionView({
             tone={verifying ? "secondary" : "accent"}
             icon={verifying ? "close" : "play"}
             data-testid="verify-with-simulator"
-            onClick={() => setVerifying((v) => !v)}
+            onClick={onVerify}
           >
-            {verifying ? "閉じる" : "実際に動かして確かめる"}
+            {verifying ? "答え合わせを閉じる" : "上の図で動かして確かめる"}
           </Button>
           {!isLast && (
             <Button tone="primary" icon="arrowRight" data-testid="next-question" onClick={onNext}>
@@ -353,38 +393,51 @@ function ReadQuestionView({
           )}
         </div>
       )}
-
-      {verifying && <VerifyPanel problem={problem} question={question} />}
     </section>
   );
 }
 
 /**
- * 答え合わせ(SPEC.md §3.2 (1) / S-022)。
+ * 答え合わせの舞台(SPEC.md §3.2 (1) / S-022 / S-046)。
+ *
+ * 問題文の下の**唯一のラダー図**。答える前は静止した図で、答えたあとに
+ * 「動かして確かめる」を押すと、この図の上で設問と同じ操作を再生する。
+ * 操作のボタンは図の直下に置き、押しながら図の変化を同じ画面で見られるようにする。
  *
  * **設問と同じ操作を再生する**のが既定。予測して選んだあと、そのとおりになるのを
  * 目で見るところまでが 1 つの学習で、そこが「読む」の狙い。
- * 以前は自由操作のシミュレータだけだったので、学習者が設問と同じ操作を
- * 自分で組み立て直す必要があった。
- *
  * 自由に触りたいときのために、切り替えて自分で動かすこともできる。
  */
-function VerifyPanel({ problem, question }: { problem: Problem; question: ReadQuestion }) {
-  const [mode, setMode] = useState<"replay" | "free">("replay");
+function ReadStage({
+  problem,
+  question,
+  verifying,
+  mode,
+  onMode,
+  onClose,
+  onNextQuestion,
+}: {
+  problem: Problem;
+  question: ReadQuestion;
+  verifying: boolean;
+  mode: "replay" | "free";
+  onMode: (mode: "replay" | "free") => void;
+  onClose: () => void;
+  /** 最後の設問では undefined */
+  onNextQuestion: (() => void) | undefined;
+}) {
   const labels = labelMap(problem.deviceLabels);
 
-  return (
-    <div className="rise-in flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-      <Segmented<"replay" | "free">
-        label="確かめ方"
-        value={mode}
-        onChange={setMode}
-        options={[
-          { value: "replay", label: "この設問の操作を再生", testId: "verify-mode-replay" },
-          { value: "free", label: "自分で動かす", testId: "verify-mode-free" },
-        ]}
-      />
+  if (!verifying) {
+    return (
+      <Card className="overflow-x-auto p-2">
+        <LadderView circuit={problem.solution} deviceLabels={labels} />
+      </Card>
+    );
+  }
 
+  return (
+    <div className="flex flex-col gap-3">
       {mode === "replay" ? (
         <ScenarioReplay
           circuit={problem.solution}
@@ -394,6 +447,33 @@ function VerifyPanel({ problem, question }: { problem: Problem; question: ReadQu
       ) : (
         <FreePlay problem={problem} />
       )}
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
+        <Segmented<"replay" | "free">
+          label="確かめ方"
+          size="sm"
+          value={mode}
+          onChange={onMode}
+          options={[
+            { value: "replay", label: "この設問の操作を再生", testId: "verify-mode-replay" },
+            { value: "free", label: "自分で動かす", testId: "verify-mode-free" },
+          ]}
+        />
+        <div className="ml-auto flex gap-1.5">
+          {onNextQuestion && (
+            <Button
+              size="sm"
+              icon="arrowRight"
+              data-testid="stage-next-question"
+              onClick={onNextQuestion}
+            >
+              次の設問へ
+            </Button>
+          )}
+          <Button tone="ghost" size="sm" icon="close" data-testid="stage-close" onClick={onClose}>
+            閉じる
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -404,18 +484,14 @@ function FreePlay({ problem }: { problem: Problem }) {
   const labels = labelMap(problem.deviceLabels);
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-xs leading-relaxed text-slate-500">
-        入力は押しボタンです。押している間だけ ON になり、離すと OFF に戻ります。センサのように
-        ずっと ON にしたいときは「保持」を使ってください。
-      </p>
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-2">
+      <Card className="overflow-x-auto p-2 ring-2 ring-amber-400/40">
         <LadderView
           circuit={problem.solution}
           power={sim.power}
           deviceLabels={labels}
           input={sim.input}
         />
-      </div>
+      </Card>
       <SimulatorControls
         speed={sim.speed}
         running={sim.running}
@@ -432,6 +508,11 @@ function FreePlay({ problem }: { problem: Problem }) {
         deviceLabels={labels}
         input={sim.input}
       />
+      {/* 図を先頭に置くため、説明は下に。読まなくても押せば分かる */}
+      <p className="text-xs leading-relaxed text-slate-500">
+        入力は押しボタンです。押している間だけ ON になり、離すと OFF に戻ります。センサのように
+        ずっと ON にしたいときは「保持」を使ってください。
+      </p>
     </div>
   );
 }

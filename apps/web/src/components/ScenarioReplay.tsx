@@ -9,7 +9,7 @@ import { useMemo, useState } from "react";
 import { useNotation } from "../lib/notation-context.jsx";
 import { DevicePanel } from "./DevicePanel.js";
 import { LadderView } from "./LadderView.js";
-import { Button } from "./ui.js";
+import { Button, Card } from "./ui.js";
 
 /**
  * 設問の操作列をそのまま再生して見せる(S-022 / SPEC.md §3.2 (1))。
@@ -47,6 +47,11 @@ export function ScenarioReplay({ circuit, steps, deviceLabels }: ScenarioReplayP
 
   return (
     <div className="flex flex-col gap-3" data-testid="scenario-replay">
+      {/* 図が先。操作のボタンは図の直下に置いて、押しながら変化を見られるようにする(S-046) */}
+      <Card className="overflow-x-auto p-2 ring-2 ring-amber-400/40">
+        <LadderView circuit={circuit} power={frame.power} deviceLabels={deviceLabels} />
+      </Card>
+
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p
           className="flex items-center gap-2 text-sm font-medium text-slate-800"
@@ -91,10 +96,6 @@ export function ScenarioReplay({ circuit, steps, deviceLabels }: ScenarioReplayP
             最初から
           </Button>
         </div>
-      </div>
-
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-2">
-        <LadderView circuit={circuit} power={frame.power} deviceLabels={deviceLabels} />
       </div>
 
       <DevicePanel

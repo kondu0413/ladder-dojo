@@ -78,6 +78,26 @@ test.describe("答え合わせの再生", () => {
     await expect(page.getByTestId("scenario-replay")).toBeVisible();
   });
 
+  test("図は 1 つだけで、答え合わせは上の図の上で動く(S-046)", async ({ page }) => {
+    await answerFirst(page);
+    // 答える前も後も、ラダー図は問題文の下の 1 つだけ
+    await expect(page.getByRole("img", { name: /行目/ })).toHaveCount(1);
+    await page.getByTestId("verify-with-simulator").click();
+    await expect(page.getByRole("img", { name: /行目/ })).toHaveCount(1);
+    const stage = page.getByTestId("read-stage");
+    await expect(stage).toHaveAttribute("data-live", "true");
+    // 図と操作ボタンが同じ画面に入る
+    await expect(stage.getByTestId("replay-next")).toBeInViewport();
+    await expect(stage.getByRole("img", { name: /行目/ })).toBeInViewport();
+
+    // 図の下からも次の設問へ進める。進んだら図は静止に戻り、まず予測させる
+    await page.getByTestId("stage-next-question").click();
+    await expect(page.getByText(/設問 2 \/ 2/)).toBeVisible();
+    await expect(stage).toHaveAttribute("data-live", "false");
+    await expect(page.getByTestId("scenario-replay")).toHaveCount(0);
+    await expect(page.getByTestId("verify-with-simulator")).toHaveCount(0);
+  });
+
   test("答える前は答え合わせを出さない(先に予測させる)", async ({ page }) => {
     await page.goto("/problems/selfhold-read-1");
     await expect(page.getByTestId("verify-with-simulator")).toHaveCount(0);
