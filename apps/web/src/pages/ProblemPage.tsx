@@ -17,6 +17,7 @@ import { LadderEditor } from "../components/LadderEditor.js";
 import { LadderView } from "../components/LadderView.js";
 import { NotationTabs } from "../components/NotationTabs.js";
 import { ScenarioReplay } from "../components/ScenarioReplay.js";
+import { ShareButton } from "../components/ShareButton.js";
 import { SimulatorControls } from "../components/SimulatorControls.js";
 import { SolutionCompare } from "../components/SolutionCompare.js";
 import {
@@ -518,7 +519,12 @@ function BuildMode({ problem }: { problem: Problem }) {
       />
 
       {tab === "edit" ? (
-        <LadderEditor circuit={circuit} onChange={setCircuit} history={history} />
+        <LadderEditor
+          circuit={circuit}
+          onChange={setCircuit}
+          history={history}
+          extra={<ShareButton circuit={circuit} title={problem.title} />}
+        />
       ) : (
         <RunPanel circuit={circuit} labels={labels} />
       )}

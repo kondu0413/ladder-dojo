@@ -117,6 +117,47 @@ test("置いた部品を元に戻せて、やり直せる(S-038)", async ({ page
   await expect(page.getByTestId("cell-text-0-0")).toHaveCount(0);
 });
 
+test("共有リンクを開くと、同じ回路がサンドボックスに出る(S-039)", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/sandbox");
+  await page.getByTestId("cell-0-0").click();
+  await page.getByTestId("part-no").click();
+  await page.getByTestId("cell-0-5").click();
+  await page.getByTestId("device-type-Y").click();
+  await page.getByTestId("part-out").click();
+  await page.getByTestId("connect-row").click();
+  await page.getByTestId("sandbox-title").fill("共有する回路");
+
+  await page.getByTestId("share-open").click();
+  const url = await page.getByTestId("share-url").inputValue();
+  expect(url).toContain("/sandbox#c=v1.6.3.");
+  expect(url).toContain("&t=");
+
+  await page.getByTestId("share-copy").click();
+  await expect(page.getByTestId("share-copy")).toHaveText("コピーしました");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(url);
+
+  // 受け取った側: まっさらな状態でリンクを開く
+  await page.goto("/");
+  await page.goto(url);
+  await expect(page.getByTestId("sandbox-message")).toContainText("共有された回路を開きました");
+  await expect(page.getByTestId("sandbox-title")).toHaveValue("共有する回路");
+  await expect(page.getByTestId("cell-text-0-0")).toHaveText("X0");
+  await expect(page.getByTestId("cell-text-0-5")).toHaveText("Y0");
+
+  // 「新規」でリンクが外れ、白紙に戻る
+  await page.getByTestId("sandbox-new").click();
+  await expect(page).toHaveURL(/\/sandbox$/);
+  await expect(page.getByTestId("cell-text-0-0")).toHaveCount(0);
+});
+
+test("壊れた共有リンクは無視して、白紙のサンドボックスになる", async ({ page }) => {
+  await page.goto("/sandbox#c=v1.6.3.0,0,zzz");
+  await expect(page.getByRole("heading", { name: "サンドボックス" })).toBeVisible();
+  await expect(page.getByTestId("sandbox-message")).toHaveCount(0);
+  await expect(page.getByTestId("cell-text-0-0")).toHaveCount(0);
+});
+
 test("タイマの設定値を変えて置ける", async ({ page }) => {
   await page.goto("/sandbox");
   await page.getByTestId("cell-0-0").click();

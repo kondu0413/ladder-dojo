@@ -19,6 +19,7 @@ import { JudgeResultView } from "../components/JudgeResultView.js";
 import { LadderEditor } from "../components/LadderEditor.js";
 import { LadderView } from "../components/LadderView.js";
 import { NotationTabs } from "../components/NotationTabs.js";
+import { ShareButton } from "../components/ShareButton.js";
 import { SimulatorControls } from "../components/SimulatorControls.js";
 import {
   Badge,
@@ -268,7 +269,12 @@ export function CommunityProblemPage() {
       />
 
       {tab === "edit" ? (
-        <LadderEditor circuit={circuit} onChange={setCircuit} history={history} />
+        <LadderEditor
+          circuit={circuit}
+          onChange={setCircuit}
+          history={history}
+          extra={<ShareButton circuit={circuit} title={problem.title} />}
+        />
       ) : (
         <RunPanel circuit={circuit} />
       )}

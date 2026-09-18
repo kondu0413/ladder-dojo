@@ -9,8 +9,8 @@ import {
   sandboxTestCasesSchema,
   type TestCase,
 } from "@ladder-dojo/core";
-import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router";
 import { AppShell } from "../components/AppShell.js";
 import { DevicePanel } from "../components/DevicePanel.js";
 import { JudgeResultView } from "../components/JudgeResultView.js";
@@ -18,6 +18,7 @@ import { LadderEditor } from "../components/LadderEditor.js";
 import { LadderView } from "../components/LadderView.js";
 import { NotationTabs } from "../components/NotationTabs.js";
 import { PublishDialog } from "../components/PublishDialog.js";
+import { ShareButton } from "../components/ShareButton.js";
 import { SimulatorControls } from "../components/SimulatorControls.js";
 import { TestCaseEditor } from "../components/TestCaseEditor.js";
 import {
@@ -35,6 +36,7 @@ import { useHistory } from "../hooks/useHistory.js";
 import { useSimulator } from "../hooks/useSimulator.js";
 import { ApiError, api, type SandboxSummary } from "../lib/api.js";
 import { useProgress } from "../lib/progress-context.jsx";
+import { readSharedCircuit } from "../lib/share.js";
 
 type Tab = "edit" | "run" | "test";
 
@@ -42,6 +44,7 @@ type Tab = "edit" | "run" | "test";
 export function SandboxPage() {
   const { user } = useProgress();
   const navigate = useNavigate();
+  const location = useLocation();
   const [publishing, setPublishing] = useState(false);
   // 編集は「元に戻す / やり直す」つき(S-038)
   const history = useHistory<Circuit>(emptyCircuit(6, 3));
@@ -74,6 +77,24 @@ export function SandboxPage() {
   useEffect(() => {
     void refreshList();
   }, [refreshList]);
+
+  // 共有リンク(`#c=...`、S-039)で開かれたら、その回路を出す。
+  // 同じ画面で別のリンクを開き直したときにも追いかける
+  const appliedHash = useRef("");
+  const resetHistory = history.reset;
+  useEffect(() => {
+    if (location.hash === appliedHash.current) return;
+    appliedHash.current = location.hash;
+    const shared = readSharedCircuit(location.hash);
+    if (!shared) return;
+    resetHistory(shared.circuit);
+    setTitle(shared.title ?? "無題の回路");
+    setTestCases([]);
+    setSavedId(undefined);
+    setResult(undefined);
+    setTab("edit");
+    setMessage("共有された回路を開きました。");
+  }, [location.hash, resetHistory]);
 
   const save = async () => {
     setBusy(true);
@@ -141,6 +162,8 @@ export function SandboxPage() {
     setTitle("無題の回路");
     setSavedId(undefined);
     setResult(undefined);
+    // 共有リンクから開いていたなら、リンクを外す(再読み込みで戻ってこないように)
+    if (location.hash) void navigate("/sandbox", { replace: true });
   };
 
   return (
@@ -299,7 +322,14 @@ export function SandboxPage() {
         ]}
       />
 
-      {tab === "edit" && <LadderEditor circuit={circuit} onChange={setCircuit} history={history} />}
+      {tab === "edit" && (
+        <LadderEditor
+          circuit={circuit}
+          onChange={setCircuit}
+          history={history}
+          extra={<ShareButton circuit={circuit} title={title} />}
+        />
+      )}
       {tab === "run" && <RunPanel circuit={circuit} />}
       {tab === "test" && (
         <div className="flex flex-col gap-3">
