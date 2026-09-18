@@ -157,6 +157,45 @@ function leadProps(on: boolean, flowing: boolean) {
   return { stroke: DEAD, strokeWidth: 2 };
 }
 
+/**
+ * リード線。電流が流れているときは、上に明るい破線を重ねて左から右へ動かす(S-040)。
+ * 元の実線を先に描く(読み上げ・テストは最初の線を見る)。縦線は流れる向きが
+ * 枝ごとに違うので動かさない。
+ */
+function Lead({
+  x1,
+  x2,
+  y,
+  on,
+  flowing,
+}: {
+  x1: number;
+  x2: number;
+  y: number;
+  on: boolean;
+  flowing: boolean;
+}) {
+  return (
+    <>
+      <line x1={x1} y1={y} x2={x2} y2={y} {...leadProps(on, flowing)} />
+      {flowing && (
+        <line
+          x1={x1}
+          y1={y}
+          x2={x2}
+          y2={y}
+          className="flow-dash"
+          stroke="#fffbeb"
+          strokeOpacity={0.9}
+          strokeWidth={1.5}
+          strokeDasharray="4 10"
+          strokeLinecap="round"
+        />
+      )}
+    </>
+  );
+}
+
 function CellView({
   row,
   col,
@@ -235,9 +274,7 @@ function CellView({
         />
       )}
 
-      {el?.type === "wire" && (
-        <line x1={x} y1={y0} x2={x + CELL_W} y2={y0} {...leadProps(leftOn, flowing)} />
-      )}
+      {el?.type === "wire" && <Lead x1={x} x2={x + CELL_W} y={y0} on={leftOn} flowing={flowing} />}
       {el?.type === "contact" && (
         <Contact
           x={x}
@@ -350,8 +387,8 @@ function Contact({
 
   return (
     <g>
-      <line x1={x} y1={y} x2={x + half - gap} y2={y} {...leadProps(leftOn, flowing)} />
-      <line x1={x + half + gap} y1={y} x2={x + CELL_W} y2={y} {...leadProps(rightOn, flowing)} />
+      <Lead x1={x} x2={x + half - gap} y={y} on={leftOn} flowing={flowing} />
+      <Lead x1={x + half + gap} x2={x + CELL_W} y={y} on={rightOn} flowing={flowing} />
       <line
         x1={x + half - gap}
         y1={barTop}
@@ -425,16 +462,8 @@ function Coil({
             : "";
   return (
     <g>
-      <line x1={x} y1={y} x2={x + half - gap} y2={y} {...leadProps(leftOn, flowing)} />
-      <line
-        x1={x + half + gap}
-        y1={y}
-        x2={x + CELL_W}
-        y2={y}
-        stroke={color}
-        strokeWidth={w}
-        strokeLinecap="round"
-      />
+      <Lead x1={x} x2={x + half - gap} y={y} on={leftOn} flowing={flowing} />
+      <Lead x1={x + half + gap} x2={x + CELL_W} y={y} on={flowing} flowing={flowing} />
       <path
         d={`M ${x + half - gap} ${y - 13} A 15 15 0 0 0 ${x + half - gap} ${y + 13}`}
         fill="none"

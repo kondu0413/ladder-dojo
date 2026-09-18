@@ -130,6 +130,23 @@ h3 {
   animation: shimmer 1.4s ease-in-out infinite;
 }
 
+/*
+ * 通電の流れ(S-040)。
+ *
+ * 電流が流れている線の上に、明るい破線を重ねて左から右へ動かす。
+ * 色と太さだけでは「どちらへ流れているか」「いま動いているか」が伝わらない。
+ * 動きを減らす設定の人には出さない(その場合も線の色・太さで通電は分かる)。
+ */
+@keyframes flow-dash {
+  to {
+    stroke-dashoffset: -14;
+  }
+}
+
+.flow-dash {
+  animation: flow-dash 0.7s linear infinite;
+}
+
 /* 紹介画面の紺の背景に敷く、うっすらした点のグリッド */
 .dot-grid {
   background-image: radial-gradient(circle at 1px 1px, rgb(255 255 255 / 0.09) 1px, transparent 0);
@@ -141,5 +158,8 @@ h3 {
   .rise-in,
   .skeleton {
     animation: none;
+  }
+  .flow-dash {
+    display: none;
   }
 }
