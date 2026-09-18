@@ -57,6 +57,7 @@ const NAV: ReadonlyArray<{ to: string; label: string; icon: IconName }> = [
   { to: "/samples", label: "サンプル", icon: "cpu" },
   { to: "/rankings", label: "ランキング", icon: "trophy" },
   { to: "/orgs", label: "組織", icon: "factory" },
+  { to: "/glossary", label: "用語集", icon: "book" },
 ];
 
 /** ロゴと名前。ヘッダーと紹介画面で同じものを使う */

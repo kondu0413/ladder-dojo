@@ -195,7 +195,7 @@ export function CommunityListPage() {
             <Link
               to={`/community/${p.id}`}
               data-testid={`posted-${p.id}`}
-              className="group flex h-full flex-col gap-2.5 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card transition-[transform,box-shadow,border-color] duration-150 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-float"
+              className="group flex h-full flex-col gap-2.5 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card transition-[box-shadow,border-color] duration-150 hover:border-slate-300 hover:shadow-float"
             >
               <span className="flex items-start justify-between gap-2">
                 <span className="text-sm font-semibold leading-snug text-slate-900">{p.title}</span>

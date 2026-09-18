@@ -12,6 +12,7 @@ import { AppShell } from "../components/AppShell.js";
 import { CommonMistakes } from "../components/CommonMistakes.js";
 import { DevicePanel } from "../components/DevicePanel.js";
 import { DiagnosisPanel } from "../components/DiagnosisPanel.js";
+import { GlossaryText } from "../components/GlossaryText.js";
 import { JudgeResultView } from "../components/JudgeResultView.js";
 import { LadderEditor } from "../components/LadderEditor.js";
 import { LadderView } from "../components/LadderView.js";
@@ -77,12 +78,11 @@ export function ProblemPage() {
       </PageHeader>
 
       <Card padded className="flex flex-col gap-4">
-        <p
+        <GlossaryText
           data-testid="problem-spec"
           className="whitespace-pre-wrap text-[15px] leading-7 text-slate-800"
-        >
-          {notation.text(problem.spec)}
-        </p>
+          text={notation.text(problem.spec)}
+        />
         <div className="border-t border-slate-100 pt-3">
           <NotationTabs />
         </div>
@@ -566,9 +566,10 @@ function BuildMode({ problem }: { problem: Problem }) {
               className="ml-auto h-4 w-4 text-slate-400 transition-transform group-open:rotate-180"
             />
           </summary>
-          <p className="border-t border-slate-100 px-4 py-3 text-sm leading-relaxed text-slate-700">
-            {notation.text(hint)}
-          </p>
+          <GlossaryText
+            className="border-t border-slate-100 px-4 py-3 text-sm leading-relaxed text-slate-700"
+            text={notation.text(hint)}
+          />
         </details>
       )}
 

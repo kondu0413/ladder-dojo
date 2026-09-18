@@ -254,7 +254,7 @@ export function ProblemListPage() {
                         to={`/problems/${problem.id}`}
                         data-testid={`problem-${problem.id}`}
                         data-cleared={p.cleared}
-                        className="group flex h-full items-start gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card transition-[transform,box-shadow,border-color] duration-150 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-float"
+                        className="group flex h-full items-start gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card transition-[box-shadow,border-color] duration-150 hover:border-slate-300 hover:shadow-float"
                       >
                         <span
                           className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
