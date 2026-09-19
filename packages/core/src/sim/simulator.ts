@@ -43,6 +43,19 @@ export type PowerMap = {
   conducts: boolean[][];
 };
 
+/**
+ * 1 スキャンをラングごとに区切った記録(S-049)。
+ * 「上から順に実行され、あとの結果が残る」を見せるために使う
+ */
+export type RungTrace = {
+  /** このラングの行(0 始まり)。縦線でつながった行はまとめて 1 ラング */
+  rows: number[];
+  /** このラングまで実行した時点の通電状態。まだ実行していない行は無電圧のまま */
+  power: PowerMap;
+  /** このラングまで実行した時点のデバイス */
+  snapshot: Snapshot;
+};
+
 export type SimulatorOptions = {
   /** タイマの進め方。instant は通電した瞬間に設定値到達 */
   timerMode?: "realtime" | "instant";
@@ -215,10 +228,27 @@ export class Simulator {
   }
 
   /**
+   * 1 スキャンをラングごとに区切って記録する(S-049)。
+   *
+   * **落ち着いた状態で呼ぶこと**(settle のあと)。時間を進めない 1 スキャンを回すので、
+   * 落ち着いていれば状態は変わらず、途中の駒だけが手に入る。SET と RST の両方に
+   * 通電しているときは、1 行目のあとに Y0 が ON、2 行目のあとに OFF、と見える。
+   * trackPower を切った Simulator では途中の通電状態が取れないので使わない
+   */
+  traceScan(): RungTrace[] {
+    const out: RungTrace[] = [];
+    this.scan(0, (rows, power) => {
+      out.push({ rows: [...rows], power: clonePower(power), snapshot: this.snapshot() });
+    });
+    return out;
+  }
+
+  /**
    * 1 スキャン実行する。
    * @param dtMs 前回スキャンからの経過時間(タイマに加算)。0 なら時間を進めない
+   * @param onRung ラングを 1 つ実行するたびに呼ぶ(S-049)。power は組み立て途中の通電状態
    */
-  scan(dtMs = 0): PowerMap {
+  scan(dtMs = 0, onRung?: (rows: readonly number[], power: PowerMap) => void): PowerMap {
     if (!(dtMs >= 0)) throw new Error(`dtMs が不正: ${dtMs}`);
     // 入力の反映
     for (const [k, v] of this.pendingInputs) this.bits.set(k, v);
@@ -264,6 +294,7 @@ export class Simulator {
         const energized = this.nodesBuf[r]?.[cols - 1] ?? false;
         this.applyCoil(r, cols - 1, el, energized, dtMs, next);
       }
+      if (onRung) onRung(rung.rows, power);
     }
     // 今回値を次の前回値にする(配列は入れ替えるだけで作り直さない)
     this.nextCell = this.prevCell;
@@ -431,6 +462,14 @@ export class Simulator {
         break;
     }
   }
+}
+
+function clonePower(power: PowerMap): PowerMap {
+  return {
+    nodes: power.nodes.map((row) => [...row]),
+    cells: power.cells.map((row) => [...row]),
+    conducts: power.conducts.map((row) => [...row]),
+  };
 }
 
 function emptyPower(circuit: Circuit): PowerMap {

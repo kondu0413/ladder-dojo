@@ -228,7 +228,7 @@ export const GLOSSARY: GlossaryEntry[] = [
     aliases: ["SET / RST", "SET/RST", "SET", "セット"],
     short:
       "SET は通電した瞬間に ON にして保ち、RST で OFF に戻す。接点で自己保持を組まない書き方。",
-    body: "SET コイルは通電した瞬間に対象を ON にし、通電が切れても ON のまま保ちます。戻すには同じデバイスの RST コイルに通電します。両方に同時に通電したときは、あとに評価される下のラングの結果が残ります(RST を下に置けば停止が優先)。RST は SET で保持した Y / M のほか、カウンタも戻せます。",
+    body: "SET コイルは通電した瞬間に対象を ON にし、通電が切れても ON のまま保ちます。戻すには同じデバイスの RST コイルに通電します。両方に同時に通電したときは、PLC が上から順に実行するので、あとに実行される下の行の結果が残ります(RST を下に置けば停止が優先)。RST は SET で保持した Y / M のほか、カウンタも戻せます。",
     circuit: ladder(4).row(no("X0"), set("Y0")).row(no("X1"), reset("Y0")).build(),
     deviceLabels: { X0: "起動", X1: "停止", Y0: "ランプ" },
     related: ["selfhold", "reset", "scan"],

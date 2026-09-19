@@ -635,3 +635,28 @@ describe("オフディレイタイマ(S-044)", () => {
     expect(devicePresets(c).timers).toEqual({ T0: 1000 });
   });
 });
+
+describe("スキャンをラングごとに記録する(S-049)", () => {
+  it("ラングを実行するたびに呼ばれ、途中の通電状態と状態が取れる", () => {
+    const circuit = ladder(4).row(no("X0"), set("Y0")).row(no("X1"), reset("Y0")).build();
+    const sim = new Simulator(circuit);
+    sim.setInput("X0", true);
+    sim.setInput("X1", true);
+    sim.scan();
+    expect(sim.read("Y0")).toBe(false);
+
+    const trace = sim.traceScan();
+    expect(trace.map((t) => t.rows)).toEqual([[0], [1]]);
+    expect(trace[0]?.snapshot.bits.Y0).toBe(true);
+    expect(trace[1]?.snapshot.bits.Y0).toBe(false);
+    // 1 行目まで: 2 行目はまだ無電圧。2 行目まで: 両方通電
+    expect(trace[0]?.power.cells[0]?.[0]).toBe(true);
+    expect(trace[0]?.power.cells[1]?.[0]).toBe(false);
+    expect(trace[1]?.power.cells[1]?.[0]).toBe(true);
+    // 記録は写しなので、あとのスキャンで書き換わらない
+    sim.scan();
+    expect(trace[0]?.power.cells[1]?.[0]).toBe(false);
+    // 落ち着いた状態からの記録なので、最後の状態はもとのまま
+    expect(sim.read("Y0")).toBe(false);
+  });
+});

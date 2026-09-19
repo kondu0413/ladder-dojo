@@ -3,6 +3,8 @@ import { ladder, nc, no, out, reset, set, timer } from "./builder.js";
 import { runTestCase } from "./judge/judge.js";
 import {
   describeFrame,
+  describeRows,
+  describeRungTrace,
   describeStep,
   describeSteps,
   replayScenario,
@@ -200,8 +202,8 @@ describe("操作列の再生", () => {
 describe("操作を日本語にする", () => {
   it.each([
     [{ type: "press", device: "X0" } as Step, "X0 を押して離す"],
-    [{ type: "set", inputs: { X0: true } } as Step, "X0 を ON にする"],
-    [{ type: "set", inputs: { X0: false } } as Step, "X0 を OFF にする"],
+    [{ type: "set", inputs: { X0: true } } as Step, "X0 を押したまま"],
+    [{ type: "set", inputs: { X0: false } } as Step, "X0 を離す"],
     [{ type: "wait", ms: 500 } as Step, "500 ミリ秒 待つ"],
     [{ type: "wait", ms: 3000 } as Step, "3 秒 待つ"],
     [{ type: "wait", ms: 1500 } as Step, "1.5 秒 待つ"],
@@ -217,7 +219,11 @@ describe("操作を日本語にする", () => {
 
   it("同時に複数のデバイスを動かす操作も読める", () => {
     expect(describeStep({ type: "set", inputs: { X0: true, X1: false } })).toBe(
-      "X0 を ON にする、X1 を OFF にする",
+      "X0 を押したまま、X1 を離す",
+    );
+    // 同時に押しているものは「と」でまとめる(S-049)
+    expect(describeStep({ type: "set", inputs: { X0: true, X1: true } })).toBe(
+      "X0 と X1 を押したまま",
     );
   });
 });
@@ -235,7 +241,7 @@ describe("操作の説明の表記(S-028)", () => {
 
   it("説明付きでも表記が効く", () => {
     expect(describeStep({ type: "set", inputs: { X1: true } }, { X1: "停止" }, "omron")).toBe(
-      "0.01(停止) を ON にする",
+      "0.01(停止) を押したまま",
     );
   });
 });
@@ -277,7 +283,7 @@ describe("設問のスタート時点(S-048)", () => {
         { type: "press", device: "X0" },
         { type: "set", inputs: { X0: true } },
       ]),
-    ).toBe("X0 を押して離す ×2 → X0 を ON にする");
+    ).toBe("X0 を押して離す ×2 → X0 を押したまま");
     // 答え合わせの expect は操作ではない
     expect(
       describeSteps([
@@ -291,5 +297,70 @@ describe("設問のスタート時点(S-048)", () => {
     expect(describeSteps([{ type: "press", device: "X0" }], undefined, "omron")).toBe(
       "0.00 を押して離す",
     );
+  });
+});
+
+/**
+ * スキャンの中を見る(S-049)。
+ *
+ * SET と RST の両方に通電すると、図では両方のコイルが通電して見えるのに Y0 は OFF。
+ * 「上から順に実行され、あとの結果が残る」を、1 行目のあとに ON・2 行目のあとに OFF
+ * という途中の駒で見せる。
+ */
+describe("スキャンの中を見る(S-049)", () => {
+  /** SET / RST: X0 で SET、X1 で RST */
+  const setReset = ladder(4).row(no("X0"), set("Y0")).row(no("X1"), reset("Y0")).build();
+
+  it("駒ごとに 1 スキャンをラングで区切った記録が付く", () => {
+    const { frames } = replayScenario(setReset, [{ type: "set", inputs: { X0: true, X1: true } }]);
+    const last = frames[frames.length - 1];
+    expect(last?.rungs).toHaveLength(2);
+    expect(last?.rungs[0]?.rows).toEqual([0]);
+    expect(last?.rungs[1]?.rows).toEqual([1]);
+    // 1 行目まで実行: SET で ON。2 行目まで実行: RST で OFF(= この駒の状態)
+    expect(last?.rungs[0]?.snapshot.bits.Y0).toBe(true);
+    expect(last?.rungs[1]?.snapshot.bits.Y0).toBe(false);
+    expect(last?.snapshot.bits.Y0).toBe(false);
+    // まだ実行していない行は無電圧のまま
+    expect(last?.rungs[0]?.power.cells[1]?.[0]).toBe(false);
+    expect(last?.rungs[1]?.power.cells[1]?.[0]).toBe(true);
+  });
+
+  it("記録を取っても駒の状態は変わらない(落ち着いた状態からのスキャン)", () => {
+    const steps: Step[] = [
+      { type: "press", device: "X0" },
+      { type: "wait", ms: 100 },
+    ];
+    const { frames } = replayScenario(selfHold, steps);
+    for (const f of frames) {
+      const lastRung = f.rungs[f.rungs.length - 1];
+      expect(lastRung?.snapshot).toEqual(f.snapshot);
+    }
+    // 自己保持は押して離したあとも ON のまま
+    expect(on(frames, frames.length - 1, "Y0")).toBe(true);
+  });
+
+  it("途中の駒の説明は、直前の駒との差を言う", () => {
+    const { frames } = replayScenario(setReset, [{ type: "set", inputs: { X0: true, X1: true } }]);
+    const last = frames[frames.length - 1];
+    if (!last) throw new Error("frame");
+    expect(describeRungTrace(last.rungs, 0, last.snapshot, { Y0: "ランプ" })).toBe(
+      "1 行目まで実行 → Y0(ランプ) は ON",
+    );
+    expect(describeRungTrace(last.rungs, 1, last.snapshot)).toBe("2 行目まで実行 → Y0 は OFF");
+  });
+
+  it("変化が無い行は「変化なし」", () => {
+    const { frames } = replayScenario(selfHold, [{ type: "press", device: "X0" }]);
+    const last = frames[frames.length - 1];
+    if (!last) throw new Error("frame");
+    // 自己保持は 1 ラング(2 行)。落ち着いているので変化なし
+    expect(describeRungTrace(last.rungs, 0, last.snapshot)).toBe("1〜2 行目まで実行 → 変化なし");
+  });
+
+  it("行の並びの言い方", () => {
+    expect(describeRows([0])).toBe("1 行目");
+    expect(describeRows([2, 3])).toBe("3〜4 行目");
+    expect(describeRows([])).toBe("");
   });
 });

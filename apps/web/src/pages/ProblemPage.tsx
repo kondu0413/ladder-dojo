@@ -2,6 +2,7 @@ import {
   type Circuit,
   describeSteps,
   emptyCircuit,
+  findCoilConflicts,
   type JudgeResult,
   judge,
   type Problem,
@@ -11,6 +12,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { AppShell } from "../components/AppShell.js";
+import { CoilConflictNote } from "../components/CoilConflictNote.js";
 import { CommonMistakes } from "../components/CommonMistakes.js";
 import { DevicePanel } from "../components/DevicePanel.js";
 import { DiagnosisPanel } from "../components/DiagnosisPanel.js";
@@ -517,6 +519,11 @@ function ReadStage({
 function FreePlay({ problem }: { problem: Problem }) {
   const sim = useSimulator(problem.solution);
   const labels = labelMap(problem.deviceLabels);
+  // 同じデバイスに複数のコイルが書いている(SET と RST の両方に通電など)ときの印と理由(S-049)
+  const conflicts = useMemo(
+    () => findCoilConflicts(problem.solution, sim.power),
+    [problem.solution, sim.power],
+  );
   return (
     <div className="flex flex-col gap-3">
       <Card className="overflow-x-auto p-2 ring-2 ring-amber-400/40">
@@ -526,8 +533,10 @@ function FreePlay({ problem }: { problem: Problem }) {
           states={sim.states}
           deviceLabels={labels}
           input={sim.input}
+          conflicts={conflicts}
         />
       </Card>
+      <CoilConflictNote conflicts={conflicts} deviceLabels={labels} />
       <SimulatorControls
         speed={sim.speed}
         running={sim.running}
@@ -713,6 +722,8 @@ function BuildMode({ problem }: { problem: Problem }) {
 
 function RunPanel({ circuit, labels }: { circuit: Circuit; labels: Record<string, string> }) {
   const sim = useSimulator(circuit);
+  // 自分の回路で二重コイルや SET / RST の衝突が起きたら、その場で理由を出す(S-049)
+  const conflicts = useMemo(() => findCoilConflicts(circuit, sim.power), [circuit, sim.power]);
   return (
     <div className="flex flex-col gap-3">
       <Card className="overflow-x-auto p-2">
@@ -722,8 +733,10 @@ function RunPanel({ circuit, labels }: { circuit: Circuit; labels: Record<string
           states={sim.states}
           deviceLabels={labels}
           input={sim.input}
+          conflicts={conflicts}
         />
       </Card>
+      <CoilConflictNote conflicts={conflicts} deviceLabels={labels} />
       <SimulatorControls
         speed={sim.speed}
         running={sim.running}

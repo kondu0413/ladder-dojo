@@ -2,6 +2,7 @@ import {
   type Circuit,
   circuitSchema,
   emptyCircuit,
+  findCoilConflicts,
   type JudgeResult,
   judge,
   type Problem,
@@ -9,9 +10,10 @@ import {
   sandboxTestCasesSchema,
   type TestCase,
 } from "@ladder-dojo/core";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { AppShell } from "../components/AppShell.js";
+import { CoilConflictNote } from "../components/CoilConflictNote.js";
 import { DevicePanel } from "../components/DevicePanel.js";
 import { JudgeResultView } from "../components/JudgeResultView.js";
 import { LadderEditor } from "../components/LadderEditor.js";
@@ -399,6 +401,8 @@ function RunPanel({
   const sim = useSimulator(circuit);
   // 操作を記録してテストにする(S-042)。記録中は入力を横取りする
   const recorder = useRecorder(sim);
+  // 二重コイルや SET / RST の衝突の印と理由(S-049)
+  const conflicts = useMemo(() => findCoilConflicts(circuit, sim.power), [circuit, sim.power]);
   return (
     <div className="flex flex-col gap-3">
       <Card className="overflow-x-auto p-2">
@@ -407,8 +411,10 @@ function RunPanel({
           power={sim.power}
           states={sim.states}
           input={recorder.input}
+          conflicts={conflicts}
         />
       </Card>
+      <CoilConflictNote conflicts={conflicts} />
       <SimulatorControls
         speed={sim.speed}
         running={sim.running}
