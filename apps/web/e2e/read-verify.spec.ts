@@ -186,7 +186,9 @@ test.describe("答え合わせの再生", () => {
 
     // 両方押した駒: 両方のコイルが通電、Y0 は OFF
     await page.getByTestId("replay-next").click();
-    await expect(page.getByTestId("replay-caption")).toContainText("X0(起動) と X1(停止) を押したまま");
+    await expect(page.getByTestId("replay-caption")).toContainText(
+      "X0(起動) と X1(停止) を押したまま",
+    );
     await expect(stage.getByTestId("cell-0-3")).toHaveAttribute("data-flowing", "true");
     await expect(stage.getByTestId("cell-1-3")).toHaveAttribute("data-flowing", "true");
     await expect(stage.getByTestId("cell-text-0-3")).not.toHaveAttribute("data-on", "true");
