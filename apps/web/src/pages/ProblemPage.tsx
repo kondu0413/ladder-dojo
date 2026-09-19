@@ -650,6 +650,7 @@ function BuildMode({ problem }: { problem: Problem }) {
           onChange={setCircuit}
           history={history}
           extra={<ShareButton circuit={circuit} title={problem.title} />}
+          deviceLabels={labels}
         />
       ) : (
         <RunPanel circuit={circuit} labels={labels} />

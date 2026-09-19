@@ -5,6 +5,7 @@ import {
   formatDeviceNames,
   formatTimerPreset,
   NOTATIONS,
+  parseDevice,
   risingMark,
 } from "./notation.js";
 
@@ -90,5 +91,46 @@ describe("表記の切り替え(S-028)", () => {
         expect(formatDevice(id, notation)).not.toBe("");
       }
     }
+  });
+});
+
+/**
+ * 表示用の書き方からデバイス名に戻す(S-050)。
+ * 編集画面で、表記のままの名前(オムロン系なら 100.00)を打てるようにするため
+ */
+describe("表示の書き方からデバイス名に戻す(S-050)", () => {
+  it("どの表記でも内部の書き方は通る(空白・小文字も)", () => {
+    expect(parseDevice("X0", "mitsubishi")).toBe("X0");
+    expect(parseDevice(" y12 ", "omron")).toBe("Y12");
+    expect(parseDevice("m3", "iec")).toBe("M3");
+    expect(parseDevice("T999", "mitsubishi")).toBe("T999");
+  });
+
+  it("オムロン系のワード.ビットを戻す(入力 0〜、出力 100〜、内部リレー W)", () => {
+    expect(parseDevice("0.00", "omron")).toBe("X0");
+    expect(parseDevice("0.15", "omron")).toBe("X15");
+    expect(parseDevice("1.00", "omron")).toBe("X16");
+    expect(parseDevice("100.00", "omron")).toBe("Y0");
+    expect(parseDevice("100.01", "omron")).toBe("Y1");
+    expect(parseDevice("101.00", "omron")).toBe("Y16");
+    expect(parseDevice("W0.03", "omron")).toBe("M3");
+    expect(parseDevice("T0005", "omron")).toBe("T5");
+    expect(parseDevice("C0000", "omron")).toBe("C0");
+  });
+
+  it("formatDevice の逆になっている", () => {
+    for (const id of ["X0", "X17", "Y0", "Y31", "M16", "T12", "C7"] as const) {
+      for (const notation of ["mitsubishi", "omron", "iec"] as const) {
+        expect(parseDevice(formatDevice(id, notation), notation)).toBe(id);
+      }
+    }
+  });
+
+  it("読めないものは undefined(ビット 16 以上、範囲外、ワード.ビットを三菱系で)", () => {
+    expect(parseDevice("0.16", "omron")).toBeUndefined();
+    expect(parseDevice("X1000", "mitsubishi")).toBeUndefined();
+    expect(parseDevice("100.00", "mitsubishi")).toBeUndefined();
+    expect(parseDevice("", "omron")).toBeUndefined();
+    expect(parseDevice("abc", "iec")).toBeUndefined();
   });
 });
