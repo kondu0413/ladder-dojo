@@ -27,6 +27,8 @@ export type InputControl = {
 
 export type SimulatorState = {
   snapshot: Snapshot;
+  /** デバイスの ON / OFF(T / C は done)。ラダー図で名前を光らせる(S-047) */
+  states: Record<string, boolean>;
   power: PowerMap;
   devices: DeviceId[];
   inputs: DeviceId[];
@@ -191,8 +193,10 @@ export function useSimulator(circuit: Circuit): SimulatorState {
     forceRender();
   }, [sim]);
 
+  const snapshot = sim.snapshot();
   return {
-    snapshot: sim.snapshot(),
+    snapshot,
+    states: snapshotStates(snapshot),
     power: sim.power,
     devices,
     inputs,
@@ -207,4 +211,13 @@ export function useSimulator(circuit: Circuit): SimulatorState {
     step,
     reset,
   };
+}
+
+/** スナップショットを「デバイス名 → ON か」に潰す。T / C は設定値到達(done)を ON とする */
+export function snapshotStates(snapshot: Snapshot): Record<string, boolean> {
+  const out: Record<string, boolean> = {};
+  for (const [k, v] of Object.entries(snapshot.bits)) out[k] = v;
+  for (const [k, v] of Object.entries(snapshot.timers)) out[k] = v.done;
+  for (const [k, v] of Object.entries(snapshot.counters)) out[k] = v.done;
+  return out;
 }

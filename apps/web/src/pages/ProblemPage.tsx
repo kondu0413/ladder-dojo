@@ -488,6 +488,7 @@ function FreePlay({ problem }: { problem: Problem }) {
         <LadderView
           circuit={problem.solution}
           power={sim.power}
+          states={sim.states}
           deviceLabels={labels}
           input={sim.input}
         />
@@ -680,7 +681,13 @@ function RunPanel({ circuit, labels }: { circuit: Circuit; labels: Record<string
   return (
     <div className="flex flex-col gap-3">
       <Card className="overflow-x-auto p-2">
-        <LadderView circuit={circuit} power={sim.power} deviceLabels={labels} input={sim.input} />
+        <LadderView
+          circuit={circuit}
+          power={sim.power}
+          states={sim.states}
+          deviceLabels={labels}
+          input={sim.input}
+        />
       </Card>
       <SimulatorControls
         speed={sim.speed}

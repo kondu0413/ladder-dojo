@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { ladder, nc, no, out, timer } from "./builder.js";
+import { ladder, nc, no, out, reset, set, timer } from "./builder.js";
 import { runTestCase } from "./judge/judge.js";
-import { describeStep, replayScenario } from "./replay.js";
+import { describeFrame, describeStep, replayScenario } from "./replay.js";
 import type { Step } from "./schema/index.js";
 
 /**
@@ -34,11 +34,16 @@ describe("操作列の再生", () => {
     ];
     const { frames } = replayScenario(selfHold, steps);
 
-    expect(frames).toHaveLength(3);
+    // 「押して離す」は押している間と離したあとの 2 駒(S-047)
+    expect(frames).toHaveLength(4);
     expect(frames[0]?.index).toBe(-1);
     expect(frames[0]?.step).toBeUndefined();
     expect(frames[1]?.step).toEqual(steps[0]);
-    expect(frames[2]?.step).toEqual(steps[1]);
+    expect(frames[1]?.phase).toBe("down");
+    expect(frames[2]?.step).toEqual(steps[0]);
+    expect(frames[2]?.phase).toBe("up");
+    expect(frames[3]?.step).toEqual(steps[1]);
+    expect(frames[3]?.phase).toBeUndefined();
   });
 
   it("操作前の状態も落ち着かせてから見せる", () => {
@@ -55,8 +60,10 @@ describe("操作列の再生", () => {
       { type: "press", device: "X1" },
     ]);
     expect(on(frames, 0, "Y0")).toBe(false); // 何もしていない
-    expect(on(frames, 1, "Y0")).toBe(true); // 起動して保持
-    expect(on(frames, 2, "Y0")).toBe(false); // 停止
+    expect(on(frames, 1, "Y0")).toBe(true); // 起動を押している
+    expect(on(frames, 2, "Y0")).toBe(true); // 離しても保持
+    expect(on(frames, 3, "Y0")).toBe(false); // 停止を押している
+    expect(on(frames, 4, "Y0")).toBe(false); // 離しても消えたまま
   });
 
   it("通電状態(ラダー図に渡すもの)が駒ごとに変わる", () => {
@@ -71,10 +78,32 @@ describe("操作列の再生", () => {
     // 保持しているのは 1 行目の Y0 接点。ここを取り違えると、
     // 「自己保持を目で追う」という問題の狙いそのものを見せ損なう
     const { frames } = replayScenario(selfHold, [{ type: "press", device: "X0" }]);
-    const after = frames[1];
+    const during = frames[1];
+    expect(during?.power.cells[0]?.[0], "押している間は X0 の接点を通る").toBe(true);
+    const after = frames[2];
     expect(after?.power.cells[0]?.[0], "X0 の接点は離したので通らない").toBe(false);
     expect(after?.power.cells[1]?.[0], "自己保持の枝が通っている").toBe(true);
     expect(after?.snapshot.bits.Y0, "それでもランプは点いたまま").toBe(true);
+  });
+
+  it("押している間しか通電しない回路でも、押した瞬間が駒として見える(S-047)", () => {
+    // SET / RST: 離したあとは何も通電していないが、Y0 は保持されている
+    const latch = ladder(4).row(no("X0"), set("Y0")).row(no("X1"), reset("Y0")).build();
+    const { frames } = replayScenario(latch, [{ type: "press", device: "X0" }]);
+    expect(frames).toHaveLength(3);
+    expect(frames[1]?.power.cells[0]?.[0], "押している間は SET のラングが通電").toBe(true);
+    expect(frames[2]?.power.cells[0]?.[0], "離したあとは通電していない").toBe(false);
+    expect(on(frames, 2, "Y0"), "それでも SET で保持されている").toBe(true);
+  });
+
+  it("駒の説明は、押している間と離したあとで言い分ける", () => {
+    const press = { type: "press", device: "X0" } as const;
+    expect(describeFrame({ step: undefined })).toBe("何も操作していない状態");
+    expect(describeFrame({ step: press, phase: "down" }, { X0: "起動" })).toBe(
+      "X0(起動) を押している",
+    );
+    expect(describeFrame({ step: press, phase: "up" })).toBe("X0 を離した");
+    expect(describeFrame({ step: { type: "wait", ms: 1500 } })).toBe("1.5 秒 待つ");
   });
 
   it("**答え合わせ用の expect は駒にしない**(操作ではないので見せる意味がない)", () => {
@@ -82,8 +111,9 @@ describe("操作列の再生", () => {
       { type: "press", device: "X0" },
       { type: "expect", outputs: { Y0: true } },
     ]);
-    expect(frames).toHaveLength(2);
+    expect(frames).toHaveLength(3);
     expect(frames[1]?.step).toEqual({ type: "press", device: "X0" });
+    expect(frames[2]?.step).toEqual({ type: "press", device: "X0" });
   });
 
   it("時間が進む操作では仮想時間も進む", () => {
@@ -92,7 +122,8 @@ describe("操作列の再生", () => {
       { type: "wait", ms: 5000 },
     ]);
     expect(frames[1]?.elapsedMs ?? 0).toBeLessThan(1000);
-    expect(frames[2]?.elapsedMs ?? 0).toBeGreaterThanOrEqual(5000);
+    expect(frames[2]?.elapsedMs ?? 0).toBeLessThan(1000);
+    expect(frames[3]?.elapsedMs ?? 0).toBeGreaterThanOrEqual(5000);
   });
 
   describe("判定と食い違わない", () => {

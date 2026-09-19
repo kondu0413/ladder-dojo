@@ -27,6 +27,12 @@ export type LadderViewProps = {
   selected?: { row: number; col: number } | undefined;
   /** 見てほしいセル(つまずき診断)。選択とは別の色で囲む */
   highlight?: ReadonlyArray<{ row: number; col: number }> | undefined;
+  /**
+   * デバイスの ON / OFF(S-047)。ON のデバイス名を橙で描く。
+   * 通電(線の色)は「いま電流が流れているか」で、SET で保持した出力や
+   * 押したあとのカウンタは、通電が無くても ON でいる。名前の色でそれを見せる
+   */
+  states?: Record<string, boolean> | undefined;
 };
 
 /**
@@ -56,6 +62,7 @@ export function LadderView({
   onTapCell,
   selected,
   highlight,
+  states,
 }: LadderViewProps) {
   const { notation } = useNotation();
   const cells = useMemo(() => cellMap(circuit), [circuit]);
@@ -123,6 +130,7 @@ export function LadderView({
             onTapCell={onTapCell}
             isSelected={selected?.row === row && selected?.col === col}
             isHighlighted={highlighted.has(cellKey(row, col))}
+            states={states}
           />
         )),
       )}
@@ -142,6 +150,7 @@ type CellViewProps = {
   onTapCell: ((row: number, col: number) => void) | undefined;
   isSelected: boolean;
   isHighlighted: boolean;
+  states: Record<string, boolean> | undefined;
 };
 
 /**
@@ -213,12 +222,14 @@ function CellView({
   onTapCell,
   isSelected,
   isHighlighted,
+  states,
 }: CellViewProps) {
   const notation = useNotation();
   const { x, y } = cellOrigin(row, col);
   const y0 = wireY(row);
   const el = cell?.element;
   const cellText = !el || el.type === "wire" ? "" : cellLabel(el, notation);
+  const deviceOn = el && el.type !== "wire" ? (states?.[el.device] ?? false) : false;
   const label = el && "device" in el ? deviceLabels?.[el.device] : undefined;
   const isInput = el?.type === "contact" && el.device.startsWith("X");
   const pressable = isInput && input && el?.type === "contact";
@@ -310,7 +321,8 @@ function CellView({
           y={y + 16}
           textAnchor="middle"
           data-testid={`cell-text-${row}-${col}`}
-          className={`fill-slate-800 font-mono font-semibold ${
+          data-on={deviceOn || undefined}
+          className={`font-mono font-semibold ${deviceOn ? "fill-amber-700" : "fill-slate-800"} ${
             cellText.length > 8 ? "text-[10px]" : "text-[13px]"
           }`}
         >

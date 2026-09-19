@@ -221,6 +221,7 @@ function LiveDemo({ notationText }: { notationText: (text: string) => string }) 
         <LadderView
           circuit={SAMPLE}
           power={sim.power}
+          states={sim.states}
           input={sim.input}
           deviceLabels={{ X0: "起動", Y0: "ランプ" }}
         />

@@ -45,6 +45,7 @@ export function SimulatorDemoPage() {
           <LadderView
             circuit={sample.circuit}
             power={sim.power}
+            states={sim.states}
             deviceLabels={sample.deviceLabels}
             input={sim.input}
           />

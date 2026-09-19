@@ -21,8 +21,8 @@ test.describe("答え合わせの再生", () => {
     await page.getByTestId("verify-with-simulator").click();
     await expect(page.getByTestId("scenario-replay")).toBeVisible();
 
-    // 最初の駒は「何も操作していない状態」
-    await expect(page.getByTestId("replay-position")).toHaveText("1 / 2");
+    // 最初の駒は「何も操作していない状態」。押して離すは 2 駒(押している間・離したあと)
+    await expect(page.getByTestId("replay-position")).toHaveText("1 / 3");
     await expect(page.getByTestId("replay-caption")).toContainText("何も操作していない");
   });
 
@@ -36,11 +36,17 @@ test.describe("答え合わせの再生", () => {
     // 操作前: 自己保持の枝(1 行目)は通電していない
     await expect(replay.getByTestId("cell-1-0")).toHaveAttribute("data-flowing", "false");
 
+    // 押している間: X0 の接点を通って点く(S-047 で押した瞬間も駒になった)
     await page.getByTestId("replay-next").click();
     await expect(page.getByTestId("replay-caption")).toContainText("X0");
+    await expect(page.getByTestId("replay-caption")).toContainText("押している");
+    await expect(replay.getByTestId("cell-0-0")).toHaveAttribute("data-flowing", "true");
+    // ON のデバイス名は橙になる
+    await expect(replay.getByTestId("cell-text-0-0")).toHaveAttribute("data-on", "true");
 
-    // 押して離したあと、保持しているのは自己保持の枝のほう。
-    // X0 の接点は離したので通っていない
+    // 離したあと: 保持しているのは自己保持の枝のほう。X0 の接点は通っていない
+    await page.getByTestId("replay-next").click();
+    await expect(page.getByTestId("replay-caption")).toContainText("離した");
     await expect(replay.getByTestId("cell-1-0")).toHaveAttribute("data-flowing", "true");
     await expect(replay.getByTestId("cell-0-0")).toHaveAttribute("data-flowing", "false");
     await expect(replay.getByRole("img", { name: /通電中/ })).toBeVisible();
@@ -52,15 +58,16 @@ test.describe("答え合わせの再生", () => {
 
     await expect(page.getByTestId("replay-prev")).toBeDisabled();
     await page.getByTestId("replay-next").click();
-    await expect(page.getByTestId("replay-position")).toHaveText("2 / 2");
+    await page.getByTestId("replay-next").click();
+    await expect(page.getByTestId("replay-position")).toHaveText("3 / 3");
     await expect(page.getByTestId("replay-next")).toBeDisabled();
 
     await page.getByTestId("replay-prev").click();
-    await expect(page.getByTestId("replay-position")).toHaveText("1 / 2");
+    await expect(page.getByTestId("replay-position")).toHaveText("2 / 3");
 
     await page.getByTestId("replay-next").click();
     await page.getByTestId("replay-restart").click();
-    await expect(page.getByTestId("replay-position")).toHaveText("1 / 2");
+    await expect(page.getByTestId("replay-position")).toHaveText("1 / 3");
   });
 
   test("自分で動かすほうにも切り替えられる", async ({ page }) => {
@@ -76,6 +83,24 @@ test.describe("答え合わせの再生", () => {
 
     await page.getByTestId("verify-mode-replay").click();
     await expect(page.getByTestId("scenario-replay")).toBeVisible();
+  });
+
+  test("SET で保持した出力は、通電が無くても名前が橙で点いていると分かる(S-047)", async ({
+    page,
+  }) => {
+    await page.goto("/problems/selfhold-read-4");
+    await page.getByTestId("choice-0").click();
+    await page.getByTestId("verify-with-simulator").click();
+    const replay = page.getByTestId("scenario-replay");
+    // 押している間: SET のラングが通電
+    await page.getByTestId("replay-next").click();
+    await expect(replay.getByTestId("cell-0-0")).toHaveAttribute("data-flowing", "true");
+    // 離したあと: どのラングも通電していないが、Y0 は ON のまま(名前が橙)
+    await page.getByTestId("replay-next").click();
+    await expect(replay.getByTestId("cell-0-0")).toHaveAttribute("data-flowing", "false");
+    await expect(replay.getByTestId("cell-0-3")).toHaveAttribute("data-flowing", "false");
+    await expect(replay.getByTestId("cell-text-0-3")).toHaveAttribute("data-on", "true");
+    await expect(page.getByTestId("device-Y0")).toHaveAttribute("data-on", "true");
   });
 
   test("図は 1 つだけで、答え合わせは上の図の上で動く(S-046)", async ({ page }) => {
@@ -108,7 +133,8 @@ test.describe("答え合わせの再生", () => {
     await page.getByTestId("choice-1").click();
     await page.getByTestId("verify-with-simulator").click();
 
-    await expect(page.getByTestId("replay-position")).toHaveText("1 / 3");
+    await expect(page.getByTestId("replay-position")).toHaveText("1 / 4");
+    await page.getByTestId("replay-next").click();
     await page.getByTestId("replay-next").click();
     await page.getByTestId("replay-next").click();
     await expect(page.getByTestId("replay-caption")).toContainText("秒 待つ");
