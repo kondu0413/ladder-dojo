@@ -83,6 +83,12 @@ test.describe("次の問題へ(S-038)", () => {
     await expect(page.getByRole("heading", { level: 1 })).not.toHaveText(
       "押しボタンを離したらどうなる?",
     );
+    // 前の問題の答えを引きずらない(S-051)。同じ画面の中の移動なので、作り直さないと
+    // 次の問題が「答えたあと」の状態で開く(人間の報告)
+    await expect(page.getByTestId("read-complete")).toHaveCount(0);
+    await expect(page.getByTestId("read-result")).toHaveCount(0);
+    await expect(page.getByText(/設問 1 \//)).toBeVisible();
+    await expect(page.getByTestId("choice-0")).toBeEnabled();
   });
 
   test("一覧の「続きはここから」は、いちばん手前の未クリアを指す", async ({ page }) => {

@@ -92,7 +92,16 @@ export function ProblemPage() {
         </div>
       </Card>
 
-      {problem.mode === "read" ? <ReadMode problem={problem} /> : <BuildMode problem={problem} />}
+      {/*
+        問題ごとに作り直す(key)。「次の問題へ」は同じ画面(/problems/:id)の中の移動なので、
+        key が無いと前の問題の答え・設問の位置・編集中の回路・判定結果がそのまま残り、
+        次の問題が答えたあとの状態で開く(S-051、人間の報告)
+      */}
+      {problem.mode === "read" ? (
+        <ReadMode key={problem.id} problem={problem} />
+      ) : (
+        <BuildMode key={problem.id} problem={problem} />
+      )}
     </AppShell>
   );
 }
