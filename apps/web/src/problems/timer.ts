@@ -363,6 +363,7 @@ export const timerProblems: Problem[] = [
             { type: "wait", ms: 2000 },
             { type: "set", inputs: { X0: false } },
           ],
+          premiseSteps: 2,
           choices: [
             "完了したままになる",
             "完了が取り消され、現在値も 0 に戻る",
@@ -409,6 +410,7 @@ export const timerProblems: Problem[] = [
             { type: "wait", ms: 5000 },
             { type: "press", device: "X0" as const },
           ],
+          premiseSteps: 2,
           choices: ["また 3 秒間点灯する", "もう点かない", "すぐ消える"],
           answerIndex: 0,
           explanation:
@@ -567,6 +569,7 @@ export const timerProblems: Problem[] = [
             { type: "wait", ms: 1100 },
             { type: "wait", ms: 1000 },
           ],
+          premiseSteps: 1,
           choices: ["点いたまま", "消える", "点いたまま変わらなくなる"],
           answerIndex: 1,
           explanation:
@@ -621,6 +624,7 @@ export const timerProblems: Problem[] = [
             { type: "press", device: "X0" as const },
             { type: "wait", ms: 3100 },
           ],
+          premiseSteps: 1,
           choices: ["消える", "点いたまま", "また点く"],
           answerIndex: 0,
           explanation:

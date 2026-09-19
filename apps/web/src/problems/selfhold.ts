@@ -252,6 +252,7 @@ export const selfholdProblems: Problem[] = [
             { type: "set", inputs: { X0: true } },
             { type: "set", inputs: { X0: false } },
           ],
+          premiseSteps: 1,
           choices: ["点灯したままになる", "消える", "しばらくしてから消える"],
           answerIndex: 1,
           explanation:
@@ -290,6 +291,7 @@ export const selfholdProblems: Problem[] = [
             { type: "press", device: "X0" as const },
             { type: "press", device: "X1" as const },
           ],
+          premiseSteps: 1,
           choices: ["消灯する", "点灯したまま変わらない", "一瞬消えてまた点く"],
           answerIndex: 0,
           explanation:
@@ -319,6 +321,7 @@ export const selfholdProblems: Problem[] = [
             { type: "press", device: "X0" as const },
             { type: "set", inputs: { X2: true } },
           ],
+          premiseSteps: 1,
           choices: ["消灯する", "点灯したまま", "点滅する"],
           answerIndex: 0,
           explanation: "X2 は b 接点で直列に入っているため、押すと回路が切れて消灯します。",
@@ -331,6 +334,7 @@ export const selfholdProblems: Problem[] = [
             { type: "set", inputs: { X2: true } },
             { type: "set", inputs: { X2: false } },
           ],
+          premiseSteps: 2,
           choices: [
             "自動で点灯し、運転が再開される",
             "消えたまま。起動ボタンを押し直す必要がある",
@@ -437,6 +441,7 @@ export const selfholdProblems: Problem[] = [
             { type: "set", inputs: { X1: true } },
             { type: "set", inputs: { X1: false } },
           ],
+          premiseSteps: 1,
           choices: ["消えたまま", "また点く", "しばらくしてから点く"],
           answerIndex: 1,
           explanation:
@@ -493,6 +498,7 @@ export const selfholdProblems: Problem[] = [
             { type: "press", device: "X0" as const },
             { type: "press", device: "X1" as const },
           ],
+          premiseSteps: 1,
           choices: ["消える", "点いたまま", "点滅する"],
           answerIndex: 0,
           explanation:

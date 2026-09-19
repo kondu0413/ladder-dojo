@@ -4,6 +4,7 @@ import {
   listDevices,
   replayScenario,
   type Step,
+  startFrameIndex,
 } from "@ladder-dojo/core";
 import { useMemo, useState } from "react";
 import { snapshotStates } from "../hooks/useSimulator.js";
@@ -29,20 +30,34 @@ export type ScenarioReplayProps = {
   circuit: Circuit;
   steps: readonly Step[];
   deviceLabels?: Record<string, string> | undefined;
+  /**
+   * steps の先頭いくつが設問の前提(済んでいる操作)か(S-048)。
+   * 「そのあと X1 を押すと」の設問は、X0 の操作を済ませた駒から再生を始める。
+   * 前の駒にも戻れる(前提の操作がどう効いたかを見返せる)
+   */
+  premiseSteps?: number | undefined;
 };
 
-export function ScenarioReplay({ circuit, steps, deviceLabels }: ScenarioReplayProps) {
+export function ScenarioReplay({
+  circuit,
+  steps,
+  deviceLabels,
+  premiseSteps = 0,
+}: ScenarioReplayProps) {
   const { frames, stopped } = useMemo(() => replayScenario(circuit, steps), [circuit, steps]);
+  const start = useMemo(() => startFrameIndex(frames, premiseSteps), [frames, premiseSteps]);
   // 自由操作のほうと同じ一覧にする。並びが変わると見比べにくい
   const devices = useMemo(() => listDevices(circuit), [circuit]);
   const { notation } = useNotation();
-  const [index, setIndex] = useState(0);
+  const [index, setIndex] = useState(start);
   const frame = frames[Math.min(index, frames.length - 1)];
   const last = index >= frames.length - 1;
 
   if (!frame) return null;
 
   const caption = describeFrame(frame, deviceLabels, notation);
+  // 前提の駒には印を付ける。設問が問うている操作はスタート時点より後
+  const phase = index < start ? "前提" : start > 0 && index === start ? "スタート時点" : undefined;
 
   return (
     <div className="flex flex-col gap-3" data-testid="scenario-replay">
@@ -67,6 +82,14 @@ export function ScenarioReplay({ circuit, steps, deviceLabels }: ScenarioReplayP
           >
             {index + 1} / {frames.length}
           </span>
+          {phase && (
+            <span
+              data-testid="replay-phase"
+              className="rounded-md bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900"
+            >
+              {phase}
+            </span>
+          )}
           {caption}
         </p>
         <div className="flex gap-2">
@@ -95,7 +118,7 @@ export function ScenarioReplay({ circuit, steps, deviceLabels }: ScenarioReplayP
             size="sm"
             icon="reset"
             data-testid="replay-restart"
-            onClick={() => setIndex(0)}
+            onClick={() => setIndex(start)}
           >
             最初から
           </Button>

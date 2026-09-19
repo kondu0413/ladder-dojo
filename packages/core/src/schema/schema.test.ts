@@ -216,6 +216,29 @@ describe("問題スキーマ", () => {
     expect(() => parseProblem(bad)).toThrow();
   });
 
+  it("premiseSteps(済んでいる操作の数)は scenario より短くないと拒否する(S-048)", () => {
+    const question = {
+      id: "q1",
+      prompt: "そのあと X1 を押すとどうなる?",
+      scenario: [
+        { type: "press", device: "X0" },
+        { type: "press", device: "X1" },
+      ],
+      choices: ["消える", "点いたまま"],
+      answerIndex: 0,
+    };
+    const withPremise = (premiseSteps: number) => ({
+      ...base,
+      mode: "read",
+      read: { questions: [{ ...question, premiseSteps }] },
+    });
+    expect(parseProblem(withPremise(1)).read?.questions[0]?.premiseSteps).toBe(1);
+    expect(parseProblem(withPremise(0)).read?.questions[0]?.premiseSteps).toBe(0);
+    // 全部が前提だと、設問で問う操作が残らない
+    expect(() => parseProblem(withPremise(2))).toThrow();
+    expect(() => parseProblem(withPremise(-1))).toThrow();
+  });
+
   it("read モードの問題(選択肢つき)が通る", () => {
     const readProblem = {
       ...base,

@@ -1,10 +1,12 @@
 import {
   type Circuit,
+  describeSteps,
   emptyCircuit,
   type JudgeResult,
   judge,
   type Problem,
   type ReadQuestion,
+  replayScenario,
 } from "@ladder-dojo/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
@@ -36,7 +38,7 @@ import {
 } from "../components/ui.js";
 import { useDiagnosis } from "../hooks/useDiagnosis.js";
 import { useHistory } from "../hooks/useHistory.js";
-import { useSimulator } from "../hooks/useSimulator.js";
+import { snapshotStates, useSimulator } from "../hooks/useSimulator.js";
 import { labelMap } from "../lib/describe.js";
 import { useNotation } from "../lib/notation-context.jsx";
 import { useProgress } from "../lib/progress-context.jsx";
@@ -181,7 +183,6 @@ function ReadMode({ problem }: { problem: Problem }) {
       <ReadQuestionView
         ref={questionRef}
         key={question.id}
-        problem={problem}
         question={question}
         chosen={answers[question.id]}
         isLast={isLast}
@@ -250,7 +251,6 @@ function scrollBehavior(): ScrollBehavior {
 
 function ReadQuestionView({
   ref,
-  problem,
   question,
   chosen,
   isLast,
@@ -263,7 +263,6 @@ function ReadQuestionView({
 }: {
   /** 設問を進めたときに、ここまで画面を運ぶ(S-024) */
   ref?: React.Ref<HTMLElement>;
-  problem: Problem;
   question: ReadQuestion;
   chosen: number | undefined;
   isLast: boolean;
@@ -427,11 +426,46 @@ function ReadStage({
   onNextQuestion: (() => void) | undefined;
 }) {
   const labels = labelMap(problem.deviceLabels);
+  const { notation } = useNotation();
+  const premiseSteps = question.premiseSteps ?? 0;
+  /**
+   * 設問のスタート時点(S-048)。「そのあと X1 を押して離すと」の設問では、前の操作
+   * (X0 を押して離す)を済ませた状態を図に出す。**点いているところがスタート**で、
+   * 設問文の「そのあと」が図と合う。前提が無い設問は、電源を入れただけの状態
+   */
+  const premise = useMemo(
+    () => question.scenario.slice(0, premiseSteps),
+    [question.scenario, premiseSteps],
+  );
+  const start = useMemo(() => {
+    const { frames } = replayScenario(problem.solution, premise);
+    return frames[frames.length - 1];
+  }, [problem.solution, premise]);
 
   if (!verifying) {
     return (
-      <Card className="overflow-x-auto p-2">
-        <LadderView circuit={problem.solution} deviceLabels={labels} />
+      <Card className="p-2">
+        <div className="overflow-x-auto">
+          <LadderView
+            circuit={problem.solution}
+            deviceLabels={labels}
+            power={start?.power}
+            states={start ? snapshotStates(start.snapshot) : undefined}
+          />
+        </div>
+        <p
+          data-testid="read-start"
+          className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-xs text-slate-600"
+        >
+          <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-700">
+            ここまでの操作
+          </span>
+          <span>
+            {premise.length > 0
+              ? describeSteps(premise, labels, notation)
+              : "まだ何も操作していない"}
+          </span>
+        </p>
       </Card>
     );
   }
@@ -443,6 +477,7 @@ function ReadStage({
           circuit={problem.solution}
           steps={question.scenario}
           deviceLabels={labels}
+          premiseSteps={premiseSteps}
         />
       ) : (
         <FreePlay problem={problem} />

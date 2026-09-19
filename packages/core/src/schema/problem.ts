@@ -18,6 +18,13 @@ export const readQuestionSchema = z.object({
   prompt: z.string().min(1).max(300),
   /** 答え合わせでシミュレータに流す操作列(expect は含めなくてよい) */
   scenario: z.array(stepSchema).min(1).max(50),
+  /**
+   * scenario の先頭 premiseSteps 個は、設問の時点で**すでに済んでいる操作**(S-048)。
+   * 「そのあと X1 を押すと」の「そのあと」= 先頭の X0 の操作。図はその操作を流した
+   * あとの状態(点いているランプなど)を設問のスタート時点として見せ、再生もそこから
+   * 始める。省略時は 0(何も操作していない状態がスタート)
+   */
+  premiseSteps: z.number().int().min(0).optional(),
   choices: z.array(z.string().min(1).max(100)).min(2).max(5),
   answerIndex: z.number().int().min(0),
   explanation: z.string().max(500).optional(),
@@ -84,6 +91,13 @@ export const problemSchema = z
             code: "custom",
             path: ["read", "questions", i, "answerIndex"],
             message: "answerIndex が choices の範囲外",
+          });
+        }
+        if (q.premiseSteps !== undefined && q.premiseSteps >= q.scenario.length) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["read", "questions", i, "premiseSteps"],
+            message: "premiseSteps は scenario より短くする(設問で問う操作が残るように)",
           });
         }
       });

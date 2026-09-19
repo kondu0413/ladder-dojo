@@ -6,6 +6,7 @@ import {
   problemSchema,
   replayScenario,
   runTestCase,
+  startFrameIndex,
 } from "@ladder-dojo/core";
 import { describe, expect, it } from "vitest";
 import {
@@ -217,6 +218,36 @@ describe("公式問題", () => {
         ],
       });
       expect(judged.passed, "再生の結果で判定が通らない").toBe(true);
+    });
+
+    /**
+     * 設問のスタート時点(S-048)。「そのあと X1 を押すと」の設問は、前の操作を
+     * 済ませた駒から始める。前提の駒は操作前の駒より後にあり、設問で問う操作が
+     * そのあとに残っていること。
+     * (状態が初期状態と同じになる前提もある: timer-read-1/q2 の「Y0 が消えたあと」。
+     * それでも「ここまでの操作」の説明と再生の開始位置には意味がある)
+     */
+    it.each(readQuestions.filter(([, , q]) => (q.premiseSteps ?? 0) > 0))(
+      "%s のスタート時点は操作前より後にあり、問う操作が残っている",
+      (_id, problem, question) => {
+        const { frames } = replayScenario(problem.solution, question.scenario);
+        const at = startFrameIndex(frames, question.premiseSteps ?? 0);
+        expect(at).toBeGreaterThan(0);
+        expect(at).toBeLessThan(frames.length - 1);
+        expect(frames[at]?.index).toBe((question.premiseSteps ?? 0) - 1);
+      },
+    );
+
+    it("「そのあと」「〜のまま」と続く設問には前提が付いている", () => {
+      // 設問文が前の状態を引き継いでいるのに図が初期状態のままだと、
+      // 「そのあとってなに?」となる(人間の指摘)
+      const continuing = readQuestions.filter(([, , q]) =>
+        /^(そのあと|そこから|両方押したまま|左を押したまま)/.test(q.prompt),
+      );
+      expect(continuing.length).toBeGreaterThan(0);
+      for (const [id, , q] of continuing) {
+        expect(q.premiseSteps ?? 0, id).toBeGreaterThan(0);
+      }
     });
   });
 
