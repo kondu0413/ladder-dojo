@@ -144,6 +144,43 @@ export function describeStep(
   }
 }
 
+/**
+ * 設問のスタート時点の駒(S-048)。
+ *
+ * `scenario` の先頭 `premiseSteps` 個は、設問の時点で**すでに済んでいる操作**
+ * (「そのあと X1 を押すと」の「そのあと」)。その操作を流し終えた駒がスタート時点で、
+ * 静止した図にはこの駒の状態を出し、再生もここから始める。
+ * 返すのは `frames` の添字。premiseSteps が 0 なら 0(操作前の駒)
+ */
+export function startFrameIndex(frames: readonly ReplayFrame[], premiseSteps: number): number {
+  let at = 0;
+  frames.forEach((frame, i) => {
+    if (frame.index < premiseSteps) at = i;
+  });
+  return at;
+}
+
+/**
+ * 操作列をひとつながりの文にする(「X0 を押して離す ×2 → X1 を押して離す」)。
+ * 設問のスタート時点までに済んだ操作の説明に使う(S-048)。
+ * 同じ操作が続くときは回数でまとめる。expect は操作ではないので飛ばす。空なら ""
+ */
+export function describeSteps(
+  steps: readonly Step[],
+  labels?: Record<string, string>,
+  notation: Notation = DEFAULT_NOTATION,
+): string {
+  const parts: { text: string; count: number }[] = [];
+  for (const step of steps) {
+    if (step.type === "expect") continue;
+    const text = describeStep(step, labels, notation);
+    const last = parts[parts.length - 1];
+    if (last && last.text === text) last.count += 1;
+    else parts.push({ text, count: 1 });
+  }
+  return parts.map((p) => (p.count > 1 ? `${p.text} ×${p.count}` : p.text)).join(" → ");
+}
+
 function formatMs(ms: number): string {
   if (ms < 1000) return `${ms} ミリ秒`;
   return `${Math.round(ms / 100) / 10} 秒`;

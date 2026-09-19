@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { ladder, nc, no, out, reset, set, timer } from "./builder.js";
 import { runTestCase } from "./judge/judge.js";
-import { describeFrame, describeStep, replayScenario } from "./replay.js";
+import {
+  describeFrame,
+  describeStep,
+  describeSteps,
+  replayScenario,
+  startFrameIndex,
+} from "./replay.js";
 import type { Step } from "./schema/index.js";
 
 /**
@@ -230,6 +236,60 @@ describe("操作の説明の表記(S-028)", () => {
   it("説明付きでも表記が効く", () => {
     expect(describeStep({ type: "set", inputs: { X1: true } }, { X1: "停止" }, "omron")).toBe(
       "0.01(停止) を ON にする",
+    );
+  });
+});
+
+/**
+ * 設問のスタート時点(S-048)。
+ *
+ * 「そのあと X1 を押して離すと」の設問は、X0 の操作を済ませた状態から始まる。
+ * 静止した図にその状態を出し、再生もそこから始めるための添字と説明。
+ */
+describe("設問のスタート時点(S-048)", () => {
+  const steps: Step[] = [
+    { type: "press", device: "X0" },
+    { type: "press", device: "X1" },
+  ];
+
+  it("前提の操作を流し終えた駒がスタートになる(押して離すは離したあとの駒)", () => {
+    const { frames } = replayScenario(selfHold, steps);
+    expect(startFrameIndex(frames, 0)).toBe(0);
+    expect(startFrameIndex(frames, 1)).toBe(2);
+    expect(frames[2]?.phase).toBe("up");
+    // 自己保持なので、X0 を押して離したあとは Y0 が点いている
+    expect(on(frames, 2, "Y0")).toBe(true);
+  });
+
+  it("前提が操作列より長くても最後の駒で止まる", () => {
+    const { frames } = replayScenario(selfHold, steps);
+    expect(startFrameIndex(frames, 5)).toBe(frames.length - 1);
+  });
+
+  it("済んだ操作をひとつながりの文にする(同じ操作は回数でまとめる)", () => {
+    expect(describeSteps([])).toBe("");
+    expect(describeSteps([{ type: "press", device: "X0" }], { X0: "起動" })).toBe(
+      "X0(起動) を押して離す",
+    );
+    expect(
+      describeSteps([
+        { type: "press", device: "X0" },
+        { type: "press", device: "X0" },
+        { type: "set", inputs: { X0: true } },
+      ]),
+    ).toBe("X0 を押して離す ×2 → X0 を ON にする");
+    // 答え合わせの expect は操作ではない
+    expect(
+      describeSteps([
+        { type: "press", device: "X0" },
+        { type: "expect", outputs: {} },
+      ]),
+    ).toBe("X0 を押して離す");
+  });
+
+  it("説明にも表記が効く", () => {
+    expect(describeSteps([{ type: "press", device: "X0" }], undefined, "omron")).toBe(
+      "0.00 を押して離す",
     );
   });
 });

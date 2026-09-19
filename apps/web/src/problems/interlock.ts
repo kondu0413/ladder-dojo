@@ -292,6 +292,7 @@ export const interlockProblems: Problem[] = [
             { type: "set", inputs: { X0: true } },
             { type: "set", inputs: { X1: true } },
           ],
+          premiseSteps: 1,
           choices: ["逆転が入って両方 ON になる", "逆転は入らない", "正転が切れて逆転に変わる"],
           answerIndex: 1,
           explanation:
@@ -304,6 +305,7 @@ export const interlockProblems: Problem[] = [
             { type: "set", inputs: { X0: true, X1: true } },
             { type: "set", inputs: { X0: false } },
           ],
+          premiseSteps: 1,
           choices: ["どちらも止まる", "逆転が入る", "正転が入ったまま"],
           answerIndex: 1,
           explanation:
@@ -333,6 +335,7 @@ export const interlockProblems: Problem[] = [
             { type: "press", device: "X0" },
             { type: "press", device: "X1" },
           ],
+          premiseSteps: 1,
           choices: ["逆転に切り替わる", "正転のまま。逆転は入らない", "両方とも入って短絡する"],
           answerIndex: 1,
           explanation:
@@ -346,6 +349,7 @@ export const interlockProblems: Problem[] = [
             { type: "press", device: "X2" },
             { type: "press", device: "X1" },
           ],
+          premiseSteps: 1,
           choices: [
             "停止ボタン X2 でいったん止めてから逆転ボタンを押す",
             "逆転ボタンを長く押す",
@@ -379,6 +383,7 @@ export const interlockProblems: Problem[] = [
             { type: "press", device: "X0" },
             { type: "set", inputs: { X3: true } },
           ],
+          premiseSteps: 1,
           choices: ["上昇が止まる", "下降に切り替わる", "そのまま上昇し続ける"],
           answerIndex: 0,
           explanation:
@@ -391,6 +396,7 @@ export const interlockProblems: Problem[] = [
             { type: "set", inputs: { X3: true } },
             { type: "press", device: "X1" },
           ],
+          premiseSteps: 1,
           choices: ["下降できる", "下降もできない"],
           answerIndex: 0,
           explanation:
@@ -511,6 +517,7 @@ export const interlockProblems: Problem[] = [
             { type: "set", inputs: { X0: true } },
             { type: "set", inputs: { X1: true } },
           ],
+          premiseSteps: 1,
           choices: ["動く", "動かない", "一瞬だけ動く"],
           answerIndex: 0,
           explanation:

@@ -379,6 +379,7 @@ export const comboProblems: Problem[] = [
             { type: "press", device: "X0" },
             { type: "press", device: "X1" },
           ],
+          premiseSteps: 1,
           choices: ["Y0 だけ消えて Y1 は残る", "両方消える", "Y1 だけ残って点滅する"],
           answerIndex: 1,
           explanation:
@@ -424,6 +425,7 @@ export const comboProblems: Problem[] = [
             { type: "wait", ms: 5100 },
             { type: "press", device: "X1" },
           ],
+          premiseSteps: 2,
           choices: ["消える", "点いたまま残る"],
           answerIndex: 0,
           explanation:
@@ -589,6 +591,7 @@ export const comboProblems: Problem[] = [
             { type: "press", device: "X0" },
             { type: "press", device: "X1" },
           ],
+          premiseSteps: 1,
           choices: ["押している間だけ動く", "動いたままになる", "やはり動かない"],
           answerIndex: 1,
           explanation:

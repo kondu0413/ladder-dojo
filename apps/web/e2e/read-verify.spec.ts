@@ -103,6 +103,62 @@ test.describe("答え合わせの再生", () => {
     await expect(page.getByTestId("device-Y0")).toHaveAttribute("data-on", "true");
   });
 
+  /**
+   * 設問のスタート時点(S-048)。
+   *
+   * 「そのあと X1 を押して離すと」の設問で、図が何も操作していない状態のままだと
+   * 「そのあとってなに?」となる(人間の指摘)。前の操作を済ませた状態(点いている
+   * ランプ)を図に出し、再生もそこから始める。
+   */
+  test("「そのあと」の設問は、前の操作を済ませた状態から始まる(S-048)", async ({ page }) => {
+    await page.goto("/problems/selfhold-read-4");
+    const stage = page.getByTestId("read-stage");
+    // 設問 1: 前提なし
+    await expect(page.getByTestId("read-start")).toContainText("まだ何も操作していない");
+    await expect(stage.getByTestId("cell-text-0-3")).not.toHaveAttribute("data-on", "true");
+
+    await page.getByTestId("choice-0").click();
+    await page.getByTestId("next-question").click();
+    await expect(page.getByText(/設問 2 \/ 3/)).toBeVisible();
+
+    // 設問 2「そのあと X1 を押して離すと」: X0 を押して離したあとが図に出る。
+    // SET で保持した Y0 は、どのラングも通電していなくても点いている
+    await expect(page.getByTestId("read-start")).toContainText("X0");
+    await expect(page.getByTestId("read-start")).toContainText("押して離す");
+    await expect(stage.getByTestId("cell-text-0-3")).toHaveAttribute("data-on", "true");
+    await expect(stage.getByTestId("cell-0-0")).toHaveAttribute("data-flowing", "false");
+
+    // 再生もその状態から始まる。前提の操作は「戻る」で見返せる
+    await page.getByTestId("choice-0").click();
+    await page.getByTestId("verify-with-simulator").click();
+    await expect(page.getByTestId("replay-position")).toHaveText("3 / 5");
+    await expect(page.getByTestId("replay-phase")).toHaveText("スタート時点");
+    await expect(stage.getByTestId("cell-text-0-3")).toHaveAttribute("data-on", "true");
+
+    await page.getByTestId("replay-next").click();
+    await expect(page.getByTestId("replay-caption")).toContainText("X1");
+    await expect(stage.getByTestId("cell-1-0")).toHaveAttribute("data-flowing", "true");
+    await page.getByTestId("replay-next").click();
+    await expect(stage.getByTestId("cell-text-0-3")).not.toHaveAttribute("data-on", "true");
+    await expect(page.getByTestId("replay-next")).toBeDisabled();
+
+    await page.getByTestId("replay-restart").click();
+    await expect(page.getByTestId("replay-position")).toHaveText("3 / 5");
+    await page.getByTestId("replay-prev").click();
+    await expect(page.getByTestId("replay-phase")).toHaveText("前提");
+    await expect(page.getByTestId("replay-position")).toHaveText("2 / 5");
+  });
+
+  test("自己保持の 2 問目は、点いたままのランプから始まる(S-048)", async ({ page }) => {
+    await answerFirst(page);
+    await page.getByTestId("next-question").click();
+    const stage = page.getByTestId("read-stage");
+    // 「Y0 が点灯している状態で」: 自己保持の枝が通電し、Y0 が点いている
+    await expect(stage.getByTestId("cell-1-0")).toHaveAttribute("data-flowing", "true");
+    await expect(stage.getByTestId("cell-0-0")).toHaveAttribute("data-flowing", "false");
+    await expect(stage.getByRole("img", { name: /通電中/ })).toBeVisible();
+  });
+
   test("図は 1 つだけで、答え合わせは上の図の上で動く(S-046)", async ({ page }) => {
     await answerFirst(page);
     // 答える前も後も、ラダー図は問題文の下の 1 つだけ

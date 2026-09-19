@@ -296,6 +296,7 @@ export const counterProblems: Problem[] = [
             { type: "press", device: "X0" as const },
             { type: "press", device: "X0" as const },
           ],
+          premiseSteps: 3,
           choices: ["完了が取り消される", "完了のまま変わらない", "0 に戻って数え直す"],
           answerIndex: 1,
           explanation:
@@ -334,6 +335,7 @@ export const counterProblems: Problem[] = [
           id: "q2",
           prompt: "5 回押して Y0 が点いたあと、さらに 3 回押すとどうなりますか?",
           scenario: [...pressX0(8)],
+          premiseSteps: 5,
           choices: ["点いたまま変わらない", "消える", "8 回目で異常になる"],
           answerIndex: 0,
           explanation:
@@ -513,6 +515,7 @@ export const counterProblems: Problem[] = [
             { type: "set", inputs: { X0: true } },
             { type: "set", inputs: { X0: false } },
           ],
+          premiseSteps: 3,
           choices: ["点く", "消えたまま", "リセットされる"],
           answerIndex: 0,
           explanation:
