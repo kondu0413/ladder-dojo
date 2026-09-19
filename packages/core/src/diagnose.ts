@@ -183,7 +183,7 @@ function diagnoseStructure(
       id: "double-coil",
       kind: "structure",
       title: `${device} のコイルが ${list.length} つあります(二重コイル)`,
-      detail: `同じデバイスのコイルを複数のラングに置くと、下のラングの結果だけが残ります。${device} を ON にする条件は 1 つのラングにまとめてください。`,
+      detail: `同じデバイスのコイルを複数のラングに置くと、あとに実行される下の行の結果だけが残ります。${device} を ON にする条件は 1 つのラングにまとめてください。`,
       cells: list.map((c) => ({ row: c.row, col: c.col })),
     });
   }

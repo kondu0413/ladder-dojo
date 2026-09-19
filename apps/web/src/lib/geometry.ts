@@ -6,8 +6,10 @@ import type { Circuit } from "@ladder-dojo/core";
  */
 export const CELL_W = 76;
 export const CELL_H = 64;
-/** 左右の母線の余白 */
-export const RAIL_PAD = 14;
+/** 左右の母線の余白。左には行番号(S-049)が入る */
+export const RAIL_PAD = 22;
+/** 右側に「残る / 上書き」の印(S-049)を出すときに足す幅 */
+export const NOTE_W = 44;
 
 export function svgWidth(circuit: Circuit): number {
   return RAIL_PAD * 2 + circuit.cols * CELL_W;

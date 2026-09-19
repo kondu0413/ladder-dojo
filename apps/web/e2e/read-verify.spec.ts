@@ -159,6 +159,72 @@ test.describe("答え合わせの再生", () => {
     await expect(stage.getByRole("img", { name: /通電中/ })).toBeVisible();
   });
 
+  /**
+   * 「あとに実行される行の結果が残る」を見せる(S-049)。
+   *
+   * SET と RST の両方に通電した駒は、図では両方のコイルが通電して見えるのに Y0 は OFF。
+   * 「下の RST が勝つ」では分からない(人間の指摘)。行番号・「残る / 上書き」の印・
+   * 理由の一言・スキャンの中を 1 行ずつ見る、の 4 つで見せる。
+   */
+  test("SET と RST の両方に通電した駒は、理由と「残る / 上書き」の印が出て、1 行ずつ見られる", async ({
+    page,
+  }) => {
+    await page.goto("/problems/selfhold-read-4");
+    const stage = page.getByTestId("read-stage");
+    // 図には行番号が付いている
+    await expect(stage.getByTestId("row-number-0")).toHaveText("1");
+    await expect(stage.getByTestId("row-number-1")).toHaveText("2");
+
+    // 設問 3「両方押したまま」まで進む
+    await page.getByTestId("choice-0").click();
+    await page.getByTestId("next-question").click();
+    await page.getByTestId("choice-0").click();
+    await page.getByTestId("next-question").click();
+    await expect(page.getByText(/設問 3 \/ 3/)).toBeVisible();
+    await page.getByTestId("choice-0").click();
+    await page.getByTestId("verify-with-simulator").click();
+
+    // 両方押した駒: 両方のコイルが通電、Y0 は OFF
+    await page.getByTestId("replay-next").click();
+    await expect(page.getByTestId("replay-caption")).toContainText(
+      "X0(起動) と X1(停止) を押したまま",
+    );
+    await expect(stage.getByTestId("cell-0-3")).toHaveAttribute("data-flowing", "true");
+    await expect(stage.getByTestId("cell-1-3")).toHaveAttribute("data-flowing", "true");
+    await expect(stage.getByTestId("cell-text-0-3")).not.toHaveAttribute("data-on", "true");
+
+    // 印: 1 行目の SET は上書き、2 行目の RST が残る。理由の一言も出る
+    await expect(stage.getByTestId("coil-note-0")).toHaveAttribute("data-keeps", "false");
+    await expect(stage.getByTestId("coil-note-1")).toHaveAttribute("data-keeps", "true");
+    const note = page.getByTestId("coil-conflict");
+    await expect(note).toContainText("1 行目の SET と 2 行目の RST が両方通電");
+    await expect(note).toContainText("あとの 2 行目(RST)の結果が残り");
+
+    // 1 行ずつ見る: 1 行目まで実行すると Y0 は ON、2 行目まで実行すると OFF
+    await page.getByTestId("trace-open").click();
+    await expect(page.getByTestId("rung-position")).toHaveText("1 / 2");
+    await expect(page.getByTestId("rung-caption")).toContainText("1 行目まで実行");
+    await expect(page.getByTestId("rung-caption")).toContainText("Y0(ランプ) は ON");
+    await expect(stage.getByTestId("cell-text-0-3")).toHaveAttribute("data-on", "true");
+    await expect(stage.getByTestId("row-focus-0")).toBeVisible();
+    // まだ実行していない 2 行目は薄く、無電圧
+    await expect(stage.getByTestId("cell-1-3")).toHaveAttribute("data-pending", "true");
+    await expect(stage.getByTestId("cell-1-3")).toHaveAttribute("data-flowing", "false");
+    await expect(page.getByTestId("device-Y0")).toHaveAttribute("data-on", "true");
+
+    await page.getByTestId("rung-next").click();
+    await expect(page.getByTestId("rung-caption")).toContainText("2 行目まで実行");
+    await expect(page.getByTestId("rung-caption")).toContainText("Y0(ランプ) は OFF");
+    await expect(stage.getByTestId("cell-text-0-3")).not.toHaveAttribute("data-on", "true");
+    await expect(stage.getByTestId("cell-1-3")).toHaveAttribute("data-flowing", "true");
+    await expect(page.getByTestId("rung-next")).toBeDisabled();
+
+    // 閉じると駒の表示に戻る
+    await page.getByTestId("rung-close").click();
+    await expect(page.getByTestId("rung-trace")).toHaveCount(0);
+    await expect(page.getByTestId("replay-position")).toHaveText("2 / 2");
+  });
+
   test("図は 1 つだけで、答え合わせは上の図の上で動く(S-046)", async ({ page }) => {
     await answerFirst(page);
     // 答える前も後も、ラダー図は問題文の下の 1 つだけ

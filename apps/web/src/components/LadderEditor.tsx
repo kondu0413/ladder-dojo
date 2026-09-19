@@ -8,6 +8,8 @@ import {
   connectRow,
   type DeviceId,
   type DeviceType,
+  deviceNumber as deviceNumberOf,
+  deviceType as deviceTypeOf,
   type Element,
   hasVline,
   putElement,
@@ -18,8 +20,9 @@ import {
 import { useEffect, useState } from "react";
 import type { HistoryControls } from "../hooks/useHistory.js";
 import { useNotation } from "../lib/notation-context.jsx";
+import { DevicePicker } from "./DevicePicker.js";
 import { LadderView } from "./LadderView.js";
-import { Button, Card, Icon, Label, Notice, Segmented } from "./ui.js";
+import { Button, Card, Icon, Label, Notice } from "./ui.js";
 
 /** パレットの部品。device が必要なものは選択中のデバイスを使う */
 type PartId =
@@ -115,8 +118,6 @@ const PARTS: Part[] = [
   },
 ];
 
-const DEVICE_TYPES: DeviceType[] = ["X", "Y", "M", "T", "C"];
-
 export type LadderEditorProps = {
   circuit: Circuit;
   onChange: (circuit: Circuit) => void;
@@ -124,13 +125,21 @@ export type LadderEditorProps = {
   history?: HistoryControls | undefined;
   /** 図の右上に置く追加の操作(共有など) */
   extra?: React.ReactNode;
+  /** 問題のデバイスの説明。デバイスの候補に出す(S-050) */
+  deviceLabels?: Record<string, string> | undefined;
 };
 
 /**
  * ラダー図の編集(SPEC.md §3.1: 部品パレットからグリッドに置く。スマホのタップ中心、ドラッグ非依存)。
  * セルを選んでから部品をタップすると、選択中のデバイスで配置する。
  */
-export function LadderEditor({ circuit, onChange, history, extra }: LadderEditorProps) {
+export function LadderEditor({
+  circuit,
+  onChange,
+  history,
+  extra,
+  deviceLabels,
+}: LadderEditorProps) {
   const [selected, setSelected] = useState<{ row: number; col: number } | undefined>(undefined);
 
   // キーボードでも戻せる(PC で編集する人向け)。入力欄の中では効かせない
@@ -254,36 +263,16 @@ export function LadderEditor({ circuit, onChange, history, extra }: LadderEditor
       )}
 
       <Card padded className="flex flex-col gap-4">
-        <section className="flex flex-col gap-2">
-          <Label>デバイス</Label>
-          <div className="flex flex-wrap items-center gap-2">
-            <Segmented<DeviceType>
-              mono
-              label="デバイスの種類"
-              value={deviceType}
-              onChange={setDeviceType}
-              options={DEVICE_TYPES.map((t) => ({
-                value: t,
-                label: t,
-                testId: `device-type-${t}`,
-              }))}
-            />
-            <Stepper
-              label="番号"
-              value={deviceNumber}
-              min={0}
-              max={999}
-              onChange={setDeviceNumber}
-              testId="device-number"
-            />
-            <span
-              className="theme-fixed inline-flex min-h-9 items-center rounded-lg bg-slate-900 px-3 font-mono text-sm font-semibold text-amber-300"
-              data-testid="current-device"
-            >
-              {notation.device(device)}
-            </span>
-          </div>
-        </section>
+        {/* 回路にあるデバイスをタップで選ぶ / 表記のままの名前を打つ(S-050) */}
+        <DevicePicker
+          circuit={circuit}
+          value={device}
+          deviceLabels={deviceLabels}
+          onChange={(d) => {
+            setDeviceType(deviceTypeOf(d));
+            setDeviceNumber(deviceNumberOf(d));
+          }}
+        />
 
         <section className="flex flex-col gap-2">
           <Label>部品(タップで配置)</Label>

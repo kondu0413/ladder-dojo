@@ -1,7 +1,7 @@
 import { type JudgeOptions, StepRunner } from "./judge/judge.js";
 import { DEFAULT_NOTATION, formatDevice, type Notation } from "./notation.js";
 import { type Circuit, DEFAULT_HOLD_MS, type DeviceId, type Step } from "./schema/index.js";
-import { type PowerMap, Simulator, type Snapshot } from "./sim/simulator.js";
+import { type PowerMap, type RungTrace, Simulator, type Snapshot } from "./sim/simulator.js";
 
 /**
  * 操作列を 1 ステップずつ流し、その都度の通電状態を返す(S-022)。
@@ -31,6 +31,12 @@ export type ReplayFrame = {
   snapshot: Snapshot;
   /** 仮想時間(ms) */
   elapsedMs: number;
+  /**
+   * この駒の状態で 1 スキャンを行ごとに区切った記録(S-049)。
+   * 「1 行目まで実行 → Y0 は ON、2 行目まで実行 → OFF」と、スキャンの中を見せるために使う。
+   * 落ち着いた状態からのスキャンなので、最後の要素の状態はこの駒と同じ
+   */
+  rungs: RungTrace[];
 };
 
 export type ReplayResult = {
@@ -62,24 +68,21 @@ export function replayScenario(
   // 最初に一度落ち着かせる。電源投入直後から ON になる回路があるので、
   // 「何も操作していない状態」も正しく見せる必要がある
   runner.settle();
-  const frames: ReplayFrame[] = [
-    {
-      index: -1,
-      step: undefined,
-      power: runner.sim.power,
-      snapshot: runner.sim.snapshot(),
+  // 駒の通電状態を先に取ってから traceScan を回す(traceScan は新しい通電マップを作る)
+  const capture = (index: number, step: Step | undefined, phase?: "down" | "up"): ReplayFrame => {
+    const power = runner.sim.power;
+    const snapshot = runner.sim.snapshot();
+    return {
+      index,
+      step,
+      ...(phase ? { phase } : {}),
+      power,
+      snapshot,
       elapsedMs: runner.elapsedMs,
-    },
-  ];
-
-  const capture = (index: number, step: Step, phase?: "down" | "up"): ReplayFrame => ({
-    index,
-    step,
-    ...(phase ? { phase } : {}),
-    power: runner.sim.power,
-    snapshot: runner.sim.snapshot(),
-    elapsedMs: runner.elapsedMs,
-  });
+      rungs: runner.sim.traceScan(),
+    };
+  };
+  const frames: ReplayFrame[] = [capture(-1, undefined)];
 
   for (const [i, step] of steps.entries()) {
     // expect は答え合わせ用の印で、操作ではない。見せる意味がないので飛ばす
@@ -130,9 +133,16 @@ export function describeStep(
   };
   switch (step.type) {
     case "set": {
-      const parts = Object.entries(step.inputs).map(
-        ([device, on]) => `${name(device)} を ${on ? "ON" : "OFF"} にする`,
-      );
+      // 入力は押しボタン(S-027)。ON にする = 押したまま、OFF にする = 離す(S-049)
+      const on = Object.entries(step.inputs)
+        .filter(([, v]) => v)
+        .map(([d]) => name(d));
+      const off = Object.entries(step.inputs)
+        .filter(([, v]) => !v)
+        .map(([d]) => name(d));
+      const parts: string[] = [];
+      if (on.length > 0) parts.push(`${on.join(" と ")} を押したまま`);
+      if (off.length > 0) parts.push(`${off.join(" と ")} を離す`);
       return parts.join("、");
     }
     case "press":
@@ -179,6 +189,49 @@ export function describeSteps(
     else parts.push({ text, count: 1 });
   }
   return parts.map((p) => (p.count > 1 ? `${p.text} ×${p.count}` : p.text)).join(" → ");
+}
+
+/** 行の並びを「1 行目」「1〜2 行目」にする */
+export function describeRows(rows: readonly number[]): string {
+  const first = rows[0];
+  const last = rows[rows.length - 1];
+  if (first === undefined || last === undefined) return "";
+  return first === last ? `${first + 1} 行目` : `${first + 1}〜${last + 1} 行目`;
+}
+
+/** ビット・タイマ完了・カウンタ完了をまとめた ON / OFF の表 */
+function statesOf(snapshot: Snapshot): Record<string, boolean> {
+  const out: Record<string, boolean> = {};
+  for (const [k, v] of Object.entries(snapshot.bits)) out[k] = v;
+  for (const [k, v] of Object.entries(snapshot.timers)) out[k] = v.done;
+  for (const [k, v] of Object.entries(snapshot.counters)) out[k] = v.done;
+  return out;
+}
+
+/**
+ * スキャンの中の 1 駒の説明(S-049)。「1 行目まで実行 → Y0 は ON」「2 行目まで実行 → 変化なし」。
+ * 変化は直前の駒(index が 0 なら操作の駒の状態 `before`)との差
+ */
+export function describeRungTrace(
+  rungs: readonly RungTrace[],
+  index: number,
+  before: Snapshot,
+  labels?: Record<string, string>,
+  notation: Notation = DEFAULT_NOTATION,
+): string {
+  const trace = rungs[index];
+  if (!trace) return "";
+  const prev = index === 0 ? before : (rungs[index - 1]?.snapshot ?? before);
+  const was = statesOf(prev);
+  const now = statesOf(trace.snapshot);
+  const changes = Object.entries(now)
+    .filter(([device, value]) => was[device] !== value)
+    .map(([device, value]) => {
+      const shown = formatDevice(device as DeviceId, notation);
+      const label = labels?.[device];
+      return `${label ? `${shown}(${label})` : shown} は ${value ? "ON" : "OFF"}`;
+    });
+  return `${describeRows(trace.rows)}まで実行 → ${changes.length > 0 ? changes.join("、") : "変化なし"}`;
 }
 
 function formatMs(ms: number): string {

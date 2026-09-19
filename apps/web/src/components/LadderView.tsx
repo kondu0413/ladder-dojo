@@ -1,4 +1,11 @@
-import type { Cell, Circuit, CoilElement, ContactElement, PowerMap } from "@ladder-dojo/core";
+import type {
+  Cell,
+  Circuit,
+  CoilConflict,
+  CoilElement,
+  ContactElement,
+  PowerMap,
+} from "@ladder-dojo/core";
 import { cellKey, cellMap, describeCircuit } from "@ladder-dojo/core";
 import { useMemo } from "react";
 import type { InputControl } from "../hooks/useSimulator.js";
@@ -6,6 +13,7 @@ import {
   CELL_H,
   CELL_W,
   cellOrigin,
+  NOTE_W,
   nodeX,
   RAIL_PAD,
   svgHeight,
@@ -33,6 +41,15 @@ export type LadderViewProps = {
    * 押したあとのカウンタは、通電が無くても ON でいる。名前の色でそれを見せる
    */
   states?: Record<string, boolean> | undefined;
+  /**
+   * 同じデバイスに複数のコイルが書いている衝突(S-049)。右の余白に、あとに実行されて
+   * 結果が残るコイルには「残る」、先に実行されて上書きされたコイルには「上書き」の印を出す
+   */
+  conflicts?: readonly CoilConflict[] | undefined;
+  /** いま実行している行(スキャンの中を見るとき、S-049)。帯で囲む */
+  focusRows?: readonly number[] | undefined;
+  /** まだ実行していない行(スキャンの中を見るとき)。薄く描く */
+  pendingRows?: readonly number[] | undefined;
 };
 
 /**
@@ -63,6 +80,9 @@ export function LadderView({
   selected,
   highlight,
   states,
+  conflicts,
+  focusRows,
+  pendingRows,
 }: LadderViewProps) {
   const { notation } = useNotation();
   const cells = useMemo(() => cellMap(circuit), [circuit]);
@@ -81,10 +101,22 @@ export function LadderView({
     () => new Set((highlight ?? []).map((c) => cellKey(c.row, c.col))),
     [highlight],
   );
-  const width = svgWidth(circuit);
+  const notes = useMemo(() => {
+    const map = new Map<number, { keeps: boolean; device: string }>();
+    for (const c of conflicts ?? []) {
+      c.writes.forEach((w, i) => {
+        map.set(w.row, { keeps: i === c.writes.length - 1, device: c.device });
+      });
+    }
+    return map;
+  }, [conflicts]);
+  const width = svgWidth(circuit) + (notes.size > 0 ? NOTE_W : 0);
   const height = svgHeight(circuit);
   const leftX = RAIL_PAD;
   const rightX = RAIL_PAD + circuit.cols * CELL_W;
+  const pending = useMemo(() => new Set(pendingRows ?? []), [pendingRows]);
+  const rowIds = useMemo(() => Array.from({ length: circuit.rows }, (_, i) => i), [circuit.rows]);
+  const focus = useMemo(() => new Set(focusRows ?? []), [focusRows]);
 
   return (
     <svg
@@ -96,6 +128,32 @@ export function LadderView({
       aria-label={description}
     >
       <title>{description}</title>
+      {/* 実行中の行の帯(スキャンの中を見るとき、S-049) */}
+      {Array.from(focus, (row) => (
+        <rect
+          key={`focus-${row}`}
+          data-testid={`row-focus-${row}`}
+          x={leftX - 4}
+          y={cellOrigin(row, 0).y}
+          width={rightX - leftX + 8}
+          height={CELL_H}
+          rx={8}
+          style={{ fill: "var(--ladder-highlight-fill)" }}
+        />
+      ))}
+      {/* 行番号(S-049)。設問や説明の「2 行目」が図のどこかを指せるように */}
+      {rowIds.map((row) => (
+        <text
+          key={`row-${row}`}
+          data-testid={`row-number-${row}`}
+          x={9}
+          y={wireY(row) + 3.5}
+          textAnchor="middle"
+          className="fill-slate-400 font-mono text-[10px] font-semibold"
+        >
+          {row + 1}
+        </text>
+      ))}
       <line
         x1={leftX}
         y1={6}
@@ -131,9 +189,36 @@ export function LadderView({
             isSelected={selected?.row === row && selected?.col === col}
             isHighlighted={highlighted.has(cellKey(row, col))}
             states={states}
+            dimmed={pending.has(row)}
           />
         )),
       )}
+      {/* 同じデバイスへの書き込みの衝突: 右の余白に「残る」「上書き」(S-049) */}
+      {Array.from(notes, ([row, note]) => (
+        <g
+          key={`note-${row}`}
+          data-testid={`coil-note-${row}`}
+          data-keeps={note.keeps}
+          aria-label={`${row + 1} 行目のコイル: ${note.keeps ? "この結果が残る" : "あとの行に上書きされる"}`}
+        >
+          <rect
+            x={rightX + 8}
+            y={wireY(row) - 9}
+            width={NOTE_W - 12}
+            height={18}
+            rx={5}
+            style={{ fill: note.keeps ? "var(--ladder-flow)" : "var(--ladder-empty)" }}
+          />
+          <text
+            x={rightX + 8 + (NOTE_W - 12) / 2}
+            y={wireY(row) + 3.5}
+            textAnchor="middle"
+            className={`text-[9px] font-bold ${note.keeps ? "fill-slate-900" : "fill-slate-500"}`}
+          >
+            {note.keeps ? "残る" : "上書き"}
+          </text>
+        </g>
+      ))}
     </svg>
   );
 }
@@ -151,6 +236,8 @@ type CellViewProps = {
   isSelected: boolean;
   isHighlighted: boolean;
   states: Record<string, boolean> | undefined;
+  /** まだ実行していない行(スキャンの中を見るとき、S-049) */
+  dimmed: boolean;
 };
 
 /**
@@ -223,6 +310,7 @@ function CellView({
   isSelected,
   isHighlighted,
   states,
+  dimmed,
 }: CellViewProps) {
   const notation = useNotation();
   const { x, y } = cellOrigin(row, col);
@@ -249,6 +337,8 @@ function CellView({
       data-testid={`cell-${row}-${col}`}
       data-flowing={flowing}
       data-highlighted={isHighlighted || undefined}
+      data-pending={dimmed || undefined}
+      opacity={dimmed ? 0.35 : undefined}
     >
       {/* 編集中は空のマスにも薄い枠を出す。何も無い白い面では、どこを押せばよいか分からない */}
       {onTapCell && !el && !isSelected && !isHighlighted && (

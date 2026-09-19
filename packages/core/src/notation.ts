@@ -77,6 +77,49 @@ export function formatDevice(id: DeviceId, notation: Notation): string {
 }
 
 /**
+ * 表示用の書き方からデバイス名に戻す(S-050)。`formatDevice` の逆。
+ *
+ * 編集画面の番号の欄は内部の番号(X100)で動いていて、オムロン系では「6.04」と
+ * 表示されるので、「100.00」(= Y0)を置きたい人には壊れて見えた。表記のままの
+ * 名前を打てるようにする。どの表記でも内部の書き方(X0 / Y0)は受け付ける。
+ * 空白と大文字小文字は気にしない。読めなければ undefined
+ */
+export function parseDevice(text: string, notation: Notation): DeviceId | undefined {
+  const t = text.trim().toUpperCase();
+  const inRange = (n: number) => n >= 0 && n <= 999;
+  const plain = /^([XYMTC])(\d{1,3})$/.exec(t);
+  if (plain?.[1] && plain[2] !== undefined) {
+    const n = Number(plain[2]);
+    return inRange(n) ? (`${plain[1]}${n}` as DeviceId) : undefined;
+  }
+  if (notation !== "omron") return undefined;
+  // ワード.ビット(入力は 0〜、出力は 100〜、内部リレーは W0〜)。ビットは 00〜15
+  const wb = /^(W?)(\d{1,3})\.(\d{1,2})$/.exec(t);
+  if (wb?.[2] !== undefined && wb[3] !== undefined) {
+    const word = Number(wb[2]);
+    const bit = Number(wb[3]);
+    if (bit > 15) return undefined;
+    if (wb[1] === "W") {
+      const n = word * 16 + bit;
+      return inRange(n) ? (`M${n}` as DeviceId) : undefined;
+    }
+    if (word >= 100) {
+      const n = (word - 100) * 16 + bit;
+      return inRange(n) ? (`Y${n}` as DeviceId) : undefined;
+    }
+    const n = word * 16 + bit;
+    return inRange(n) ? (`X${n}` as DeviceId) : undefined;
+  }
+  // T0000 / C0005
+  const tc = /^([TC])(\d{1,4})$/.exec(t);
+  if (tc?.[1] && tc[2] !== undefined) {
+    const n = Number(tc[2]);
+    return inRange(n) ? (`${tc[1]}${n}` as DeviceId) : undefined;
+  }
+  return undefined;
+}
+
+/**
  * タイマの設定値。ラダー図のコイルの脇に出す。
  *
  * 三菱系・オムロン系とも **0.1 秒を 1 として数える**書き方にしている

@@ -16,18 +16,18 @@ test("回路を組み立てて、その場で動かせる", async ({ page }) => 
   // 1 行目: X0(a接点)→ X1(b接点)→ Y0(出力コイル)
   await selectCell(0, 0);
   await page.getByTestId("device-type-X").click();
-  await expect(page.getByTestId("current-device")).toHaveText("X0");
+  await expect(page.getByTestId("current-device")).toHaveValue("X0");
   await page.getByTestId("part-no").click();
 
   await selectCell(0, 1);
   await page.getByTestId("device-number-inc").click();
-  await expect(page.getByTestId("current-device")).toHaveText("X1");
+  await expect(page.getByTestId("current-device")).toHaveValue("X1");
   await page.getByTestId("part-nc").click();
 
   await selectCell(0, 5);
   await page.getByTestId("device-type-Y").click();
   await page.getByTestId("device-number-dec").click();
-  await expect(page.getByTestId("current-device")).toHaveText("Y0");
+  await expect(page.getByTestId("current-device")).toHaveValue("Y0");
   await page.getByTestId("part-out").click();
 
   // 接点とコイルの間を横線でつなぐ
@@ -258,7 +258,7 @@ test("タイマの設定値を変えて置ける", async ({ page }) => {
 
   await page.getByTestId("cell-0-5").click();
   await page.getByTestId("part-timer").click();
-  await expect(page.getByTestId("current-device")).toHaveText("T0");
+  await expect(page.getByTestId("current-device")).toHaveValue("T0");
   // 既定は三菱系の表記。タイマの設定値は 0.1 秒を 1 として数える(3.5 秒 = K35、S-028)
   await expect(page.getByTestId("cell-text-0-5")).toHaveText("T0 K35");
 });
@@ -354,5 +354,65 @@ test.describe("保存とテストケース(§3.4)", () => {
 
     await expect(page.getByTestId("judge-result")).toHaveAttribute("data-passed", "false");
     await expect(page.getByTestId("diff-Y0")).toContainText("OFF");
+  });
+});
+
+/**
+ * デバイスの選び方(S-050)。
+ *
+ * 番号を +/− で 1 ずつしか動かせず、オムロン系では内部の番号(X100)と画面の名前
+ * (6.04)が食い違って壊れて見えた(人間の指摘)。表記のままの名前を打てること、
+ * 回路にあるデバイスをタップで選べることを確かめる。
+ */
+test.describe("デバイスの選び方(S-050)", () => {
+  test("オムロン系で 100.00 と打つと出力 Y0 になり、種類も切り替わる", async ({ page }) => {
+    await page.goto("/sandbox");
+    await page.getByRole("button", { name: "オムロン系" }).click();
+    await page.getByTestId("cell-0-0").click();
+    const field = page.getByTestId("current-device");
+    await expect(field).toHaveValue("0.00");
+
+    await field.fill("100.00");
+    await expect(field).toHaveValue("100.00");
+    await expect(page.getByTestId("device-type-Y")).toHaveAttribute("aria-pressed", "true");
+    await page.getByTestId("part-no").click();
+    await expect(page.getByTestId("cell-text-0-0")).toHaveText("100.00");
+
+    // 三菱系に戻すと同じデバイスが Y0 と出る
+    await page.getByRole("button", { name: "三菱系" }).click();
+    await expect(page.getByTestId("cell-text-0-0")).toHaveText("Y0");
+    await expect(field).toHaveValue("Y0");
+  });
+
+  test("読めない名前は赤くなり、離れると元に戻る", async ({ page }) => {
+    await page.goto("/sandbox");
+    await page.getByTestId("cell-0-0").click();
+    const field = page.getByTestId("current-device");
+    await field.fill("abc");
+    await expect(page.getByTestId("device-invalid")).toBeVisible();
+    await field.blur();
+    await expect(field).toHaveValue("X0");
+    await expect(page.getByTestId("device-invalid")).toHaveCount(0);
+  });
+
+  test("回路にあるデバイスをタップで選び直せる(自己保持の接点)", async ({ page }) => {
+    await page.goto("/sandbox");
+    // Y0 のコイルを置く
+    await page.getByTestId("cell-0-5").click();
+    await page.getByTestId("device-type-Y").click();
+    await page.getByTestId("part-out").click();
+    await expect(page.getByTestId("device-chip-Y0")).toBeVisible();
+
+    // 2 行目に Y0 の a 接点(自己保持)。種類は X に戻っていても、チップで Y0 を選べる
+    await page.getByTestId("cell-1-0").click();
+    await page.getByTestId("device-type-X").click();
+    await page.getByTestId("device-chip-Y0").click();
+    await expect(page.getByTestId("current-device")).toHaveValue("Y0");
+    await page.getByTestId("part-no").click();
+    await expect(page.getByTestId("cell-text-1-0")).toHaveText("Y0");
+
+    // 「次の空き」は、いまの種類でまだ使っていない番号
+    await page.getByTestId("device-chip-next").click();
+    await expect(page.getByTestId("current-device")).toHaveValue("Y1");
   });
 });
