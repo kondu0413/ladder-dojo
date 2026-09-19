@@ -1,11 +1,12 @@
 import {
   type Circuit,
-  describeStep,
+  describeFrame,
   listDevices,
   replayScenario,
   type Step,
 } from "@ladder-dojo/core";
 import { useMemo, useState } from "react";
+import { snapshotStates } from "../hooks/useSimulator.js";
 import { useNotation } from "../lib/notation-context.jsx";
 import { DevicePanel } from "./DevicePanel.js";
 import { LadderView } from "./LadderView.js";
@@ -41,15 +42,18 @@ export function ScenarioReplay({ circuit, steps, deviceLabels }: ScenarioReplayP
 
   if (!frame) return null;
 
-  const caption = frame.step
-    ? describeStep(frame.step, deviceLabels, notation)
-    : "何も操作していない状態";
+  const caption = describeFrame(frame, deviceLabels, notation);
 
   return (
     <div className="flex flex-col gap-3" data-testid="scenario-replay">
       {/* 図が先。操作のボタンは図の直下に置いて、押しながら変化を見られるようにする(S-046) */}
       <Card className="overflow-x-auto p-2 ring-2 ring-amber-400/40">
-        <LadderView circuit={circuit} power={frame.power} deviceLabels={deviceLabels} />
+        <LadderView
+          circuit={circuit}
+          power={frame.power}
+          states={snapshotStates(frame.snapshot)}
+          deviceLabels={deviceLabels}
+        />
       </Card>
 
       <div className="flex flex-wrap items-center justify-between gap-2">

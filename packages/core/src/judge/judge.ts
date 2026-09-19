@@ -289,19 +289,33 @@ export class StepRunner {
         for (const [dev, v] of Object.entries(step.inputs)) this.sim.setInput(dev as DeviceId, v);
         return this.settleOutcome();
       case "press": {
-        this.sim.setInput(step.device, true);
-        const r1 = this.settleOutcome();
+        const r1 = this.pressDown(step.device);
         if (r1 !== "ok") return r1;
-        const r2 = this.advance(step.holdMs ?? DEFAULT_HOLD_MS);
-        if (r2 !== "ok") return r2;
-        this.sim.setInput(step.device, false);
-        return this.settleOutcome();
+        return this.pressUp(step.device, step.holdMs ?? DEFAULT_HOLD_MS);
       }
       case "wait":
         return this.advance(step.ms);
       case "expect":
         return "ok";
     }
+  }
+
+  /**
+   * 「押して離す」の前半: 押して落ち着かせる。
+   * 再生(S-047)はここで 1 駒見せる。押している間の通電が、離したあとには消える回路
+   * (SET / RST、カウンタ、立ち上がり)では、この駒が無いと何も起きていないように見える
+   */
+  pressDown(device: DeviceId): RunOutcome {
+    this.sim.setInput(device, true);
+    return this.settleOutcome();
+  }
+
+  /** 「押して離す」の後半: 押したまま holdMs 待ち、離して落ち着かせる */
+  pressUp(device: DeviceId, holdMs: number): RunOutcome {
+    const r = this.advance(holdMs);
+    if (r !== "ok") return r;
+    this.sim.setInput(device, false);
+    return this.settleOutcome();
   }
 
   /** 時間を ms 進める(スキャンを繰り返す)。その後 settle */

@@ -1,6 +1,6 @@
 import { type JudgeOptions, StepRunner } from "./judge/judge.js";
 import { DEFAULT_NOTATION, formatDevice, type Notation } from "./notation.js";
-import type { Circuit, DeviceId, Step } from "./schema/index.js";
+import { type Circuit, DEFAULT_HOLD_MS, type DeviceId, type Step } from "./schema/index.js";
 import { type PowerMap, Simulator, type Snapshot } from "./sim/simulator.js";
 
 /**
@@ -20,6 +20,12 @@ export type ReplayFrame = {
   index: number;
   /** この駒に至った操作。初期状態では undefined */
   step: Step | undefined;
+  /**
+   * 「押して離す」は 2 駒に分ける(S-047)。down = 押している間、up = 離したあと。
+   * 押している間しか通電しない回路(SET / RST・カウンタ・立ち上がり)で、
+   * 離したあとの駒だけだと「何も起きていない」ように見える
+   */
+  phase?: "down" | "up";
   /** この時点の通電状態。ラダー図に渡す */
   power: PowerMap;
   snapshot: Snapshot;
@@ -66,20 +72,49 @@ export function replayScenario(
     },
   ];
 
+  const capture = (index: number, step: Step, phase?: "down" | "up"): ReplayFrame => ({
+    index,
+    step,
+    ...(phase ? { phase } : {}),
+    power: runner.sim.power,
+    snapshot: runner.sim.snapshot(),
+    elapsedMs: runner.elapsedMs,
+  });
+
   for (const [i, step] of steps.entries()) {
     // expect は答え合わせ用の印で、操作ではない。見せる意味がないので飛ばす
     if (step.type === "expect") continue;
+    if (step.type === "press") {
+      // 押している間と離したあとを別の駒にする(S-047)。判定と同じ手順を半分ずつ通す
+      const down = runner.pressDown(step.device);
+      frames.push(capture(i, step, "down"));
+      if (down !== "ok") return { frames, stopped: down };
+      const up = runner.pressUp(step.device, step.holdMs ?? DEFAULT_HOLD_MS);
+      frames.push(capture(i, step, "up"));
+      if (up !== "ok") return { frames, stopped: up };
+      continue;
+    }
     const outcome = runner.run(step);
-    frames.push({
-      index: i,
-      step,
-      power: runner.sim.power,
-      snapshot: runner.sim.snapshot(),
-      elapsedMs: runner.elapsedMs,
-    });
+    frames.push(capture(i, step));
     if (outcome !== "ok") return { frames, stopped: outcome };
   }
   return { frames };
+}
+
+/** 駒の説明。「押して離す」は前半・後半で言い分ける(S-047) */
+export function describeFrame(
+  frame: Pick<ReplayFrame, "step" | "phase">,
+  labels?: Record<string, string>,
+  notation: Notation = DEFAULT_NOTATION,
+): string {
+  if (!frame.step) return "何も操作していない状態";
+  if (frame.step.type === "press" && frame.phase) {
+    const shown = formatDevice(frame.step.device, notation);
+    const label = labels?.[frame.step.device];
+    const name = label ? `${shown}(${label})` : shown;
+    return frame.phase === "down" ? `${name} を押している` : `${name} を離した`;
+  }
+  return describeStep(frame.step, labels, notation);
 }
 
 /** 操作を日本語の一言にする(「X0 を押す」)。画面と読み上げの両方で使う */

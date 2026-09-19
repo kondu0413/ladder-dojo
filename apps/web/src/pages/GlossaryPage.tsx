@@ -132,6 +132,7 @@ function MiniLadder({
         <LadderView
           circuit={circuit}
           power={sim.power}
+          states={sim.states}
           input={sim.input}
           deviceLabels={deviceLabels}
         />

@@ -402,7 +402,12 @@ function RunPanel({
   return (
     <div className="flex flex-col gap-3">
       <Card className="overflow-x-auto p-2">
-        <LadderView circuit={circuit} power={sim.power} input={recorder.input} />
+        <LadderView
+          circuit={circuit}
+          power={sim.power}
+          states={sim.states}
+          input={recorder.input}
+        />
       </Card>
       <SimulatorControls
         speed={sim.speed}

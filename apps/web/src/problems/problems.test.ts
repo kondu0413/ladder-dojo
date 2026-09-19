@@ -192,8 +192,11 @@ describe("公式問題", () => {
       // 公式問題でそれが出るのは、問題のほうがおかしい
       const { frames, stopped } = replayScenario(problem.solution, question.scenario);
       expect(stopped, "再生が途中で止まった").toBeUndefined();
-      // 操作前の 1 駒 + 操作のぶん(expect は駒にしない)
-      const operations = question.scenario.filter((step) => step.type !== "expect").length;
+      // 操作前の 1 駒 + 操作のぶん(expect は駒にしない。「押して離す」は 2 駒、S-047)
+      const operations = question.scenario.reduce(
+        (n, step) => n + (step.type === "expect" ? 0 : step.type === "press" ? 2 : 1),
+        0,
+      );
       expect(frames).toHaveLength(operations + 1);
     });
 
