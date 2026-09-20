@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ladder, no, out, reset, set } from "./builder.js";
+import { counter, ladder, no, out, pulse, reset, set, timer } from "./builder.js";
 import { describeCoilConflict, findCoilConflicts } from "./conflicts.js";
 import { Simulator } from "./sim/simulator.js";
 
@@ -33,6 +33,32 @@ describe("コイルの書き込みの衝突", () => {
     sim.setInput("X0", true);
     sim.scan();
     expect(findCoilConflicts(setReset, sim.power)).toEqual([]);
+  });
+
+  it("RST だけが通電していても衝突ではない(SET は通電したときしか書かない)", () => {
+    const sim = new Simulator(setReset);
+    sim.setInput("X1", true);
+    sim.scan();
+    expect(findCoilConflicts(setReset, sim.power)).toEqual([]);
+  });
+
+  it("タイマ・カウンタ・微分コイルと、カウンタの RST は書き込みに数えない", () => {
+    const circuit = ladder(4)
+      .row(no("X0"), timer("T0", 1000))
+      .row(no("X0"), counter("C0", 3))
+      .row(no("X0"), pulse("M0"))
+      .row(no("X0"), reset("C0"))
+      .build();
+    const sim = new Simulator(circuit);
+    sim.setInput("X0", true);
+    sim.scan();
+    expect(findCoilConflicts(circuit, sim.power)).toEqual([]);
+  });
+
+  it("通電の情報が無い行は通電なしとして扱う", () => {
+    // 二重コイルは両方 OFF を書く = 同じ値なので衝突ではない
+    const double = ladder(4).row(no("X0"), out("Y0")).row(no("X1"), out("Y0")).build();
+    expect(findCoilConflicts(double, { nodes: [], cells: [], conducts: [] })).toEqual([]);
   });
 
   it("二重コイルは通電していないほうも OFF を書くので衝突になる", () => {
@@ -69,6 +95,10 @@ describe("コイルの書き込みの衝突", () => {
       "1 行目の SET と 2 行目の RST が両方通電しています。PLC は上から順に実行するので、あとの 2 行目(RST)の結果が残り、Y0(ランプ) は OFF です。",
     );
     expect(describeCoilConflict(c, undefined, "omron")).toContain("100.00 は OFF");
+  });
+
+  it("書き込みの無い衝突には何も言わない", () => {
+    expect(describeCoilConflict({ device: "Y0", writes: [], result: false })).toBe("");
   });
 
   it("二重コイルの理由は、どちらが何を書いたかを言う", () => {

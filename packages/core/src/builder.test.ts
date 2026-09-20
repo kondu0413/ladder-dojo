@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ladder, nc, no, out, timer, wire } from "./builder.js";
+import { counter, ladder, nc, no, out, timer, wire } from "./builder.js";
 import { circuitFingerprint } from "./fingerprint.js";
 import { coreVersion } from "./index.js";
 import { circuitMetrics } from "./metrics.js";
@@ -176,6 +176,12 @@ describe("circuitFingerprint(比較専用の指紋)", () => {
   it("タイマの設定値が違えば別の文字列になる", () => {
     const a = ladder(3).row(no("X0"), timer("T0", 1000)).build();
     const b = ladder(3).row(no("X0"), timer("T0", 2000)).build();
+    expect(circuitFingerprint(a)).not.toBe(circuitFingerprint(b));
+  });
+
+  it("カウンタの設定値が違えば別の文字列になる", () => {
+    const a = ladder(3).row(no("X0"), counter("C0", 3)).build();
+    const b = ladder(3).row(no("X0"), counter("C0", 5)).build();
     expect(circuitFingerprint(a)).not.toBe(circuitFingerprint(b));
   });
 

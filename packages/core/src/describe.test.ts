@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { counter, ladder, nc, no, out, pulse, reset, rise, timer, wire } from "./builder.js";
+import {
+  counter,
+  ladder,
+  nc,
+  no,
+  out,
+  pulse,
+  reset,
+  rise,
+  set,
+  timer,
+  tof,
+  wire,
+} from "./builder.js";
 import { describeCircuit, describeRow } from "./describe.js";
 import { Simulator } from "./sim/simulator.js";
 
@@ -42,6 +55,8 @@ describe("1 行ぶんの読み上げ", () => {
     it.each([
       [pulse("M0"), "M0 の立ち上がり微分コイル"],
       [reset("C0"), "C0 のリセットコイル"],
+      [set("Y0"), "Y0 のセットコイル"],
+      [tof("T0", 1500), "T0 のオフディレイタイマコイル、設定 1.5 秒"],
     ])("%o を読む", (coil, expected) => {
       const circuit = ladder(3).row(no("X0"), coil).build();
       expect(describeRow(circuit, 0)).toContain(expected);

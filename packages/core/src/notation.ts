@@ -171,9 +171,8 @@ export function fallingMark(notation: Notation): string {
 /** 文章の中のデバイス名(`X0` など)を、その表記に置き換える */
 export function formatDeviceNames(text: string, notation: Notation): string {
   if (notation !== "omron") return text;
-  return text.replace(/\b([XYMTC])(\d{1,3})\b/g, (whole, type: string, num: string) => {
-    const id = `${type}${Number(num)}` as DeviceId;
-    // 前後に数字が付いた別の語(X1000 など)は置き換えない
-    return Number(num) > 999 ? whole : formatDevice(id, notation);
-  });
+  // 4 桁以上の番号(X1000 など)や英字が続く語は \b と \d{1,3} の組で除かれる
+  return text.replace(/\b([XYMTC])(\d{1,3})\b/g, (_whole, type: string, num: string) =>
+    formatDevice(`${type}${Number(num)}` as DeviceId, notation),
+  );
 }

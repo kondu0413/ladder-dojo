@@ -174,6 +174,24 @@ describe("列の追加・削除", () => {
     expect(hasVline(next, 0, 2)).toBe(false);
   });
 
+  it("コイルの無い行でも、新しい最右列に来る接点は捨てられる(最右列はコイル専用)", () => {
+    const c = ladder(4).row(no("X0"), nc("X1"), no("X2")).build();
+    const next = removeColumn(c);
+    expect(next.cols).toBe(3);
+    expect(elementAt(next, 0, 0)).toEqual(no("X0"));
+    expect(elementAt(next, 0, 1)).toEqual(nc("X1"));
+    expect(elementAt(next, 0, 2)).toBeUndefined();
+  });
+
+  it("コイルの無い行でも、新しい最右列に来る縦線は落とされる", () => {
+    const c = ladder(4).row(no("X0"), no("X1")).row(no("X2")).v(0, 2).build();
+    expect(hasVline(c, 0, 2)).toBe(true);
+    const next = removeColumn(c);
+    expect(next.cols).toBe(3);
+    expect(hasVline(next, 0, 2)).toBe(false);
+    expect(elementAt(next, 0, 1)).toEqual(no("X1"));
+  });
+
   it("縮めても最右列より左の縦線は残る", () => {
     const c = ladder(4).row(no("X0"), out("Y0")).row(no("X1")).v(0, 1).build();
     const next = removeColumn(c);
