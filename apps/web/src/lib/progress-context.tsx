@@ -304,11 +304,14 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
 
   const acceptMerge = useCallback(async () => {
     if (!pendingMerge) return;
+    // 端末で記録した日時も送る。無いと取り込んだ時刻になり、復習の間隔がそこから数え直される(S-054)
     const entries = Object.entries(pendingMerge).map(([problemId, p]) => ({
       problemId,
       attempts: p.attempts,
       failures: p.failures,
       cleared: p.cleared,
+      ...(p.clearedAt ? { clearedAt: p.clearedAt } : {}),
+      ...(p.lastAttemptAt ? { lastAttemptAt: p.lastAttemptAt } : {}),
     }));
     if (entries.length === 0) {
       setPendingMerge(undefined);

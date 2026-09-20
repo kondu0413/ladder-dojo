@@ -577,6 +577,24 @@ describe("一覧と取得", () => {
     });
   });
 
+  it("mine=false は自分の投稿に絞らない(未ログインでも 200、S-054)", async () => {
+    const res = await app.request("/api/problems?mine=false", {}, env);
+    expect(res.status).toBe(200);
+    expect((await app.request("/api/problems?mine=0", {}, env)).status).toBe(200);
+    // 絞るときは相変わらずログインが要る
+    expect((await app.request("/api/problems?mine=true", {}, env)).status).toBe(401);
+    expect((await app.request("/api/problems?mine=yes", {}, env)).status).toBe(400);
+  });
+
+  it("検索語に制御文字が混ざっていても 500 にしない(S-054)", async () => {
+    const res = await app.request(
+      `/api/problems?q=${encodeURIComponent("\u0000自己\u001f")}`,
+      {},
+      env,
+    );
+    expect(res.status).toBe(200);
+  });
+
   it("不正な並び順は 400", async () => {
     expect((await app.request("/api/problems?sort=random", {}, env)).status).toBe(400);
   });
@@ -705,6 +723,24 @@ describe("クリア率(§3.6)", () => {
     expect(body.problem).toMatchObject({ attempts: 2, clears: 1, clearRate: 50 });
   });
 
+  it("同じ人の挑戦が同時に届いても挑戦者数は 1 人(S-054)", async () => {
+    const author = await signUp("author");
+    const id = await publishedId(author);
+    const a = await signUp("a");
+    const attempt = (passed: boolean) =>
+      app.request(
+        `/api/problems/${id}/attempts`,
+        { method: "POST", headers: jsonHeaders(a), body: JSON.stringify({ passed }) },
+        env,
+      );
+    const results = await Promise.all([attempt(false), attempt(true), attempt(false)]);
+    for (const r of results) expect(r.status).toBe(200);
+
+    const res = await app.request(`/api/problems/${id}`, { headers: authHeaders(a) }, env);
+    const body = (await res.json()) as { problem: { attempts: number; clears: number } };
+    expect(body.problem).toMatchObject({ attempts: 1, clears: 1 });
+  });
+
   it("未ログインでは挑戦を記録できない", async () => {
     const author = await signUp();
     const id = await publishedId(author);
@@ -768,6 +804,24 @@ describe("いいね・難易度投票・通報(§3.6)", () => {
     expect(body.problem).toMatchObject({ votedDifficulty: 2, difficultyVotes: 2 });
   });
 
+  it("同じ人の投票が同時に届いても票は 1 つ(S-054)", async () => {
+    const author = await signUp("author");
+    const voter = await signUp("v");
+    const id = await publishedId(author, { difficulty: 3 });
+    const vote = (difficulty: number) =>
+      app.request(
+        `/api/problems/${id}/difficulty`,
+        { method: "PUT", headers: jsonHeaders(voter), body: JSON.stringify({ difficulty }) },
+        env,
+      );
+    await Promise.all([vote(4), vote(4)]);
+    const res = await app.request(`/api/problems/${id}`, { headers: authHeaders(voter) }, env);
+    const body = (await res.json()) as {
+      problem: { votedDifficulty: number; difficultyVotes: number };
+    };
+    expect(body.problem).toMatchObject({ votedDifficulty: 4, difficultyVotes: 1 });
+  });
+
   it("範囲外の難易度は 400", async () => {
     const author = await signUp("author");
     const voter = await signUp("v");
@@ -805,6 +859,23 @@ describe("いいね・難易度投票・通報(§3.6)", () => {
     expect(
       (await app.request(`/api/problems/${id}`, { headers: authHeaders(author) }, env)).status,
     ).toBe(404);
+  });
+
+  it("3 人の通報が同時に届いても非表示になる(件数を SQL で足す、S-054)", async () => {
+    const author = await signUp("author");
+    const id = await publishedId(author, { title: "同時に通報される問題" });
+    const reporters = [await signUp("r1"), await signUp("r2"), await signUp("r3")];
+    const results = await Promise.all(
+      reporters.map((r) =>
+        app.request(
+          `/api/problems/${id}/report`,
+          { method: "POST", headers: jsonHeaders(r), body: JSON.stringify({ reason: "不適切" }) },
+          env,
+        ),
+      ),
+    );
+    for (const r of results) expect(r.status).toBe(200);
+    expect((await app.request(`/api/problems/${id}`, {}, env)).status).toBe(404);
   });
 
   it("同じ人が何度通報しても 1 件として数える", async () => {

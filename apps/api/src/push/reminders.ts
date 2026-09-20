@@ -1,4 +1,4 @@
-import { and, gte, inArray, isNotNull, lte, or } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import {
   assignments,
@@ -48,8 +48,13 @@ export async function sendDueReminders(env: Env, now: Date = new Date()): Promis
   if (!publicKey || !privateKey) return empty;
 
   const db = drizzle(env.DB);
-  // (1) 購読。誰も購読していなければ、課題を読む必要も無い
-  const subs = await db.select().from(pushSubscriptions).limit(500);
+  // (1) 購読。誰も購読していなければ、課題を読む必要も無い。
+  // 上限で送れなかった人が翌日も同じにならないよう、最後に送った時刻が古い順(S-054)
+  const subs = await db
+    .select()
+    .from(pushSubscriptions)
+    .orderBy(sql`${pushSubscriptions.lastUsedAt} is not null`, asc(pushSubscriptions.lastUsedAt))
+    .limit(500);
   if (subs.length === 0) return empty;
   const subscribedUsers = new Set(subs.map((s) => s.userId));
 
@@ -99,11 +104,15 @@ export async function sendDueReminders(env: Env, now: Date = new Date()): Promis
   if (itemsByUser.size === 0) return empty;
 
   // (4)(5) クリア済みを除く。公式問題は progress、投稿問題は posted_attempts
-  const users = [...itemsByUser.keys()];
   const officialRefs = [
     ...new Set(rows.filter((r) => r.kind === "official").map((r) => r.problemRef)),
   ];
   const postedRefs = [...new Set(rows.filter((r) => r.kind === "posted").map((r) => r.problemRef))];
+  // ユーザーと課題の id は SQL に並べない(D1 の 100 パラメータ制限、S-054)。
+  // 購読している人 × 課題になっている問題、で引いてから JS で対象の組み合わせに絞る
+  const subscribers = db.select({ userId: pushSubscriptions.userId }).from(pushSubscriptions);
+  const refsOf = (kind: "official" | "posted") =>
+    db.select({ ref: assignments.problemRef }).from(assignments).where(eq(assignments.kind, kind));
   const cleared = new Set<string>();
   if (officialRefs.length > 0) {
     const done = await db
@@ -111,8 +120,8 @@ export async function sendDueReminders(env: Env, now: Date = new Date()): Promis
       .from(progress)
       .where(
         and(
-          inArray(progress.userId, users),
-          inArray(progress.problemId, officialRefs),
+          inArray(progress.userId, subscribers),
+          inArray(progress.problemId, refsOf("official")),
           isNotNull(progress.clearedAt),
         ),
       )
@@ -125,8 +134,8 @@ export async function sendDueReminders(env: Env, now: Date = new Date()): Promis
       .from(postedAttempts)
       .where(
         and(
-          inArray(postedAttempts.userId, users),
-          inArray(postedAttempts.problemId, postedRefs),
+          inArray(postedAttempts.userId, subscribers),
+          inArray(postedAttempts.problemId, refsOf("posted")),
           isNotNull(postedAttempts.clearedAt),
         ),
       )
@@ -139,6 +148,7 @@ export async function sendDueReminders(env: Env, now: Date = new Date()): Promis
   const keys = { publicKey, privateKey };
   const result: ReminderResult = { sent: 0, removed: 0, failed: 0, truncated: 0 };
   const gone: string[] = [];
+  const used: string[] = [];
   let budget = MAX_PUSHES_PER_RUN;
   for (const [userId, items] of itemsByUser) {
     const pending = items.filter((i) => !cleared.has(`${userId}:${i.kind}:${i.problemRef}`));
@@ -156,16 +166,24 @@ export async function sendDueReminders(env: Env, now: Date = new Date()): Promis
         keys,
         subject,
       ).catch(() => ({ ok: false, status: 0, gone: false }));
-      if (r.ok) result.sent++;
-      else if (r.gone) gone.push(sub.id);
+      if (r.ok) {
+        result.sent++;
+        used.push(sub.id);
+      } else if (r.gone) gone.push(sub.id);
       else result.failed++;
     }
   }
 
-  // (6) 無効になった購読を消す
+  // (6) 無効になった購読を消し、送れた購読に時刻を残す(次回は送れていない人から)
   if (gone.length > 0) {
     await db.delete(pushSubscriptions).where(inArray(pushSubscriptions.id, gone));
     result.removed = gone.length;
+  }
+  if (used.length > 0) {
+    await db
+      .update(pushSubscriptions)
+      .set({ lastUsedAt: now })
+      .where(inArray(pushSubscriptions.id, used));
   }
   if (result.truncated > 0) {
     console.warn(`assignment reminders hit the per-run limit (${result.truncated} skipped)`);

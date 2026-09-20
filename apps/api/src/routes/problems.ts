@@ -87,10 +87,20 @@ const publishSchema = z.object({
 const listQuerySchema = z.object({
   sort: z.enum(["new", "likes", "difficulty"]).default("new"),
   tag: z.string().max(30).optional(),
-  q: z.string().max(100).optional(),
+  // 制御文字(NUL など)は全文検索が受け付けず 500 になるので落とす(S-054)
+  q: z
+    .string()
+    .max(100)
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: 制御文字を落とすための範囲
+    .transform((s) => s.replace(/[\u0000-\u001f\u007f]/g, ""))
+    .optional(),
   difficulty: z.coerce.number().int().min(1).max(5).optional(),
   cursor: z.string().max(64).optional(),
-  mine: z.coerce.boolean().optional(),
+  // z.coerce.boolean() は "false" も true にする。文字列で受けて自分で読む(S-054)
+  mine: z
+    .enum(["true", "false", "1", "0"])
+    .optional()
+    .transform((v) => v === "true" || v === "1"),
 });
 
 /**
@@ -297,45 +307,41 @@ export const problemRoutes = new Hono<AppBindings>()
     if (!problem) return c.json({ error: "not_found" } as const, 404);
 
     const now = new Date();
-    const before = await db
-      .select()
-      .from(postedAttempts)
-      .where(and(eq(postedAttempts.problemId, problemId), eq(postedAttempts.userId, userId)))
-      .get();
-
-    const firstAttempt = !before;
-    const firstClear = body.data.passed && !before?.clearedAt;
-
-    await db
-      .insert(postedAttempts)
-      .values({
-        problemId,
-        userId,
-        attempts: 1,
-        failures: body.data.passed ? 0 : 1,
-        clearedAt: body.data.passed ? now : null,
-        lastAttemptAt: now,
-      })
-      .onConflictDoUpdate({
-        target: [postedAttempts.problemId, postedAttempts.userId],
-        set: {
-          attempts: sql`${postedAttempts.attempts} + 1`,
+    /**
+     * 挑戦の記録と、挑戦者数・クリア者数の更新を 1 つの batch にする(S-054)。
+     * 以前は「先に読んで初回か判断 → 別々に書く」で、同じ人の提出が同時に 2 つ飛ぶと
+     * 挑戦者数が 2 人分増えていた(S-007 の投げっぱなしで実際に起こりうる)。
+     * 人数は表から数え直すので、ずれが積み上がらない
+     */
+    await db.batch([
+      db
+        .insert(postedAttempts)
+        .values({
+          problemId,
+          userId,
+          attempts: 1,
+          failures: body.data.passed ? 0 : 1,
+          clearedAt: body.data.passed ? now : null,
           lastAttemptAt: now,
-          ...(body.data.passed
-            ? { clearedAt: sql`coalesce(${postedAttempts.clearedAt}, ${now.getTime()})` }
-            : { failures: sql`${postedAttempts.failures} + 1` }),
-        },
-      });
-
-    if (firstAttempt || firstClear) {
-      await db
+        })
+        .onConflictDoUpdate({
+          target: [postedAttempts.problemId, postedAttempts.userId],
+          set: {
+            attempts: sql`${postedAttempts.attempts} + 1`,
+            lastAttemptAt: now,
+            ...(body.data.passed
+              ? { clearedAt: sql`coalesce(${postedAttempts.clearedAt}, ${now.getTime()})` }
+              : { failures: sql`${postedAttempts.failures} + 1` }),
+          },
+        }),
+      db
         .update(postedProblems)
         .set({
-          ...(firstAttempt ? { attemptsCount: sql`${postedProblems.attemptsCount} + 1` } : {}),
-          ...(firstClear ? { clearsCount: sql`${postedProblems.clearsCount} + 1` } : {}),
+          attemptsCount: sql`(select count(*) from posted_attempts where problem_id = ${problemId})`,
+          clearsCount: sql`(select count(*) from posted_attempts where problem_id = ${problemId} and cleared_at is not null)`,
         })
-        .where(eq(postedProblems.id, problemId));
-    }
+        .where(eq(postedProblems.id, problemId)),
+    ]);
 
     const updated = await db
       .select()
@@ -395,36 +401,24 @@ export const problemRoutes = new Hono<AppBindings>()
       return c.json({ error: "not_found" } as const, 404);
     }
 
-    const before = await db
-      .select()
-      .from(problemDifficultyVotes)
-      .where(
-        and(
-          eq(problemDifficultyVotes.problemId, problemId),
-          eq(problemDifficultyVotes.userId, userId),
-        ),
-      )
-      .get();
-
     const now = new Date();
-    await db
-      .insert(problemDifficultyVotes)
-      .values({ problemId, userId, difficulty: body.data.difficulty, updatedAt: now })
-      .onConflictDoUpdate({
-        target: [problemDifficultyVotes.problemId, problemDifficultyVotes.userId],
-        set: { difficulty: body.data.difficulty, updatedAt: now },
-      });
-
-    const delta = body.data.difficulty - (before?.difficulty ?? 0);
-    await db
-      .update(postedProblems)
-      .set({
-        difficultyVotesSum: sql`${postedProblems.difficultyVotesSum} + ${delta}`,
-        ...(before
-          ? {}
-          : { difficultyVotesCount: sql`${postedProblems.difficultyVotesCount} + 1` }),
-      })
-      .where(eq(postedProblems.id, problemId));
+    // 票の記録と合計の更新を 1 つの batch にし、合計は票の表から数え直す(二重送信で増えない、S-054)
+    await db.batch([
+      db
+        .insert(problemDifficultyVotes)
+        .values({ problemId, userId, difficulty: body.data.difficulty, updatedAt: now })
+        .onConflictDoUpdate({
+          target: [problemDifficultyVotes.problemId, problemDifficultyVotes.userId],
+          set: { difficulty: body.data.difficulty, updatedAt: now },
+        }),
+      db
+        .update(postedProblems)
+        .set({
+          difficultyVotesSum: sql`(select coalesce(sum(difficulty), 0) from problem_difficulty_votes where problem_id = ${problemId})`,
+          difficultyVotesCount: sql`(select count(*) from problem_difficulty_votes where problem_id = ${problemId})`,
+        })
+        .where(eq(postedProblems.id, problemId)),
+    ]);
 
     const updated = await db
       .select()
@@ -454,13 +448,17 @@ export const problemRoutes = new Hono<AppBindings>()
       .get();
     if (!inserted) return c.json({ reported: true as const, hidden: problem.hidden });
 
-    const count = problem.reportsCount + 1;
-    const hidden = count >= AUTO_HIDE_REPORTS;
-    await db
+    // 件数は SQL で足す。先に読んだ値に 1 を足すと、同時の通報が失われて自動非表示にならない(S-054)
+    const updated = await db
       .update(postedProblems)
-      .set({ reportsCount: count, hidden })
-      .where(eq(postedProblems.id, problemId));
-    return c.json({ reported: true as const, hidden });
+      .set({
+        reportsCount: sql`${postedProblems.reportsCount} + 1`,
+        hidden: sql`case when ${postedProblems.reportsCount} + 1 >= ${AUTO_HIDE_REPORTS} then 1 else ${postedProblems.hidden} end`,
+      })
+      .where(eq(postedProblems.id, problemId))
+      .returning({ hidden: postedProblems.hidden })
+      .get();
+    return c.json({ reported: true as const, hidden: updated?.hidden ?? problem.hidden });
   });
 
 // ---------------------------------------------------------------------------

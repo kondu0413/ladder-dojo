@@ -68,12 +68,7 @@ export const rankingRoutes = new Hono<AppBindings>().get("/", optionalUser, asyn
     return c.json({ error: "not_found" } as const, 404);
   }
 
-  const entries = await computeOrgRanking(
-    c.env,
-    membership.map((m) => m.userId),
-    metric as Metric,
-    effectivePeriod,
-  );
+  const entries = await computeOrgRanking(c.env, orgId, metric as Metric, effectivePeriod);
   // 組織は対象が少ないので毎回その場で計算する = 常に最新
   return c.json({
     period: effectivePeriod,
