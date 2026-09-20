@@ -78,6 +78,37 @@ test.describe("表記の切り替え", () => {
     await expect(panel).not.toContainText("Y0");
   });
 
+  /**
+   * 表記の取りこぼし(S-052)。図だけ切り替わって説明文が X0 のままの画面が残っていた
+   * (サンプル回路・用語集・判定結果のヒント・投稿一覧)。図と文は必ず揃える
+   */
+  test("サンプル回路の説明文も図と同じ表記になる", async ({ page }) => {
+    await page.goto("/samples");
+    await page.getByRole("button", { name: "オムロン系" }).click();
+    const description = page.getByTestId("sample-description");
+    await expect(description).toContainText("0.00");
+    await expect(description).not.toContainText("X0");
+    await expect(page.getByTestId("cell-text-0-0")).toHaveText("0.00");
+  });
+
+  test("用語集の説明文も小さな図と同じ表記になる", async ({ page }) => {
+    await page.goto("/glossary");
+    await page.getByRole("button", { name: "オムロン系" }).click();
+    const body = page.getByTestId("term-body-device");
+    await expect(body).toContainText("0.00");
+    await expect(body).not.toContainText("X0");
+  });
+
+  test("判定結果の操作の言い方は、再生と同じ(押したまま / 秒待つ)", async ({ page }) => {
+    await page.goto("/problems/timer-fix-1");
+    await page.getByTestId("check-answer").click();
+    const result = page.getByTestId("judge-result");
+    await expect(result).toHaveAttribute("data-passed", "false");
+    // 「X0 を ON」ではなく「押したまま」、「3.0 秒待つ」ではなく「3 秒待つ」
+    await expect(result).not.toContainText("を ON");
+    await expect(result).not.toContainText("を OFF");
+  });
+
   test("ログイン前の紹介画面でも図と説明文が揃う", async ({ page }) => {
     await page.goto("/problems/selfhold-read-1");
     await page.getByTestId("notation-omron").click();

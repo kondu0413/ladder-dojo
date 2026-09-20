@@ -129,6 +129,9 @@ export const orgRoutes = new Hono<AppBindings>()
 
     const count = await db.$count(orgMembers, eq(orgMembers.orgId, invite.orgId));
     if (count >= MAX_MEMBERS) return c.json({ error: "quota_exceeded" } as const, 409);
+    // 参加する側の上限も見る(作るときだけ見ていた、S-054)
+    const mine = await db.$count(orgMembers, eq(orgMembers.userId, c.var.user.id));
+    if (mine >= MAX_ORGS_PER_USER) return c.json({ error: "quota_exceeded" } as const, 409);
 
     await db.batch([
       db
@@ -211,9 +214,15 @@ export const orgRoutes = new Hono<AppBindings>()
     if (!(await hasOtherAdmin(db, orgId, targetId))) {
       return c.json({ error: "last_admin" as const }, 409);
     }
-    await db
-      .delete(orgMembers)
-      .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.userId, targetId)));
+    // 個人あての課題も消す。残すと通知が届き続け、管理者の集計にも数えられる(S-054)
+    await db.batch([
+      db
+        .delete(orgMembers)
+        .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.userId, targetId))),
+      db
+        .delete(assignments)
+        .where(and(eq(assignments.orgId, orgId), eq(assignments.userId, targetId))),
+    ]);
     return c.json({ removed: true as const });
   })
   /** メンバーの進捗(管理者のみ、§3.8) */
@@ -267,9 +276,8 @@ export const orgRoutes = new Hono<AppBindings>()
   /** つまずき箇所(失敗が多い / 未クリアで止まっている問題)を組織でまとめる(§3.8) */
   .get("/:orgId/stuck", requireOrgAdmin, async (c) => {
     const db = drizzle(c.env.DB);
-    const memberIds = (await listMembers(db, c.var.membership.orgId)).map((m) => m.userId);
-    if (memberIds.length === 0) return c.json({ stuck: [] });
-
+    const orgId = c.var.membership.orgId;
+    // メンバーの id を並べず副問い合わせで絞る(D1 の 100 パラメータ制限、S-054)
     const rows = await db
       .select({
         problemId: progress.problemId,
@@ -278,7 +286,7 @@ export const orgRoutes = new Hono<AppBindings>()
         clearedAt: progress.clearedAt,
       })
       .from(progress)
-      .where(and(inArray(progress.userId, memberIds), isNull(progress.clearedAt)))
+      .where(and(inArray(progress.userId, memberIdsOf(db, orgId)), isNull(progress.clearedAt)))
       .limit(2000);
 
     const byProblem = new Map<string, { stuckUsers: number; failures: number }>();
@@ -292,7 +300,8 @@ export const orgRoutes = new Hono<AppBindings>()
       .map(([problemId, v]) => ({ problemId, ...v }))
       .sort((a, b) => b.stuckUsers - a.stuckUsers || b.failures - a.failures)
       .slice(0, 50);
-    return c.json({ stuck, memberCount: memberIds.length });
+    const memberCount = await db.$count(orgMembers, eq(orgMembers.orgId, orgId));
+    return c.json({ stuck, memberCount });
   })
   /**
    * クラス全体の進捗(管理者のみ、§3.8)。
@@ -431,6 +440,14 @@ export const orgRoutes = new Hono<AppBindings>()
 
 type Db = ReturnType<typeof drizzle>;
 
+/** 組織のメンバーの id(副問い合わせ)。id を並べると D1 の 100 パラメータ制限に当たる(S-054) */
+function memberIdsOf(db: Db, orgId: string) {
+  return db
+    .select({ userId: orgMembers.userId })
+    .from(orgMembers)
+    .where(eq(orgMembers.orgId, orgId));
+}
+
 async function listMembers(db: Db, orgId: string) {
   const rows = await db
     .select({
@@ -476,10 +493,10 @@ async function attachProgress(
   dtos: AssignmentDto[],
 ): Promise<void> {
   const members = await listMembers(db, orgId);
+  if (members.length === 0 || dtos.length === 0) return;
   const memberIds = members.map((m) => m.userId);
-  const problemIds = [...new Set(dtos.map((a) => a.problemRef))];
-  if (memberIds.length === 0 || problemIds.length === 0) return;
 
+  // メンバーと課題の id を並べず、副問い合わせで絞る(D1 の 100 パラメータ制限、S-054)
   const rows = await db
     .select({
       userId: progress.userId,
@@ -487,7 +504,18 @@ async function attachProgress(
       clearedAt: progress.clearedAt,
     })
     .from(progress)
-    .where(and(inArray(progress.userId, memberIds), inArray(progress.problemId, problemIds)))
+    .where(
+      and(
+        inArray(progress.userId, memberIdsOf(db, orgId)),
+        inArray(
+          progress.problemId,
+          db
+            .select({ ref: assignments.problemRef })
+            .from(assignments)
+            .where(eq(assignments.orgId, orgId)),
+        ),
+      ),
+    )
     .limit(MAX_MATRIX_CELLS);
 
   /** 問題 ID → (ユーザー ID → クリアしたか) */

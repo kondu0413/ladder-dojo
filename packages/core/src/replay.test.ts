@@ -111,7 +111,7 @@ describe("操作列の再生", () => {
       "X0(起動) を押している",
     );
     expect(describeFrame({ step: press, phase: "up" })).toBe("X0 を離した");
-    expect(describeFrame({ step: { type: "wait", ms: 1500 } })).toBe("1.5 秒 待つ");
+    expect(describeFrame({ step: { type: "wait", ms: 1500 } })).toBe("1.5 秒待つ");
   });
 
   it("**答え合わせ用の expect は駒にしない**(操作ではないので見せる意味がない)", () => {
@@ -204,9 +204,13 @@ describe("操作を日本語にする", () => {
     [{ type: "press", device: "X0" } as Step, "X0 を押して離す"],
     [{ type: "set", inputs: { X0: true } } as Step, "X0 を押したまま"],
     [{ type: "set", inputs: { X0: false } } as Step, "X0 を離す"],
-    [{ type: "wait", ms: 500 } as Step, "500 ミリ秒 待つ"],
-    [{ type: "wait", ms: 3000 } as Step, "3 秒 待つ"],
-    [{ type: "wait", ms: 1500 } as Step, "1.5 秒 待つ"],
+    [{ type: "wait", ms: 500 } as Step, "0.5 秒待つ"],
+    [{ type: "wait", ms: 3000 } as Step, "3 秒待つ"],
+    [{ type: "wait", ms: 1500 } as Step, "1.5 秒待つ"],
+    [{ type: "wait", ms: 100 } as Step, "0.1 秒待つ"],
+    [{ type: "press", device: "X0", holdMs: 1500 } as Step, "X0 を 1.5 秒押して離す"],
+    [{ type: "set", inputs: {} } as Step, "入力を変えない"],
+    [{ type: "expect", outputs: {} } as Step, "出力を確認する"],
   ])("%o → %s", (step, expected) => {
     expect(describeStep(step)).toBe(expected);
   });

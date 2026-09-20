@@ -5,10 +5,13 @@ import {
   findCoilConflicts,
   type JudgeResult,
   judge,
+  MAX_STEPS_PER_CASE,
+  MAX_TOTAL_WAIT_MS,
   type Problem,
   SCHEMA_VERSION,
   sandboxTestCasesSchema,
   type TestCase,
+  testCaseSchema,
 } from "@ladder-dojo/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
@@ -58,6 +61,8 @@ export function SandboxPage() {
   const [title, setTitle] = useState("無題の回路");
   const [savedId, setSavedId] = useState<string | undefined>(undefined);
   const [tab, setTab] = useState<Tab>("edit");
+  /** 「動かす」で記録中か。記録中はタブを離れても動かすの画面を残す(切り替えで記録が消えていた、S-053) */
+  const [recording, setRecording] = useState(false);
   const [result, setResult] = useState<JudgeResult | undefined>(undefined);
   const [list, setList] = useState<SandboxSummary[]>([]);
   const [message, setMessage] = useState<string | undefined>(undefined);
@@ -101,6 +106,12 @@ export function SandboxPage() {
   }, [location.hash, resetHistory]);
 
   const save = async () => {
+    // サーバーに断られる前に、どのテストのどこが悪いかを言う(S-053)
+    const problem = describeInvalidTestCase(testCases);
+    if (problem) {
+      setMessage(problem);
+      return;
+    }
     setBusy(true);
     setMessage(undefined);
     try {
@@ -334,18 +345,34 @@ export function SandboxPage() {
           extra={<ShareButton circuit={circuit} title={title} />}
         />
       )}
-      {tab === "run" && (
-        <RunPanel
-          circuit={circuit}
-          nextTitle={`記録 ${testCases.length + 1}`}
-          onRecorded={(tc) => {
-            setTestCases((prev) => [...prev, tc]);
-            setResult(undefined);
-            setMessage(
-              `操作をテスト「${tc.title}」として追加しました。「テスト」タブで確かめられます。`,
-            );
-          }}
-        />
+      {tab !== "run" && recording && (
+        <p className="text-xs text-amber-800" data-testid="recording-elsewhere">
+          「動かす」で記録中です。記録を終えるか取り消すまで、動かすの画面は残っています。
+        </p>
+      )}
+      {(tab === "run" || recording) && (
+        <div className={tab === "run" ? "" : "hidden"}>
+          <RunPanel
+            circuit={circuit}
+            nextTitle={`記録 ${testCases.length + 1}`}
+            onRecordingChange={setRecording}
+            onRecorded={(tc) => {
+              // 長すぎる記録(手数・待ち時間の上限)は、保存のときに初めて断られるのではなく、ここで断る(S-053)
+              const valid = testCaseSchema.safeParse(tc);
+              if (!valid.success) {
+                setMessage(
+                  `記録が長すぎるため、テストにできませんでした(手数は ${MAX_STEPS_PER_CASE} まで、待ち時間は合計 ${MAX_TOTAL_WAIT_MS / 1000} 秒まで)。`,
+                );
+                return;
+              }
+              setTestCases((prev) => [...prev, tc]);
+              setResult(undefined);
+              setMessage(
+                `操作をテスト「${tc.title}」として追加しました。「テスト」タブで確かめられます。`,
+              );
+            }}
+          />
+        </div>
       )}
       {tab === "test" && (
         <div className="flex flex-col gap-3">
@@ -388,19 +415,50 @@ function explain(err: unknown): string {
   return "保存できませんでした。";
 }
 
+/**
+ * テストケースの不備を、保存や投稿の前にその場で言う(S-053)。
+ * 以前はスキーマ違反のテストが「テストを実行」では通り、保存で初めて
+ * 「回路かテストの内容に問題があります」とだけ言われていた
+ */
+function describeInvalidTestCase(testCases: readonly TestCase[]): string | undefined {
+  for (const [i, tc] of testCases.entries()) {
+    const parsed = testCaseSchema.safeParse(tc);
+    if (parsed.success) continue;
+    const issue = parsed.error.issues[0];
+    const where = issue?.path[0] === "steps" ? `${Number(issue.path[1]) + 1} 手目` : "名前";
+    const why =
+      issue?.path[0] === "title"
+        ? "名前が空です"
+        : issue?.path.includes("ms")
+          ? `待ち時間は 1 回 ${MAX_TOTAL_WAIT_MS / 1000} 秒までです`
+          : issue?.path[0] === "steps" && issue.path.length === 1
+            ? `手数は ${MAX_STEPS_PER_CASE} までです`
+            : (issue?.message ?? "内容に問題があります");
+    return `テスト ${i + 1}「${tc.title || "(名前なし)"}」の${where}: ${why}`;
+  }
+  return undefined;
+}
+
 function RunPanel({
   circuit,
   nextTitle,
   onRecorded,
+  onRecordingChange,
 }: {
   circuit: Circuit;
   /** 記録したテストに付ける名前 */
   nextTitle: string;
   onRecorded: (testCase: TestCase) => void;
+  /** 記録の開始・終了を親に知らせる(タブを離れても画面を残すため) */
+  onRecordingChange?: ((recording: boolean) => void) | undefined;
 }) {
   const sim = useSimulator(circuit);
   // 操作を記録してテストにする(S-042)。記録中は入力を横取りする
   const recorder = useRecorder(sim);
+  const recording = recorder.recording;
+  useEffect(() => {
+    onRecordingChange?.(recording);
+  }, [recording, onRecordingChange]);
   // 二重コイルや SET / RST の衝突の印と理由(S-049)
   const conflicts = useMemo(() => findCoilConflicts(circuit, sim.power), [circuit, sim.power]);
   return (
@@ -423,6 +481,7 @@ function RunPanel({
         onReset={sim.reset}
         onStep={sim.step}
         scans={sim.scans}
+        locked={recorder.recording}
       />
       {sim.devices.length > 0 && (
         <RecorderBar

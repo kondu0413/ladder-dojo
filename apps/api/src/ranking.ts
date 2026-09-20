@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, type SQL, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { rankingSnapshots } from "./db/schema.js";
 import type { Env } from "./env.js";
@@ -38,26 +38,41 @@ function periodStartMs(period: Period, now: Date): number {
   return now.getTime() - days * 24 * 60 * 60 * 1000;
 }
 
-/** 指標ごとの集計。`memberIds` を渡すと、その人たちだけを対象にする(組織内ランキング) */
+/**
+ * 集計の範囲。`orgId` はその組織のメンバーだけ(組織内ランキング)、`userId` は 1 人だけ
+ * (「あなたのいま」、S-026)。どちらも無ければ全員
+ */
+type Scope = { orgId?: string; userId?: string };
+
+/**
+ * ユーザー id の列 `column` を範囲で絞る where 句の断片。
+ *
+ * **メンバーの id は SQL に並べない**(S-054)。D1 は 1 クエリの束縛パラメータが 100 まで
+ * (COST.md §1.2)で、id を並べると 49 人の組織で 500 になっていた。副問い合わせで絞る
+ */
+function scopeSql(column: SQL, scope: Scope | undefined): SQL {
+  if (scope?.orgId) {
+    return sql` and ${column} in (select user_id from org_members where org_id = ${scope.orgId})`;
+  }
+  if (scope?.userId) return sql` and ${column} = ${scope.userId}`;
+  return sql``;
+}
+
+/** 指標ごとの集計 */
 async function aggregate(
   db: Db,
   metric: Metric,
   period: Period,
   now: Date,
-  memberIds?: string[],
+  scope?: Scope,
 ): Promise<RankingRow[]> {
-  if (memberIds?.length === 0) return [];
   const since = periodStartMs(period, now);
   const limit = TOP_N;
-  const memberFilter = memberIds
-    ? sql` and user_id in (${sql.join(
-        memberIds.map((id) => sql`${id}`),
-        sql`, `,
-      )})`
-    : sql``;
+  const memberFilter = scopeSql(sql`user_id`, scope);
+  const memberFilterOf = (column: SQL) => scopeSql(column, scope);
 
   if (metric === "streak") {
-    return streakRanking(db, now, memberIds);
+    return streakRanking(db, now, scope);
   }
 
   const query =
@@ -74,14 +89,7 @@ async function aggregate(
             -- 残るのは辻褄が合わない(S-031)
             select a.user_id, count(*) as c from posted_attempts a
             join posted_problems p on p.id = a.problem_id and p.hidden = 0
-            where a.cleared_at is not null and a.cleared_at >= ${since}${
-              memberIds
-                ? sql` and a.user_id in (${sql.join(
-                    memberIds.map((id) => sql`${id}`),
-                    sql`, `,
-                  )})`
-                : sql``
-            }
+            where a.cleared_at is not null and a.cleared_at >= ${since}${memberFilterOf(sql`a.user_id`)}
             group by a.user_id
           ) t
           join user u on u.id = t.user_id
@@ -97,14 +105,7 @@ async function aggregate(
             join posted_problems p on p.id = a.problem_id
             join user u on u.id = p.author_id
             where a.cleared_at is not null and a.cleared_at >= ${since}
-              and p.hidden = 0${
-                memberIds
-                  ? sql` and u.id in (${sql.join(
-                      memberIds.map((id) => sql`${id}`),
-                      sql`, `,
-                    )})`
-                  : sql``
-              }
+              and p.hidden = 0${memberFilterOf(sql`u.id`)}
             group by u.id, u.name
             order by value desc, u.name asc
             limit ${limit}
@@ -114,14 +115,7 @@ async function aggregate(
             from problem_likes l
             join posted_problems p on p.id = l.problem_id
             join user u on u.id = p.author_id
-            where l.created_at >= ${since} and p.hidden = 0${
-              memberIds
-                ? sql` and u.id in (${sql.join(
-                    memberIds.map((id) => sql`${id}`),
-                    sql`, `,
-                  )})`
-                : sql``
-            }
+            where l.created_at >= ${since} and p.hidden = 0${memberFilterOf(sql`u.id`)}
             group by u.id, u.name
             order by value desc, u.name asc
             limit ${limit}
@@ -137,25 +131,22 @@ async function aggregate(
 }
 
 /** 連続学習日数(JST、S-001)。日付の並びを JS 側で数える */
-async function streakRanking(db: Db, now: Date, memberIds?: string[]): Promise<RankingRow[]> {
+async function streakRanking(db: Db, now: Date, scope?: Scope): Promise<RankingRow[]> {
   const since = jstDate(new Date(now.getTime() - STREAK_WINDOW_DAYS * 24 * 60 * 60 * 1000));
-  const filter = memberIds
-    ? sql` and a.user_id in (${sql.join(
-        memberIds.map((id) => sql`${id}`),
-        sql`, `,
-      )})`
-    : sql``;
+  const today = jstDate(now);
+  const yesterday = jstDate(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+  const filter = scopeSql(sql`a.user_id`, scope);
+  // 「いまの連続」は今日か昨日に活動があった人にしか無い。先にその人たちに絞り、
+  // 20000 行の上限で活動の多い人が切れないようにする(S-054)
   const rows = await db.all<{ user_id: string; user_name: string; date_jst: string }>(sql`
     select a.user_id, u.name as user_name, a.date_jst
     from activity_days a
     join user u on u.id = a.user_id
     where a.date_jst >= ${since}${filter}
+      and a.user_id in (select user_id from activity_days where date_jst in (${today}, ${yesterday}))
     order by a.user_id asc, a.date_jst desc
     limit 20000
   `);
-
-  const today = jstDate(now);
-  const yesterday = jstDate(new Date(now.getTime() - 24 * 60 * 60 * 1000));
   const byUser = new Map<string, { name: string; dates: string[] }>();
   for (const row of rows) {
     const cur = byUser.get(row.user_id) ?? { name: row.user_name, dates: [] };
@@ -202,28 +193,8 @@ export async function computeGlobalRankings(env: Env, now = new Date()): Promise
     const periods: Period[] = metric === "streak" ? ["all"] : [...PERIODS];
     for (const period of periods) {
       const rows = await aggregate(db, metric, period, now);
-      await db
-        .delete(rankingSnapshots)
-        .where(
-          and(
-            eq(rankingSnapshots.period, period),
-            eq(rankingSnapshots.metric, metric),
-            isNull(rankingSnapshots.orgId),
-          ),
-        );
-      if (rows.length === 0) continue;
-      const values = rows.map((r) => ({
-        period,
-        metric,
-        orgId: null,
-        rank: r.rank,
-        userId: r.userId,
-        userName: r.userName,
-        value: r.value,
-        computedAt: now,
-      }));
-      await db.insert(rankingSnapshots).values(values);
-      written += values.length;
+      await writeGlobalSnapshot(db, metric, period, rows, now);
+      written += rows.length;
     }
   }
   return written;
@@ -269,24 +240,10 @@ export async function readGlobalRanking(
   }
   // まだ Cron が回っていない(または該当なし)。その場で計算して次回に備える
   const fresh = await aggregate(db, metric, period, now);
-  if (fresh.length > 0) {
-    await db.insert(rankingSnapshots).values(
-      fresh.map((r) => ({
-        period,
-        metric,
-        orgId: null,
-        rank: r.rank,
-        userId: r.userId,
-        userName: r.userName,
-        value: r.value,
-        computedAt: now,
-      })),
-    );
-  }
+  if (fresh.length > 0) await writeGlobalSnapshot(db, metric, period, fresh, now);
   return { entries: fresh, computedAt: now.toISOString() };
 }
 
-/** 組織内ランキング。対象が少ないのでその場で計算する */
 /**
  * **自分 1 人ぶんの、いまの値**を計算する(S-026)。
  *
@@ -303,16 +260,59 @@ export async function computeUserValue(
   period: Period,
   now = new Date(),
 ): Promise<number> {
-  const rows = await aggregate(drizzle(env.DB), metric, period, now, [userId]);
+  const rows = await aggregate(drizzle(env.DB), metric, period, now, { userId });
   return rows.find((r) => r.userId === userId)?.value ?? 0;
 }
 
+/** 組織内ランキング。対象が少ないのでその場で計算する */
 export async function computeOrgRanking(
   env: Env,
-  memberIds: string[],
+  orgId: string,
   metric: Metric,
   period: Period,
   now = new Date(),
 ): Promise<RankingRow[]> {
-  return aggregate(drizzle(env.DB), metric, period, now, memberIds);
+  return aggregate(drizzle(env.DB), metric, period, now, { orgId });
+}
+
+/** 1 回の insert に入れる行数。1 行 8 パラメータ × 12 = 96 で D1 の上限 100 に収める(S-054) */
+const SNAPSHOT_INSERT_ROWS = 12;
+
+/**
+ * 全体スナップショットを書き直す。**消す・入れるを 1 つの batch(トランザクション)にする**。
+ * 以前は 1 回の insert に 50 行(400 パラメータ)を入れていて 13 人以上で失敗し、
+ * 消したあとの空のスナップショットが残って、読むたびに計算し直しては失敗していた。
+ * 別々の文で消して入れていたので、同時に 2 つ走ると同じ順位が 2 行入ることもあった
+ */
+async function writeGlobalSnapshot(
+  db: Db,
+  metric: Metric,
+  period: Period,
+  rows: RankingRow[],
+  now: Date,
+): Promise<void> {
+  const del = db
+    .delete(rankingSnapshots)
+    .where(
+      and(
+        eq(rankingSnapshots.period, period),
+        eq(rankingSnapshots.metric, metric),
+        isNull(rankingSnapshots.orgId),
+      ),
+    );
+  const values = rows.map((r) => ({
+    period,
+    metric,
+    orgId: null,
+    rank: r.rank,
+    userId: r.userId,
+    userName: r.userName,
+    value: r.value,
+    computedAt: now,
+  }));
+  const inserts = [];
+  for (let i = 0; i < values.length; i += SNAPSHOT_INSERT_ROWS) {
+    inserts.push(db.insert(rankingSnapshots).values(values.slice(i, i + SNAPSHOT_INSERT_ROWS)));
+  }
+  await db.batch([del, ...inserts]);
 }

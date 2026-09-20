@@ -31,6 +31,9 @@ const mergeSchema = z.object({
         attempts: z.number().int().min(0).max(100_000),
         failures: z.number().int().min(0).max(100_000),
         cleared: z.boolean(),
+        /** 端末で記録した日時。無ければ取り込んだ時刻になる(復習の間隔が取り込み時から数え直される、S-054) */
+        clearedAt: z.string().datetime().optional(),
+        lastAttemptAt: z.string().datetime().optional(),
       }),
     )
     .min(1)
@@ -116,29 +119,34 @@ export const progressRoutes = new Hono<AppBindings>()
     const now = new Date();
     const userId = c.var.user.id;
 
-    const statements = body.data.entries.map((e) =>
-      db
+    const statements = body.data.entries.map((e) => {
+      const clearedAt = e.cleared ? parseWhen(e.clearedAt, now) : null;
+      const lastAttemptAt = parseWhen(e.lastAttemptAt, now);
+      return db
         .insert(progress)
         .values({
           userId,
           problemId: e.problemId,
           attempts: e.attempts,
           failures: e.failures,
-          clearedAt: e.cleared ? now : null,
-          lastAttemptAt: now,
+          clearedAt,
+          lastAttemptAt,
         })
         .onConflictDoUpdate({
           target: [progress.userId, progress.problemId],
           set: {
             attempts: sql`${progress.attempts} + ${e.attempts}`,
             failures: sql`${progress.failures} + ${e.failures}`,
-            lastAttemptAt: now,
-            ...(e.cleared
-              ? { clearedAt: sql`coalesce(${progress.clearedAt}, ${now.getTime()})` }
+            // 端末の日時とサーバーの日時の新しいほう。最初のクリアは古いほうを残す
+            lastAttemptAt: sql`max(${progress.lastAttemptAt}, ${lastAttemptAt.getTime()})`,
+            ...(clearedAt
+              ? {
+                  clearedAt: sql`min(coalesce(${progress.clearedAt}, ${clearedAt.getTime()}), ${clearedAt.getTime()})`,
+                }
               : {}),
           },
-        }),
-    );
+        });
+    });
     const [first, ...rest] = statements;
     if (first) await db.batch([first, ...rest]);
 
@@ -150,6 +158,14 @@ export const progressRoutes = new Hono<AppBindings>()
     const rows = await db.select().from(progress).where(eq(progress.userId, userId)).limit(500);
     return c.json({ merged: body.data.entries.length, progress: rows.map(toJson) });
   });
+
+/** 端末が送った日時。未来や壊れた値は取り込み時刻にする */
+function parseWhen(iso: string | undefined, now: Date): Date {
+  if (!iso) return now;
+  const t = new Date(iso);
+  if (Number.isNaN(t.getTime()) || t.getTime() > now.getTime()) return now;
+  return t;
+}
 
 function toJson(row: typeof progress.$inferSelect): ProgressDto {
   return {

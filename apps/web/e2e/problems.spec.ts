@@ -392,3 +392,15 @@ test.describe("復習の提案", () => {
     await expect(page.getByTestId("review-suggestions")).toHaveCount(0);
   });
 });
+
+/**
+ * 直す / 書くのデバイス候補は、その問題で使うものだけ(S-053)。
+ * 説明は段階ごとに共有していて、非常停止(X2)のような問題に無いデバイスまで候補に出ていた
+ */
+test("書く問題のデバイス候補に、その問題で使わないデバイスは出ない", async ({ page }) => {
+  await page.goto("/problems/selfhold-write-1");
+  await page.getByTestId("cell-0-0").click();
+  await expect(page.getByTestId("device-chip-X0")).toBeVisible();
+  await expect(page.getByTestId("device-chip-Y0")).toBeVisible();
+  await expect(page.getByTestId("device-chip-X2")).toHaveCount(0);
+});

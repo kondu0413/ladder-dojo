@@ -2,6 +2,7 @@ import {
   type Circuit,
   type DeviceId,
   listDevices,
+  MAX_TOTAL_WAIT_MS,
   type Step,
   type TestCase,
 } from "@ladder-dojo/core";
@@ -278,7 +279,13 @@ function StepList({
             tone="secondary"
             icon="clock"
             data-testid={`${testIdPrefix}-add-wait`}
-            onClick={() => append({ type: "wait", ms: Math.max(1, Math.round(seconds * 1000)) })}
+            onClick={() =>
+              // 上限(合計 120 秒)を超える待ち時間は保存できない。欄の max だけでは止まらないので丸める(S-053)
+              append({
+                type: "wait",
+                ms: Math.min(MAX_TOTAL_WAIT_MS, Math.max(100, Math.round(seconds * 1000))),
+              })
+            }
           >
             秒待つ
           </Button>

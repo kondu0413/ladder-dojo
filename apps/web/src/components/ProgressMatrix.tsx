@@ -86,7 +86,10 @@ export function ProgressMatrix({ orgId, orgName }: ProgressMatrixProps) {
       }
     }
     // ファイル名は ASCII だけにする。日本語を入れると保存名ごと失われる(csv.ts 参照)
-    const today = new Date().toISOString().slice(0, 10);
+    // 端末の日付で付ける。UTC だと日本の朝 9 時まで前日の日付になる(S-053)
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const today = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     const org = safeFilePart(orgName);
     downloadCsv(`${org ? `${org}-` : ""}ladder-dojo-progress-${today}.csv`, rows);
   };

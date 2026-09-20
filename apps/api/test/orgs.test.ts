@@ -81,6 +81,17 @@ describe("組織の作成と参加", () => {
     expect(row?.n).toBe(1);
   });
 
+  it("参加できる組織の数にも上限がある(作るときだけでなく、S-054)", async () => {
+    const busy = await signUp("busy");
+    for (let i = 0; i < 20; i++) await createOrg(busy, `組織 ${i}`);
+    const admin = await signUp("admin");
+    const orgId = await createOrg(admin);
+    const code = await invite(admin, orgId);
+    const res = await join(busy, code);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "quota_exceeded" });
+  });
+
   it("存在しないコードでは参加できない", async () => {
     const user = await signUp();
     expect((await join(user, "deadbeefcafe")).status).toBe(404);
@@ -302,6 +313,36 @@ describe("権限の変更と脱退", () => {
       env,
     );
     expect(res.status).toBe(200);
+  });
+
+  it("外したメンバーあての課題は消え、全員あての課題は残る(S-054)", async () => {
+    const { admin, member, orgId } = await orgWithMember();
+    const assign = (body: Record<string, unknown>) =>
+      app.request(
+        `/api/orgs/${orgId}/assignments`,
+        {
+          method: "POST",
+          headers: jsonHeaders(admin),
+          body: JSON.stringify({ kind: "official", problemRef: "timer-write-1", ...body }),
+        },
+        env,
+      );
+    expect((await assign({ userId: member.id })).status).toBe(201);
+    expect((await assign({})).status).toBe(201);
+
+    const res = await app.request(
+      `/api/orgs/${orgId}/members/${member.id}`,
+      { method: "DELETE", headers: authHeaders(admin) },
+      env,
+    );
+    expect(res.status).toBe(200);
+
+    const count = (where: string, ...bind: string[]) =>
+      env.DB.prepare(`select count(*) as n from assignments where org_id = ? and ${where}`)
+        .bind(orgId, ...bind)
+        .first<{ n: number }>();
+    expect((await count("user_id = ?", member.id))?.n).toBe(0);
+    expect((await count("user_id is null"))?.n).toBe(1);
   });
 });
 

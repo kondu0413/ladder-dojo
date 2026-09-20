@@ -120,7 +120,11 @@ export function describeFrame(
   return describeStep(frame.step, labels, notation);
 }
 
-/** 操作を日本語の一言にする(「X0 を押す」)。画面と読み上げの両方で使う */
+/**
+ * 操作を日本語の一言にする(「X0 を押して離す」)。画面と読み上げの両方で使う。
+ * 判定結果・タイムチャート・テストケースの一覧・再生・「ここまでの操作」が
+ * **同じ言い方**になるよう、web 側に別の実装を持たない(S-052)
+ */
 export function describeStep(
   step: Step,
   labels?: Record<string, string>,
@@ -143,14 +147,19 @@ export function describeStep(
       const parts: string[] = [];
       if (on.length > 0) parts.push(`${on.join(" と ")} を押したまま`);
       if (off.length > 0) parts.push(`${off.join(" と ")} を離す`);
-      return parts.join("、");
+      return parts.length > 0 ? parts.join("、") : "入力を変えない";
     }
-    case "press":
-      return `${name(step.device)} を押して離す`;
+    case "press": {
+      // 長押し(1 秒以上)は時間も言う。既定の短い押しは言わない
+      const hold = step.holdMs ?? DEFAULT_HOLD_MS;
+      return hold >= 1000
+        ? `${name(step.device)} を ${formatSeconds(hold)} 秒押して離す`
+        : `${name(step.device)} を押して離す`;
+    }
     case "wait":
-      return `${formatMs(step.ms)} 待つ`;
+      return `${formatSeconds(step.ms)} 秒待つ`;
     case "expect":
-      return "答え合わせ";
+      return "出力を確認する";
   }
 }
 
@@ -234,7 +243,7 @@ export function describeRungTrace(
   return `${describeRows(trace.rows)}まで実行 → ${changes.length > 0 ? changes.join("、") : "変化なし"}`;
 }
 
-function formatMs(ms: number): string {
-  if (ms < 1000) return `${ms} ミリ秒`;
-  return `${Math.round(ms / 100) / 10} 秒`;
+/** ミリ秒を秒の数字にする(3000 → "3"、1500 → "1.5"、500 → "0.5"、100 → "0.1") */
+function formatSeconds(ms: number): string {
+  return String(Math.round(ms / 100) / 10);
 }

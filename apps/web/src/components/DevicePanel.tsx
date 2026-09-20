@@ -69,6 +69,7 @@ export function DevicePanel({ devices, snapshot, circuit, deviceLabels, input }:
                 <InputButton
                   key={d}
                   device={d}
+                  shown={notation.device(d)}
                   on={on}
                   input={input}
                   className={`${cls} cursor-pointer select-none active:translate-y-px hover:border-slate-400`}
@@ -109,12 +110,15 @@ export function DevicePanel({ devices, snapshot, circuit, deviceLabels, input }:
  */
 function InputButton({
   device,
+  shown,
   on,
   input,
   className,
   body,
 }: {
   device: DeviceId;
+  /** 表記に合わせた名前(読み上げ用、S-052) */
+  shown: string;
   on: boolean;
   input: InputControl;
   className: string;
@@ -135,6 +139,8 @@ function InputButton({
         onKeyDown={(e) => {
           if (e.key === " " || e.key === "Enter") {
             e.preventDefault();
+            // キーの長押しは押すを繰り返さない(記録が溢れる、S-053)
+            if (e.repeat) return;
             input.press(device);
           }
         }}
@@ -149,7 +155,7 @@ function InputButton({
         type="button"
         data-testid={`hold-${device}`}
         aria-pressed={held}
-        aria-label={`押したままにする(${device})`}
+        aria-label={`押したままにする(${shown})`}
         onClick={() => input.toggleHold(device)}
         className={`min-h-9 rounded-lg border px-2 text-[11px] font-semibold transition-colors ${
           held

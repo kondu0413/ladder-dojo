@@ -12,7 +12,22 @@ describe("GET /api/health", () => {
       env: "e2e",
       core: { schemaVersion: 1 },
       e2eAuthBypass: true,
+      authSecretConfigured: false,
     });
+  });
+
+  it("本番で署名の秘密が無ければ health で分かり、認証を使う要求だけが失敗する(S-054)", async () => {
+    const prod = productionEnv();
+    delete (prod as { BETTER_AUTH_SECRET?: string }).BETTER_AUTH_SECRET;
+    const health = await app.request("/api/health", {}, prod);
+    expect(health.status).toBe(200);
+    expect(await health.json()).toMatchObject({ env: "production", authSecretConfigured: false });
+    // 公開の固定値で署名してしまわず、認証のリクエストは失敗させる
+    const session = await app.request("/api/auth/get-session", {}, prod);
+    expect(session.status).toBe(500);
+
+    const withSecret = await app.request("/api/health", {}, { ...prod, BETTER_AUTH_SECRET: "s" });
+    expect(await withSecret.json()).toMatchObject({ authSecretConfigured: true });
   });
 
   it("本番設定では e2eAuthBypass が false", async () => {

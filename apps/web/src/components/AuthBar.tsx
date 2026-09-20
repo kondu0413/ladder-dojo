@@ -62,7 +62,10 @@ export function AccountMenu() {
           disabled={busy}
           onClick={() => {
             setBusy(true);
-            void signInWithGoogle(window.location.pathname).finally(() => setBusy(false));
+            // 共有リンクの回路(#c=…)や一覧の絞り込み(?status=…)を、ログイン後も失わない(S-053)
+            void signInWithGoogle(
+              `${window.location.pathname}${window.location.search}${window.location.hash}`,
+            ).finally(() => setBusy(false));
           }}
           className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-3 text-xs font-semibold text-white transition-colors hover:bg-white/10 disabled:opacity-50"
         >

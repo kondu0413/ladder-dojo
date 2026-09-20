@@ -85,7 +85,8 @@ export function formatDevice(id: DeviceId, notation: Notation): string {
  * 空白と大文字小文字は気にしない。読めなければ undefined
  */
 export function parseDevice(text: string, notation: Notation): DeviceId | undefined {
-  const t = text.trim().toUpperCase();
+  // 全角(Ｘ０、１００．００)も読む(日本語入力のまま打つことがある、S-053)
+  const t = text.normalize("NFKC").trim().toUpperCase();
   const inRange = (n: number) => n >= 0 && n <= 999;
   const plain = /^([XYMTC])(\d{1,3})$/.exec(t);
   if (plain?.[1] && plain[2] !== undefined) {
@@ -170,9 +171,8 @@ export function fallingMark(notation: Notation): string {
 /** 文章の中のデバイス名(`X0` など)を、その表記に置き換える */
 export function formatDeviceNames(text: string, notation: Notation): string {
   if (notation !== "omron") return text;
-  return text.replace(/\b([XYMTC])(\d{1,3})\b/g, (whole, type: string, num: string) => {
-    const id = `${type}${Number(num)}` as DeviceId;
-    // 前後に数字が付いた別の語(X1000 など)は置き換えない
-    return Number(num) > 999 ? whole : formatDevice(id, notation);
-  });
+  // 4 桁以上の番号(X1000 など)や英字が続く語は \b と \d{1,3} の組で除かれる
+  return text.replace(/\b([XYMTC])(\d{1,3})\b/g, (_whole, type: string, num: string) =>
+    formatDevice(`${type}${Number(num)}` as DeviceId, notation),
+  );
 }

@@ -135,6 +135,61 @@ describe("進捗のマージ(S-002)", () => {
     expect(body.progress.find((p) => p.problemId === "timer-write-1")?.clearedAt).not.toBeNull();
   });
 
+  it("端末で記録した日時を保つ(取り込み時刻にしない、S-054)", async () => {
+    const user = await signUp();
+    const day = 24 * 60 * 60 * 1000;
+    const clearedAt = new Date(Date.now() - 10 * day).toISOString();
+    const lastAttemptAt = new Date(Date.now() - 3 * day).toISOString();
+    const res = await merge(user, [
+      {
+        problemId: "selfhold-write-1",
+        attempts: 2,
+        failures: 1,
+        cleared: true,
+        clearedAt,
+        lastAttemptAt,
+      },
+    ]);
+    expect(res.status).toBe(200);
+    let row = ((await res.json()) as { progress: ProgressJson[] }).progress[0];
+    expect(new Date(row?.clearedAt ?? 0).getTime()).toBe(new Date(clearedAt).getTime());
+    expect(new Date(row?.lastAttemptAt ?? 0).getTime()).toBe(new Date(lastAttemptAt).getTime());
+
+    // 2 回目: 最初のクリアは古いほうを残し、最後の挑戦は新しいほうにする
+    const laterClear = new Date(Date.now() - 1 * day).toISOString();
+    const laterAttempt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const again = await merge(user, [
+      {
+        problemId: "selfhold-write-1",
+        attempts: 1,
+        failures: 0,
+        cleared: true,
+        clearedAt: laterClear,
+        lastAttemptAt: laterAttempt,
+      },
+    ]);
+    row = ((await again.json()) as { progress: ProgressJson[] }).progress[0];
+    expect(row).toMatchObject({ attempts: 3, failures: 1 });
+    expect(new Date(row?.clearedAt ?? 0).getTime()).toBe(new Date(clearedAt).getTime());
+    expect(new Date(row?.lastAttemptAt ?? 0).getTime()).toBe(new Date(laterAttempt).getTime());
+  });
+
+  it("未来の日時は取り込み時刻に丸め、日時でない文字列は 400", async () => {
+    const user = await signUp();
+    const future = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const res = await merge(user, [
+      { problemId: "timer-write-1", attempts: 1, failures: 0, cleared: true, clearedAt: future },
+    ]);
+    expect(res.status).toBe(200);
+    const row = ((await res.json()) as { progress: ProgressJson[] }).progress[0];
+    expect(new Date(row?.clearedAt ?? 0).getTime()).toBeLessThanOrEqual(Date.now());
+
+    const bad = await merge(user, [
+      { problemId: "timer-write-1", attempts: 1, failures: 0, cleared: true, clearedAt: "きのう" },
+    ]);
+    expect(bad.status).toBe(400);
+  });
+
   it("件数の上限を超えると 400", async () => {
     const user = await signUp();
     const entries = Array.from({ length: 46 }, (_, i) => ({

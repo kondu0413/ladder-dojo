@@ -85,6 +85,12 @@ export function useSimulator(circuit: Circuit): SimulatorState {
    */
   const pressedAtScan = useRef(new Map<DeviceId, number>());
   const pendingRelease = useRef(new Set<DeviceId>());
+  /**
+   * いま押されている入力(S-053)。押していないものの「離す」は何もしない。
+   * pointerleave はタップ直後にも飛んでくるので、以前は押していない入力の
+   * 「離す」が記録に混ざり、キーの長押しでは押すが何度も入っていた
+   */
+  const pressed = useRef(new Set<DeviceId>());
   /** リセットからの仮想時間。scan に渡した dt の合計 */
   const elapsedRef = useRef(0);
 
@@ -138,12 +144,16 @@ export function useSimulator(circuit: Circuit): SimulatorState {
   useEffect(() => {
     pendingRelease.current.clear();
     pressedAtScan.current.clear();
+    pressed.current.clear();
     elapsedRef.current = 0;
     setHeld([]);
   }, [sim]);
 
   const press = useCallback(
     (device: DeviceId) => {
+      // 押しっぱなし(キーの長押しなど)の 2 回目以降は何もしない
+      if (pressed.current.has(device)) return;
+      pressed.current.add(device);
       pendingRelease.current.delete(device);
       pressedAtScan.current.set(device, sim.scans);
       sim.setInput(device, true);
@@ -155,6 +165,9 @@ export function useSimulator(circuit: Circuit): SimulatorState {
   const release = useCallback((device: DeviceId) => {
     // 保持中はボタンから指を離しても ON のまま
     if (heldRef.current.includes(device)) return;
+    // 押していないものは離せない(pointerleave が押していないボタンにも来る)
+    if (!pressed.current.has(device)) return;
+    pressed.current.delete(device);
     pendingRelease.current.add(device);
     forceRender();
   }, []);
@@ -163,9 +176,11 @@ export function useSimulator(circuit: Circuit): SimulatorState {
     (device: DeviceId) => {
       // 更新関数の中でシミュレータを触らない。StrictMode で 2 回呼ばれる
       if (heldRef.current.includes(device)) {
+        pressed.current.delete(device);
         pendingRelease.current.add(device);
         setHeld(heldRef.current.filter((d) => d !== device));
       } else {
+        pressed.current.add(device);
         pendingRelease.current.delete(device);
         pressedAtScan.current.set(device, sim.scans);
         sim.setInput(device, true);
@@ -188,6 +203,7 @@ export function useSimulator(circuit: Circuit): SimulatorState {
     sim.reset();
     pendingRelease.current.clear();
     pressedAtScan.current.clear();
+    pressed.current.clear();
     elapsedRef.current = 0;
     setHeld([]);
     forceRender();

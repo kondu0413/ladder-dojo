@@ -90,16 +90,16 @@ function FailureDetail({
   if (failure.kind === "unstable") {
     return (
       <p className="rounded-xl border border-rose-100 bg-white p-3.5 text-sm leading-relaxed text-slate-700">
-        「{result.title}
+        「{notation.text(result.title)}
         」で、回路の状態が落ち着きませんでした。出力が自分の接点で自分を反転させていないか確かめてください(例:
-        b 接点の M0 でコイル M0 を動かしている)。
+        {notation.text(" b 接点の M0 でコイル M0 を動かしている")})。
       </p>
     );
   }
   if (failure.kind === "limit") {
     return (
       <p className="rounded-xl border border-rose-100 bg-white p-3.5 text-sm leading-relaxed text-slate-700">
-        「{result.title}
+        「{notation.text(result.title)}
         」の処理が長すぎて打ち切られました。タイマの設定値が大きすぎないか確かめてください。
       </p>
     );
@@ -114,7 +114,7 @@ function FailureDetail({
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-rose-100 bg-white p-4">
       <p className="text-sm font-bold text-slate-900" data-testid="failed-case-title">
-        通らなかったテスト: {result.title}
+        通らなかったテスト: {notation.text(result.title)}
       </p>
 
       {operations.length > 0 && (
@@ -184,7 +184,7 @@ function FailureDetail({
       {failure.note && (
         <p className="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
           <Icon name="info" className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>ヒント: {failure.note}</span>
+          <span>ヒント: {notation.text(failure.note)}</span>
         </p>
       )}
     </div>

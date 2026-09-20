@@ -126,6 +126,12 @@ describe("表示の書き方からデバイス名に戻す(S-050)", () => {
     }
   });
 
+  it("全角でも読める(日本語入力のまま打ったとき、S-053)", () => {
+    expect(parseDevice("Ｘ０", "mitsubishi")).toBe("X0");
+    expect(parseDevice("ｙ１", "omron")).toBe("Y1");
+    expect(parseDevice("１００．０１", "omron")).toBe("Y1");
+  });
+
   it("読めないものは undefined(ビット 16 以上、範囲外、ワード.ビットを三菱系で)", () => {
     expect(parseDevice("0.16", "omron")).toBeUndefined();
     expect(parseDevice("X1000", "mitsubishi")).toBeUndefined();

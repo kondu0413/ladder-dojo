@@ -122,7 +122,10 @@ export function addColumn(circuit: Circuit): Circuit {
   return circuitSchema.parse({ ...circuit, cols: circuit.cols + 1, cells: prune(cells) });
 }
 
-/** 右端の列を消す。コイルは新しい最右列へ移し、そこにあった要素は捨てる */
+/**
+ * 右端の列を消す。コイルは新しい最右列へ移し、そこにあった要素は捨てる。
+ * 新しい最右列に残る接点・横線も捨てる(最右列はコイル専用、canPlace と同じ規則。S-053)
+ */
 export function removeColumn(circuit: Circuit): Circuit {
   if (circuit.cols <= 2) return circuit;
   const cols = circuit.cols - 1;
@@ -135,8 +138,14 @@ export function removeColumn(circuit: Circuit): Circuit {
   const cells: Cell[] = [];
   for (const cell of circuit.cells) {
     if (cell.col >= cols) continue; // 消す列
-    if (cell.col === cols - 1 && coilsByRow.has(cell.row)) continue; // コイルで上書きする
-    cells.push(cell.vline && cell.col === cols - 1 ? stripVline(cell) : cell);
+    if (cell.col === cols - 1) {
+      if (coilsByRow.has(cell.row)) continue; // コイルで上書きする
+      // コイル列に残せるのはコイルだけ。接点・横線は捨て、縦線も最右列には置けない
+      if (cell.element && cell.element.type !== "coil") continue;
+      cells.push(stripVline(cell));
+      continue;
+    }
+    cells.push(cell);
   }
   for (const [row, element] of coilsByRow) cells.push({ row, col: cols - 1, element });
   return circuitSchema.parse({ ...circuit, cols, cells: prune(cells) });

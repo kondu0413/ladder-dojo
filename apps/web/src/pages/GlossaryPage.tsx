@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router";
 import { AppShell } from "../components/AppShell.js";
 import { LadderView } from "../components/LadderView.js";
+import { NotationTabs } from "../components/NotationTabs.js";
 import { Button, Card, EmptyState, Icon, inputClass, PageHeader } from "../components/ui.js";
 import { useSimulator } from "../hooks/useSimulator.js";
 import { GLOSSARY, type GlossaryEntry } from "../lib/glossary.js";
+import { useNotation } from "../lib/notation-context.jsx";
 
 /**
  * 用語集(S-041)。問題文の用語リンクの飛び先。
@@ -15,9 +17,12 @@ export function GlossaryPage() {
   const active = hash.slice(1);
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
+  // 検索で絞っていても、リンクで飛んできた語は必ず出す(出ないと何も起きない、S-053)
   const entries = q
-    ? GLOSSARY.filter((e) =>
-        [e.term, ...(e.aliases ?? []), e.short, e.body].some((s) => s.toLowerCase().includes(q)),
+    ? GLOSSARY.filter(
+        (e) =>
+          e.id === active ||
+          [e.term, ...(e.aliases ?? []), e.short, e.body].some((s) => s.toLowerCase().includes(q)),
       )
     : GLOSSARY;
 
@@ -54,6 +59,10 @@ export function GlossaryPage() {
         <p className="text-xs text-slate-500" data-testid="glossary-count">
           {entries.length} 語
         </p>
+        {/* 小さな図と説明文の表記を揃える(S-052)。切り替えがここにも無いと、図が 0.00 な理由が分からない */}
+        <div className="border-t border-slate-100 pt-3">
+          <NotationTabs />
+        </div>
       </Card>
 
       {entries.length === 0 ? (
@@ -79,6 +88,7 @@ export function GlossaryPage() {
 }
 
 function GlossaryCard({ entry, active }: { entry: GlossaryEntry; active: boolean }) {
+  const notation = useNotation();
   return (
     <article
       id={`term-${entry.id}`}
@@ -91,9 +101,12 @@ function GlossaryCard({ entry, active }: { entry: GlossaryEntry; active: boolean
     >
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-bold tracking-tight text-slate-900">{entry.term}</h2>
-        <p className="text-sm font-medium text-slate-700">{entry.short}</p>
+        <p className="text-sm font-medium text-slate-700">{notation.text(entry.short)}</p>
       </div>
-      <p className="text-sm leading-relaxed text-slate-600">{entry.body}</p>
+      {/* 説明文のデバイス名も表記に合わせる(S-052)。小さな図は変換済みなので文だけ X0 だと食い違う */}
+      <p className="text-sm leading-relaxed text-slate-600" data-testid={`term-body-${entry.id}`}>
+        {notation.text(entry.body)}
+      </p>
       {entry.circuit && <MiniLadder circuit={entry.circuit} deviceLabels={entry.deviceLabels} />}
       {entry.related && entry.related.length > 0 && (
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">

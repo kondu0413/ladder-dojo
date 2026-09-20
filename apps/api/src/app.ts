@@ -28,6 +28,8 @@ export const app = new Hono<AppBindings>()
       core: coreVersion(),
       // E2E 専用ログインが本番で無効であることを外から確認できるようにする(D-014)
       e2eAuthBypass: isE2EAuthBypass(c.env),
+      // 本番で署名の秘密が無いと認証が使えない。監視で気づけるように出す(S-054)
+      authSecretConfigured: Boolean(c.env.BETTER_AUTH_SECRET),
     }),
   )
   // Better Auth のハンドラ(Google ログイン開始・コールバック・セッション取得・ログアウト)

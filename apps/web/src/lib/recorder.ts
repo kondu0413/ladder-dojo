@@ -6,7 +6,8 @@ import { DEFAULT_HOLD_MS, type DeviceId, type Step } from "@ladder-dojo/core";
  * 「動かす」で実際に押した順番と時間をそのまま手順にする。手で 1 手ずつ
  * 組み立てるより速く、実機での確認のしかたに近い。
  *
- * - 押してすぐ離した(PRESS_MAX_MS 以内、間に確認が無い)→「押して離す」1 手
+ * - 押してすぐ離した(PRESS_MAX_MS 以内、間にほかの操作や確認が無い)→「押して離す」1 手。
+ *   同時押し(離す前にほかの入力を押した)は「押したまま」「離す」に分けて、重なりを残す(S-053)
  * - それ以外の押す / 離す → 「ON にする」「OFF にする」
  * - 手と手の間の時間は WAIT_UNIT_MS 単位に丸めて「待つ」にする(半分未満は省く)
  * - 「いまの出力を確認」→ そのときの出力を期待値にする
@@ -40,13 +41,16 @@ export function eventsToSteps(events: RecordedEvent[]): Step[] {
     }
 
     if (event.kind === "press") {
-      // 同じ入力の次の出来事が「すぐ離す」なら 1 手にまとめる。間に確認があれば分ける
-      const j = events.findIndex(
-        (e, k) =>
-          k > i && ((e.kind !== "expect" && e.device === event.device) || e.kind === "expect"),
-      );
-      const next = j >= 0 ? events[j] : undefined;
-      if (next && next.kind === "release" && next.t - event.t <= PRESS_MAX_MS) {
+      // 直後の出来事が同じ入力の「すぐ離す」なら 1 手にまとめる。
+      // 間にほかの入力の操作や確認があれば分ける(順押しに変えると、同時押しが要る回路のテストが通らない)
+      const j = i + 1;
+      const next = events[j];
+      if (
+        next &&
+        next.kind === "release" &&
+        next.device === event.device &&
+        next.t - event.t <= PRESS_MAX_MS
+      ) {
         merged.add(j);
         steps.push({ type: "press", device: event.device });
         cursor = Math.max(cursor, event.t) + DEFAULT_HOLD_MS;

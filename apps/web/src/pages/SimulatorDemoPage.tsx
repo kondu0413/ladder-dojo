@@ -2,9 +2,11 @@ import { useState } from "react";
 import { AppShell } from "../components/AppShell.js";
 import { DevicePanel } from "../components/DevicePanel.js";
 import { LadderView } from "../components/LadderView.js";
+import { NotationTabs } from "../components/NotationTabs.js";
 import { SimulatorControls } from "../components/SimulatorControls.js";
 import { Card, Chip, Icon, PageHeader } from "../components/ui.js";
 import { useSimulator } from "../hooks/useSimulator.js";
+import { useNotation } from "../lib/notation-context.jsx";
 import { SAMPLES, type Sample } from "../lib/samples.js";
 
 /**
@@ -13,6 +15,7 @@ import { SAMPLES, type Sample } from "../lib/samples.js";
  */
 export function SimulatorDemoPage() {
   const [sample, setSample] = useState<Sample>(SAMPLES[0] as Sample);
+  const notation = useNotation();
   const sim = useSimulator(sample.circuit);
 
   return (
@@ -36,10 +39,15 @@ export function SimulatorDemoPage() {
         ))}
       </nav>
 
+      <Card padded>
+        <NotationTabs />
+      </Card>
+
       <Card padded className="flex flex-col gap-4">
         <p className="flex items-start gap-2 text-sm leading-relaxed text-slate-700">
           <Icon name="info" className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-          <span>{sample.description}</span>
+          {/* 説明文のデバイス名も表記に合わせる(S-052)。図だけ 0.00 で文が X0 だと別物に見える */}
+          <span data-testid="sample-description">{notation.text(sample.description)}</span>
         </p>
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-2">
           <LadderView

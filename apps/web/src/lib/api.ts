@@ -109,7 +109,14 @@ export const api = {
   listProgress: () => request<ProgressListDto>("/progress"),
 
   recordMerge: (
-    entries: Array<{ problemId: string; attempts: number; failures: number; cleared: boolean }>,
+    entries: Array<{
+      problemId: string;
+      attempts: number;
+      failures: number;
+      cleared: boolean;
+      clearedAt?: string;
+      lastAttemptAt?: string;
+    }>,
   ) =>
     request<ProgressMergeDto>("/progress/merge", {
       method: "POST",

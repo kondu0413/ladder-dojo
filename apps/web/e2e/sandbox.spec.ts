@@ -182,9 +182,9 @@ test("動かしながら操作を記録して、そのままテストにでき�
   await expect(page.getByTestId("test-title-0")).toHaveValue("記録 1");
   // 待ち時間の手が間に入ることがあるので、順番だけを見る
   await expect(page.locator('[data-testid^="case-0-step-"]')).toContainText([
-    "X0 を ON",
+    "X0 を押したまま",
     "Y0=ON",
-    "X0 を OFF",
+    "X0 を離す",
     "Y0=OFF",
   ]);
   await page.getByTestId("run-tests").click();
@@ -301,7 +301,7 @@ test.describe("保存とテストケース(§3.4)", () => {
     await page.getByTestId("test-title-0").fill("押すと点く");
     await page.getByTestId("case-0-add-on").click();
     await page.getByTestId("case-0-expect-on").click();
-    await expect(page.getByTestId("case-0-step-0")).toContainText("X0 を ON");
+    await expect(page.getByTestId("case-0-step-0")).toContainText("X0 を押したまま");
     await expect(page.getByTestId("case-0-step-1")).toContainText("Y0=ON");
 
     // その場で実行できる
@@ -414,5 +414,55 @@ test.describe("デバイスの選び方(S-050)", () => {
     // 「次の空き」は、いまの種類でまだ使っていない番号
     await page.getByTestId("device-chip-next").click();
     await expect(page.getByTestId("current-device")).toHaveValue("Y1");
+  });
+});
+
+/**
+ * 記録の細かい不具合(S-053)。
+ * タップ直後の pointerleave で「離す」が二重に記録されていた。記録中にリセットや速さを
+ * 変えると、記録した手順と見た目が食い違うテストになっていた。タブを離れると記録が消えていた
+ */
+test.describe("記録の端の条件(S-053)", () => {
+  async function buildDirect(page: import("@playwright/test").Page) {
+    await page.goto("/sandbox");
+    await page.getByTestId("cell-0-0").click();
+    await page.getByTestId("part-no").click();
+    await page.getByTestId("cell-0-5").click();
+    await page.getByTestId("device-type-Y").click();
+    await page.getByTestId("part-out").click();
+    await page.getByTestId("connect-row").click();
+    await page.getByTestId("mode-run").click();
+  }
+
+  test("タップ 1 回は「押して離す」1 手。押していない入力の「離す」は混ざらない", async ({
+    page,
+  }) => {
+    await buildDirect(page);
+    await page.getByTestId("record-start").click();
+    await page.getByTestId("input-X0").click();
+    // 指を動かしても(pointerleave)、押していないので何も記録されない
+    await page.mouse.move(5, 5);
+    await expect(page.getByTestId("record-status")).toContainText("2 手");
+    await page.getByTestId("record-stop").click();
+    await page.getByTestId("mode-test").click();
+    // 先頭に短い「待つ」が入ることがあるので、手の有無で見る
+    const steps = page.locator('[data-testid^="case-0-step-"]');
+    await expect(steps.filter({ hasText: "X0 を押して離す" })).toHaveCount(1);
+    await expect(steps.filter({ hasText: "X0 を離す" })).toHaveCount(0);
+    await expect(steps.filter({ hasText: "X0 を押したまま" })).toHaveCount(0);
+  });
+
+  test("記録中はリセットと速さが使えず、タブを離れても記録は消えない", async ({ page }) => {
+    await buildDirect(page);
+    await page.getByTestId("record-start").click();
+    await page.getByTestId("input-X0").click();
+    await expect(page.getByTestId("sim-reset")).toBeDisabled();
+    await page.getByTestId("mode-edit").click();
+    await expect(page.getByTestId("recording-elsewhere")).toBeVisible();
+    await page.getByTestId("mode-run").click();
+    await expect(page.getByTestId("record-status")).toContainText("記録中");
+    await expect(page.getByTestId("record-status")).toContainText("2 手");
+    await page.getByTestId("record-cancel").click();
+    await expect(page.getByTestId("sim-reset")).toBeEnabled();
   });
 });

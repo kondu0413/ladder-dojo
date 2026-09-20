@@ -431,6 +431,27 @@ describe("課題の通知(毎朝)", () => {
     expect(await listEndpoints(member)).toEqual([]);
   });
 
+  it("送れた購読には送った時刻が残る(次回は送れていない人から、S-054)", async () => {
+    const vapid = await generateVapid();
+    const admin = await signUp("remind-admin3");
+    const member = await signUp("remind-member3");
+    const orgId = await createOrg(admin);
+    await joinOrg(admin, orgId, member);
+    await assign(admin, orgId, { problemRef: "counter-read-0", userId: member.id });
+    const client = await makeClient(`https://push.example.test/send/used-${orgId}`);
+    await subscribe(member, client.subscription);
+    stubPushService(201);
+
+    const now = new Date();
+    await sendDueReminders(withVapid(vapid), now);
+    const row = await env.DB.prepare(
+      "select last_used_at from push_subscriptions where endpoint = ?",
+    )
+      .bind(client.subscription.endpoint)
+      .first<{ last_used_at: number | null }>();
+    expect(row?.last_used_at).toBe(now.getTime());
+  });
+
   it("鍵が無ければ何もしない", async () => {
     const result = await sendDueReminders(env, new Date());
     expect(result).toEqual({ sent: 0, removed: 0, failed: 0, truncated: 0 });

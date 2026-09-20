@@ -2,6 +2,7 @@ import type { Circuit, TestCase } from "@ladder-dojo/core";
 import { judge, PUBLISH_LIMITS } from "@ladder-dojo/core";
 import { useEffect, useState } from "react";
 import { ApiError, api, type OrgSummary, type SolutionFailure } from "../lib/api.js";
+import { useNotation } from "../lib/notation-context.jsx";
 import { Button, Field, Icon, inputClass, Notice, selectClass } from "./ui.js";
 
 export type PublishDialogProps = {
@@ -36,6 +37,7 @@ export function PublishDialog({
   onCancel,
 }: PublishDialogProps) {
   const [title, setTitle] = useState(defaultTitle);
+  const notation = useNotation();
   const [spec, setSpec] = useState("");
   const [difficulty, setDifficulty] = useState(3);
   const [tags, setTags] = useState("");
@@ -105,6 +107,7 @@ export function PublishDialog({
         setFailures(list);
         setError(failureMessage(list.some((f) => f.kind === "limit")));
       } else if (err instanceof ApiError && err.code === "invalid_body") {
+        // テストケースの不備は送る前に見ているので、ここに来るのはタイトル・仕様文の側
         setError(
           "入力に不足があります。タイトル・仕様文・テストケース(1 件以上)を確認してください。",
         );
@@ -154,7 +157,9 @@ export function PublishDialog({
           onChange={(e) => setSpec(e.target.value.slice(0, 2000))}
           data-testid="publish-spec"
           rows={4}
-          placeholder="例: 起動ボタン X0 を押すとランプ Y0 が点灯し、離しても点いたままになる。X1 で消灯する。"
+          placeholder={notation.text(
+            "例: 起動ボタン X0 を押すとランプ Y0 が点灯し、離しても点いたままになる。X1 で消灯する。",
+          )}
           className={inputClass("min-h-24 py-2.5 leading-relaxed")}
         />
       </Field>
@@ -226,7 +231,7 @@ export function PublishDialog({
             <ul className="mt-1.5 list-disc pl-5">
               {failures.map((f) => (
                 <li key={f.caseId}>
-                  {f.title}
+                  {notation.text(f.title)}
                   {f.kind === "unstable" && "(回路が発振しています)"}
                   {f.kind === "limit" && "(ここで打ち切りました)"}
                 </li>

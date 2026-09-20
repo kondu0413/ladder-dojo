@@ -27,15 +27,25 @@ export function isE2EAuthBypass(env: Env): boolean {
   return env.E2E_AUTH_BYPASS === "1";
 }
 
+/** 署名の秘密。本番で無ければ例外にして、認証を使う要求を止める(fail closed) */
+function authSecret(env: Env): string {
+  if (env.BETTER_AUTH_SECRET) return env.BETTER_AUTH_SECRET;
+  if (env.APP_ENV === "production") {
+    throw new Error("BETTER_AUTH_SECRET が設定されていません(deploy.yml の secrets を確認)");
+  }
+  return "dev-secret-not-for-production";
+}
+
 function createAuth(env: Env) {
   const db = drizzle(env.DB, { schema, logger: false });
   return betterAuth({
     appName: "ラダー図トレーニング",
     baseURL: env.BETTER_AUTH_URL,
     basePath: "/api/auth",
-    // 本番では deploy.yml が wrangler secret で設定する。未設定でも Worker は落とさず、
-    // 認証を使うリクエストだけが失敗するようにダミー値を入れる(初回デプロイ直後の数秒間)
-    secret: env.BETTER_AUTH_SECRET ?? "dev-secret-not-for-production",
+    // 本番では deploy.yml が wrangler secret で設定する。本番で未設定なら認証を使う
+    // リクエストだけを失敗させる(公開の固定値で署名すると、セッションの Cookie を
+    // 誰でも作れてしまう。S-054)。開発と E2E では固定値でよい
+    secret: authSecret(env),
     database: drizzleAdapter(db, { provider: "sqlite", schema }),
     socialProviders:
       env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET

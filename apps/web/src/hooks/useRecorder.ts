@@ -36,6 +36,8 @@ export function useRecorder(sim: SimulatorState): RecorderState {
   const [recording, setRecording] = useState(false);
   const [count, setCount] = useState(0);
   const events = useRef<RecordedEvent[]>([]);
+  /** 記録の中で押されている入力。押していないものの「離す」は記録しない(S-053) */
+  const pressed = useRef(new Set<DeviceId>());
   const outputs = sim.devices.filter((d) => !d.startsWith("X"));
 
   const push = (event: RecordedEvent) => {
@@ -52,6 +54,7 @@ export function useRecorder(sim: SimulatorState): RecorderState {
   const start = useCallback(() => {
     sim.reset();
     events.current = [];
+    pressed.current.clear();
     setCount(0);
     setRecording(true);
   }, [sim.reset]);
@@ -68,6 +71,7 @@ export function useRecorder(sim: SimulatorState): RecorderState {
     }
     const steps = eventsToSteps(events.current);
     events.current = [];
+    pressed.current.clear();
     setCount(0);
     setRecording(false);
     return { id: `rec-${Date.now().toString(36)}`, title, steps };
@@ -75,6 +79,7 @@ export function useRecorder(sim: SimulatorState): RecorderState {
 
   const cancel = () => {
     events.current = [];
+    pressed.current.clear();
     setCount(0);
     setRecording(false);
   };
@@ -84,20 +89,26 @@ export function useRecorder(sim: SimulatorState): RecorderState {
     ? {
         held: base.held,
         press: (device) => {
-          push({ t: sim.elapsedMs, kind: "press", device });
+          // 押しっぱなしの 2 回目以降(キーの長押し)は記録しない
+          if (!pressed.current.has(device)) {
+            pressed.current.add(device);
+            push({ t: sim.elapsedMs, kind: "press", device });
+          }
           base.press(device);
         },
         release: (device) => {
-          // 保持中の離すはシミュレータも無視する。記録にも残さない
-          if (!base.held.includes(device)) push({ t: sim.elapsedMs, kind: "release", device });
+          // 保持中の離すはシミュレータも無視する。押していないものの離す(pointerleave)も記録しない
+          if (!base.held.includes(device) && pressed.current.has(device)) {
+            pressed.current.delete(device);
+            push({ t: sim.elapsedMs, kind: "release", device });
+          }
           base.release(device);
         },
         toggleHold: (device) => {
-          push({
-            t: sim.elapsedMs,
-            kind: base.held.includes(device) ? "release" : "press",
-            device,
-          });
+          const holding = base.held.includes(device);
+          if (holding) pressed.current.delete(device);
+          else pressed.current.add(device);
+          push({ t: sim.elapsedMs, kind: holding ? "release" : "press", device });
           base.toggleHold(device);
         },
       }
