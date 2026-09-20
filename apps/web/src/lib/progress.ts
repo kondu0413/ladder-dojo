@@ -56,6 +56,44 @@ export function clearAllProgress(): ProgressMap {
   return {};
 }
 
+/** 引き継ぎで送り終えた分だけ端末から消す(S-053)。途中で失敗しても、済んだ分を二重に送らない */
+export function removeProgress(problemIds: readonly string[]): ProgressMap {
+  const map = loadProgress();
+  for (const id of problemIds) delete map[id];
+  save(map);
+  return map;
+}
+
+/**
+ * ログイン中に送れなかった挑戦の控え(S-053)。
+ *
+ * オフラインやサーバーの失敗で POST が通らなかった挑戦は、以前は画面にしか残らず、
+ * 読み込み直すと消えていた。ユーザーごとに端末に控え、つながったら送り直す
+ */
+export type QueuedAttempt = { problemId: string; passed: boolean; at: string };
+
+const QUEUE_KEY = "ladder-dojo:attempt-queue:v1:";
+
+export function loadQueue(userId: string): QueuedAttempt[] {
+  try {
+    const raw = localStorage.getItem(QUEUE_KEY + userId);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as QueuedAttempt[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveQueue(userId: string, items: readonly QueuedAttempt[]): void {
+  try {
+    if (items.length === 0) localStorage.removeItem(QUEUE_KEY + userId);
+    else localStorage.setItem(QUEUE_KEY + userId, JSON.stringify(items));
+  } catch {
+    // 保存できなくても学習は続けられる
+  }
+}
+
 function save(map: ProgressMap): void {
   try {
     localStorage.setItem(KEY, JSON.stringify(map));

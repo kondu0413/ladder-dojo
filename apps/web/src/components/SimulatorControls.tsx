@@ -7,6 +7,8 @@ export type SimulatorControlsProps = {
   onSpeed: (speed: SimSpeed) => void;
   onRunning: (running: boolean) => void;
   onReset: () => void;
+  /** 記録中はリセットと速さを触らせない(記録した手順と見た目が食い違うテストになる、S-053) */
+  locked?: boolean | undefined;
   /** 一時停止中に 1 スキャン進める(S-038) */
   onStep: () => void;
   /** ここまでのスキャン数。1 スキャンずつ進めるときの目安 */
@@ -34,6 +36,7 @@ export function SimulatorControls({
   onReset,
   onStep,
   scans,
+  locked = false,
 }: SimulatorControlsProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -56,7 +59,14 @@ export function SimulatorControls({
       >
         1 スキャン
       </Button>
-      <Button tone="secondary" icon="reset" data-testid="sim-reset" onClick={onReset}>
+      <Button
+        tone="secondary"
+        icon="reset"
+        data-testid="sim-reset"
+        disabled={locked}
+        title={locked ? "記録中はリセットできません" : undefined}
+        onClick={onReset}
+      >
         リセット
       </Button>
       <span
@@ -66,12 +76,18 @@ export function SimulatorControls({
       >
         {scans} scan
       </span>
-      <div className="flex items-center gap-2">
+      <div
+        className={`flex items-center gap-2 ${locked ? "pointer-events-none opacity-50" : ""}`}
+        aria-disabled={locked || undefined}
+        title={locked ? "記録中は速さを変えられません" : undefined}
+      >
         <span className="text-xs font-semibold text-slate-500">タイマ</span>
         <Segmented<SpeedKey>
           label="タイマの速さ"
           value={String(speed) as SpeedKey}
-          onChange={(v) => onSpeed(toSpeed(v))}
+          onChange={(v) => {
+            if (!locked) onSpeed(toSpeed(v));
+          }}
           options={SPEEDS.map((s) => ({
             value: s.value,
             label: s.label,

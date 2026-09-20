@@ -408,26 +408,28 @@ export const interlockProblems: Problem[] = [
   {
     schemaVersion: SCHEMA_VERSION,
     id: "interlock-fix-1",
-    title: "両方が同時に入ってしまう",
+    title: "正転が動かない",
     mode: "fix",
     stage: "interlock",
     difficulty: 3,
     tags: ["インターロック"],
-    spec: "正転 Y0 と逆転 Y1 は同時に入ってはいけません。いまは正転中に逆転ボタンを押すと両方入ってしまいます。直してください。",
+    spec: "正転 X0・逆転 X1 で動き、X2 で止まる回路です。逆転は動くのに、正転ボタンを押しても正転 Y0 が動きません。直してください。",
     deviceLabels: LABELS,
     solution: basic,
     testCases: basicCases,
     fix: {
+      // 以前は「逆転側のインターロックが無い」で、fix-3 と同じ不具合・症状は「切り替わる」だった。
+      // 症状が違う 1 か所の不具合にする(S-053): インターロックの接点の種類の取り違え
       initial: ladder(6)
-        .row(no("X0"), nc("Y1"), nc("X2"), out("Y0"))
+        .row(no("X0"), no("Y1"), nc("X2"), out("Y0"))
         .row(no("Y0"))
-        .row(no("X1"), nc("X2"), out("Y1"))
+        .row(no("X1"), nc("Y0"), nc("X2"), out("Y1"))
         .row(no("Y1"))
         .v(0, 0)
         .v(2, 0)
         .build(),
       bugCount: 1,
-      hint: "逆転のラングに、相手(正転出力)の b 接点が入っていません。",
+      hint: "インターロックの接点は「相手が動いていないとき」に通る接点です。正転のラングにある逆転出力の接点の種類を、逆転のラングと見比べてください。",
     },
   },
   {

@@ -31,7 +31,8 @@ describe("操作の記録をテストの手順にする(S-042)", () => {
     ]);
   });
 
-  it("違う入力の押下は混ぜない", () => {
+  it("同時押し(離す前にほかを押した)は「押したまま / 離す」に分けて重なりを残す(S-053)", () => {
+    // 以前は X0 を「押して離す」1 手にまとめていて、両手押しが要る回路のテストが通らなかった
     const steps = eventsToSteps([
       { t: 0, kind: "press", device: "X0" },
       { t: 50, kind: "press", device: "X1" },
@@ -39,8 +40,11 @@ describe("操作の記録をテストの手順にする(S-042)", () => {
       { t: 500, kind: "release", device: "X1" },
     ]);
     expect(steps).toEqual([
-      { type: "press", device: "X0" },
+      { type: "set", inputs: { X0: true } },
+      { type: "wait", ms: 100 },
       { type: "set", inputs: { X1: true } },
+      { type: "wait", ms: 100 },
+      { type: "set", inputs: { X0: false } },
       { type: "wait", ms: 400 },
       { type: "set", inputs: { X1: false } },
     ]);

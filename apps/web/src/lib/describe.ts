@@ -1,41 +1,9 @@
-import {
-  DEFAULT_HOLD_MS,
-  DEFAULT_NOTATION,
-  type DeviceId,
-  formatDevice,
-  type Notation,
-  type Step,
-} from "@ladder-dojo/core";
-
-/** テストケースの 1 ステップを日本語で説明する(不正解時の差分表示用、SPEC.md §3.3) */
-export function describeStep(
-  step: Step,
-  labels?: Record<string, string>,
-  notation: Notation = DEFAULT_NOTATION,
-): string {
-  const name = (device: string) => {
-    const shown = formatDevice(device as DeviceId, notation);
-    return labels?.[device] ? `${shown}(${labels[device]})` : shown;
-  };
-  switch (step.type) {
-    case "set": {
-      const parts = Object.entries(step.inputs).map(
-        ([device, on]) => `${name(device)} を ${on ? "ON" : "OFF"}`,
-      );
-      return parts.join("、") || "入力を変えない";
-    }
-    case "press": {
-      const hold = step.holdMs ?? DEFAULT_HOLD_MS;
-      return hold >= 1000
-        ? `${name(step.device)} を ${(hold / 1000).toFixed(1)} 秒押して離す`
-        : `${name(step.device)} を押して離す`;
-    }
-    case "wait":
-      return `${(step.ms / 1000).toFixed(1)} 秒待つ`;
-    case "expect":
-      return "出力を確認する";
-  }
-}
+/**
+ * テストケースの 1 ステップの説明は core の describeStep を使う(S-052)。
+ * 以前はここに別の実装があり、判定結果では「X0 を ON」、再生では「X0 を押したまま」と
+ * 同じ操作の言い方が食い違っていた
+ */
+export { describeStep } from "@ladder-dojo/core";
 
 /** 期待と実際が食い違ったデバイスだけを取り出す */
 export function diffOutputs(

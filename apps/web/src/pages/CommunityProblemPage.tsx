@@ -76,6 +76,8 @@ export function CommunityProblemPage() {
   /** 「投稿を削除」を押した状態。もう一度押して初めて消す */
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  // ログイン状態が変わったら読み直す。ログアウト後も作者向けの表示(模範解答・削除)が残っていた(S-053)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: user はログイン状態が変わったときの読み直しの起動条件
   const reload = useCallback(async () => {
     if (!id) return;
     try {
@@ -86,7 +88,7 @@ export function CommunityProblemPage() {
     } catch {
       setError("この問題は見つかりませんでした(削除されたか、非公開かもしれません)。");
     }
-  }, [id]);
+  }, [id, user]);
 
   useEffect(() => {
     void reload();

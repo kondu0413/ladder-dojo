@@ -137,7 +137,12 @@ export function DevicePicker({ circuit, value, onChange, deviceLabels }: DeviceP
               setInvalid(false);
             }}
             onKeyDown={(e) => {
-              if (e.key === "Enter") e.currentTarget.blur();
+              // 日本語入力の確定の Enter で欄を閉じない(閉じると入力途中の文字が残って壊れる、S-053)
+              if (e.key === "Enter" && !e.nativeEvent.isComposing) e.currentTarget.blur();
+            }}
+            onCompositionEnd={(e) => {
+              setText(e.currentTarget.value);
+              setInvalid(!apply(e.currentTarget.value));
             }}
             className="w-24 border-x border-slate-200 bg-slate-50 px-2 text-center font-mono text-sm font-semibold text-slate-900 outline-none focus:bg-amber-50"
           />

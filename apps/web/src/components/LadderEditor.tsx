@@ -141,6 +141,13 @@ export function LadderEditor({
   deviceLabels,
 }: LadderEditorProps) {
   const [selected, setSelected] = useState<{ row: number; col: number } | undefined>(undefined);
+  // グリッドが縮んだ(列を消す・元に戻す・読み込み)ら、外に出た選択は外す(S-053)。
+  // 残すと「選択中: 2 行 5 列」のまま置けず、見当違いのエラーが出る
+  useEffect(() => {
+    if (selected && (selected.row >= circuit.rows || selected.col >= circuit.cols)) {
+      setSelected(undefined);
+    }
+  }, [circuit.rows, circuit.cols, selected]);
 
   // キーボードでも戻せる(PC で編集する人向け)。入力欄の中では効かせない
   useEffect(() => {
@@ -206,6 +213,7 @@ export function LadderEditor({
       <Card className="overflow-x-auto p-2">
         <LadderView
           circuit={circuit}
+          deviceLabels={deviceLabels}
           onTapCell={(row, col) => {
             setError(undefined);
             setSelected({ row, col });

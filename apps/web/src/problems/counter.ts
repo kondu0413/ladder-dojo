@@ -219,7 +219,7 @@ const lotCases = [
   },
 ];
 
-const FALL_LABELS = { X0: "ボタン", X1: "リセット", Y0: "完了ランプ" } as const;
+const FALL_LABELS = { X0: "ボタン", X1: "リセット", C0: "カウンタ", Y0: "完了ランプ" } as const;
 
 /** 立ち下がり接点で「離した瞬間」を数える(S-044) */
 const fallCount = ladder(4)

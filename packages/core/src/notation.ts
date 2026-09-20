@@ -85,7 +85,8 @@ export function formatDevice(id: DeviceId, notation: Notation): string {
  * 空白と大文字小文字は気にしない。読めなければ undefined
  */
 export function parseDevice(text: string, notation: Notation): DeviceId | undefined {
-  const t = text.trim().toUpperCase();
+  // 全角(Ｘ０、１００．００)も読む(日本語入力のまま打つことがある、S-053)
+  const t = text.normalize("NFKC").trim().toUpperCase();
   const inRange = (n: number) => n >= 0 && n <= 999;
   const plain = /^([XYMTC])(\d{1,3})$/.exec(t);
   if (plain?.[1] && plain[2] !== undefined) {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { AppShell } from "../components/AppShell.js";
 import {
@@ -18,6 +18,7 @@ import {
   selectClass,
 } from "../components/ui.js";
 import { api, isAborted, type PostedProblemSummary } from "../lib/api.js";
+import { useNotation } from "../lib/notation-context.jsx";
 import { useProgress } from "../lib/progress-context.jsx";
 
 type Sort = "new" | "likes" | "difficulty";
@@ -31,6 +32,7 @@ const SORTS: Array<{ value: Sort; label: string }> = [
 /** 投稿問題の一覧(SPEC.md §3.6)。未ログインでも見られる */
 export function CommunityListPage() {
   const { user } = useProgress();
+  const notation = useNotation();
   const [problems, setProblems] = useState<PostedProblemSummary[]>([]);
   const [sort, setSort] = useState<Sort>("new");
   const [q, setQ] = useState("");
@@ -40,35 +42,58 @@ export function CommunityListPage() {
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>(undefined);
+  /**
+   * 飛んでいる取得は 1 つだけにする(S-053)。「もっと読む」の返事が、並び替えの
+   * あとに届いて別の並びのページを継ぎ足していた
+   */
+  const inflight = useRef<AbortController | null>(null);
+  const begin = useCallback(() => {
+    inflight.current?.abort();
+    const controller = new AbortController();
+    inflight.current = controller;
+    return controller;
+  }, []);
+
+  // ログアウトしたら「自分の投稿」の絞り込みは外す(次の取得が 401 になる)
+  useEffect(() => {
+    if (!user) setMine(false);
+  }, [user]);
 
   const load = useCallback(
     async (append = false) => {
+      const controller = begin();
       setLoading(true);
       setError(undefined);
       try {
-        const res = await api.listPosted({
-          sort,
-          ...(q ? { q } : {}),
-          ...(tag ? { tag } : {}),
-          ...(difficulty !== undefined ? { difficulty } : {}),
-          ...(mine ? { mine: true } : {}),
-          ...(append && cursor ? { cursor } : {}),
-        });
+        const res = await api.listPosted(
+          {
+            sort,
+            ...(q ? { q } : {}),
+            ...(tag ? { tag } : {}),
+            ...(difficulty !== undefined ? { difficulty } : {}),
+            ...(mine ? { mine: true } : {}),
+            ...(append && cursor ? { cursor } : {}),
+          },
+          controller.signal,
+        );
+        if (controller.signal.aborted) return;
         setProblems((prev) => (append ? [...prev, ...res.problems] : res.problems));
         setCursor(res.nextCursor);
       } catch (err) {
         if (!isAborted(err)) setError("問題を読み込めませんでした。");
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     },
-    [sort, q, tag, difficulty, mine, cursor],
+    [sort, q, tag, difficulty, mine, cursor, begin],
   );
 
   // 検索条件が変わったら先頭から読み直す。
   // 古いリクエストは AbortController で確実に止める(結果の入れ替わりと、無駄な Worker リクエストを防ぐ)
+  // ログイン状態が変わったら読み直す(自分の投稿・非公開の問題・作者だけの表示が変わる)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: user はログイン状態が変わったときの読み直しの起動条件
   useEffect(() => {
-    const controller = new AbortController();
+    const controller = begin();
     (async () => {
       setLoading(true);
       try {
@@ -93,7 +118,7 @@ export function CommunityListPage() {
       }
     })();
     return () => controller.abort();
-  }, [sort, q, tag, difficulty, mine]);
+  }, [sort, q, tag, difficulty, mine, user, begin]);
 
   return (
     <AppShell width="wide">
@@ -202,7 +227,9 @@ export function CommunityListPage() {
                 {p.visibility === "private" && <Badge icon="lock">非公開</Badge>}
                 {p.visibility === "org" && <Badge icon="factory">組織限定</Badge>}
               </span>
-              <span className="line-clamp-2 text-xs leading-relaxed text-slate-500">{p.spec}</span>
+              <span className="line-clamp-2 text-xs leading-relaxed text-slate-500">
+                {notation.text(p.spec)}
+              </span>
               <span className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-xs text-slate-500">
                 <Difficulty level={p.votedDifficulty ?? p.difficulty} />
                 <span className="inline-flex items-center gap-1">

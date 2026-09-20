@@ -18,9 +18,14 @@ export function createHistory<T>(present: T): History<T> {
   return { past: [], present, future: [] };
 }
 
-/** 新しい値を積む。同じ値(参照が同じ)なら履歴は増やさない。やり直しの枝は捨てる */
+/**
+ * 新しい値を積む。同じ値なら履歴は増やさない(参照が同じか、中身が同じ)。やり直しの枝は捨てる。
+ * 空のマスを消す・つながっている行をつなぐ、のような何も変えない操作は新しいオブジェクトを
+ * 返すので、中身で比べないと「元に戻す」を 1 回消費して何も起きない(S-053)
+ */
 export function push<T>(history: History<T>, next: T): History<T> {
   if (Object.is(next, history.present)) return history;
+  if (JSON.stringify(next) === JSON.stringify(history.present)) return history;
   const past = [...history.past, history.present];
   return {
     past: past.length > HISTORY_LIMIT ? past.slice(past.length - HISTORY_LIMIT) : past,

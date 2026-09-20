@@ -1,5 +1,5 @@
 import { circuitSchema } from "@ladder-dojo/core";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { AppShell } from "../components/AppShell.js";
 import { LadderView } from "../components/LadderView.js";
@@ -257,20 +257,25 @@ function MembersPanel({
   >([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
+  /** いま開いているメンバー。遅れて届いた別のメンバーの返事で上書きしない(S-053) */
+  const opening = useRef<string | undefined>(undefined);
 
   const open = async (member: OrgMember) => {
+    opening.current = member.userId;
     setSelected(member);
     setProgress([]);
     setSubmissions([]);
+    setError(undefined);
     try {
       const [p, s] = await Promise.all([
         api.memberProgress(orgId, member.userId),
         api.memberSubmissions(orgId, member.userId),
       ]);
+      if (opening.current !== member.userId) return;
       setProgress(p.progress);
       setSubmissions(s.submissions);
     } catch {
-      setError("学習状況を読み込めませんでした。");
+      if (opening.current === member.userId) setError("学習状況を読み込めませんでした。");
     }
   };
 

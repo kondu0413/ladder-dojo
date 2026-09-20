@@ -259,7 +259,7 @@ test.describe("答え合わせの再生", () => {
     await page.getByTestId("replay-next").click();
     await page.getByTestId("replay-next").click();
     await page.getByTestId("replay-next").click();
-    await expect(page.getByTestId("replay-caption")).toContainText("秒 待つ");
+    await expect(page.getByTestId("replay-caption")).toContainText("秒待つ");
     // 5 秒後は自動停止しているので消えている
     await expect(page.getByRole("img", { name: /無電圧/ }).first()).toBeVisible();
   });

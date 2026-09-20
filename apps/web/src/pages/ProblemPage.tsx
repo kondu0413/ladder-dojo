@@ -5,6 +5,7 @@ import {
   findCoilConflicts,
   type JudgeResult,
   judge,
+  listDevices,
   type Problem,
   type ReadQuestion,
   replayScenario,
@@ -135,6 +136,8 @@ function ReadMode({ problem }: { problem: Problem }) {
     // 最初の表示では動かさない。設問を進めたときだけ運ぶ
     if (index === 0) return;
     questionRef.current?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
+    // 設問を進めたらフォーカスも新しい設問へ(押したボタンは消えるので、放っておくと body に落ちる、S-053)
+    questionRef.current?.focus({ preventScroll: true });
   }, [index]);
 
   useEffect(() => {
@@ -294,7 +297,8 @@ function ReadQuestionView({
     // key が変わると作り直されるので、入場の動きがそのたびに再生される
     <section
       ref={ref}
-      className="question-enter flex scroll-mt-20 flex-col gap-4 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card sm:p-5"
+      tabIndex={-1}
+      className="question-enter flex scroll-mt-20 flex-col gap-4 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card outline-none sm:p-5"
     >
       <div className="flex items-center gap-2.5">
         {/* 丸の並びで「何問目か」を形でも示す。数字だけだと変化に気づけない */}
@@ -329,8 +333,11 @@ function ReadQuestionView({
                 type="button"
                 data-testid={`choice-${i}`}
                 data-state={state}
-                disabled={answered}
-                onClick={() => onChoose(i)}
+                // disabled にするとフォーカスが body に落ちて読み上げが途切れる。押せないことは aria で示す
+                aria-disabled={answered || undefined}
+                onClick={() => {
+                  if (!answered) onChoose(i);
+                }}
                 className={`group flex w-full items-center gap-3 rounded-xl border px-3.5 py-3 text-left text-sm font-medium transition-colors ${
                   state === "answer"
                     ? "border-emerald-400 bg-emerald-50 text-emerald-900"
@@ -372,6 +379,7 @@ function ReadQuestionView({
         <div
           data-testid="read-result"
           data-correct={correct}
+          role="status"
           className={`rise-in rounded-xl border p-3.5 text-sm leading-relaxed ${
             correct
               ? "border-emerald-200 bg-emerald-50 text-emerald-900"
@@ -575,6 +583,20 @@ function FreePlay({ problem }: { problem: Problem }) {
 // 直す / 書く: 回路を編集して判定する(SPEC.md §3.2 (2)(3))
 // ---------------------------------------------------------------------------
 
+/** 問題が使うデバイス: 模範解答・初期回路・テストケースに出てくるもの */
+function problemDevices(problem: Problem): Set<string> {
+  const out = new Set<string>(listDevices(problem.solution));
+  if (problem.fix?.initial) for (const d of listDevices(problem.fix.initial)) out.add(d);
+  for (const tc of problem.testCases) {
+    for (const step of tc.steps) {
+      if (step.type === "set") for (const d of Object.keys(step.inputs)) out.add(d);
+      else if (step.type === "press") out.add(step.device);
+      else if (step.type === "expect") for (const d of Object.keys(step.outputs)) out.add(d);
+    }
+  }
+  return out;
+}
+
 function BuildMode({ problem }: { problem: Problem }) {
   const { record, recordSubmission, get } = useProgress();
   const notation = useNotation();
@@ -598,6 +620,19 @@ function BuildMode({ problem }: { problem: Problem }) {
   // この画面で「答え合わせ」に失敗した回数。つまずき診断を出すかどうかに使う(S-009)
   const [failures, setFailures] = useState(0);
   const labels = labelMap(problem.deviceLabels);
+  /**
+   * 編集画面の候補には、その問題で使うデバイスだけを出す(S-053)。
+   * deviceLabels は段階ごとに共有していて非常停止や警告灯も入っているので、
+   * そのままだと問題に無いデバイスが候補に並び、テストが見ない配線を誘う
+   */
+  // labels は毎回作り直されるが中身は problem で決まる
+  // biome-ignore lint/correctness/useExhaustiveDependencies: labels は problem から決まる
+  const editorLabels = useMemo(() => {
+    const used = problemDevices(problem);
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(labels)) if (used.has(k)) out[k] = v;
+    return out;
+  }, [problem]);
   const hint = problem.fix?.hint ?? problem.write?.hint;
   const result = checked?.result;
 
@@ -659,7 +694,7 @@ function BuildMode({ problem }: { problem: Problem }) {
           onChange={setCircuit}
           history={history}
           extra={<ShareButton circuit={circuit} title={problem.title} />}
-          deviceLabels={labels}
+          deviceLabels={editorLabels}
         />
       ) : (
         <RunPanel circuit={circuit} labels={labels} />

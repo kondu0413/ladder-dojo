@@ -50,3 +50,16 @@ test.describe("用語集", () => {
     await expect(hint.getByTestId("glossary-term").first()).toBeVisible();
   });
 });
+
+test("検索で絞っていても、関連のリンク先の語は必ず出る(S-053)", async ({ page }) => {
+  await page.goto("/glossary");
+  await page.getByTestId("glossary-search").fill("自己保持");
+  await expect(page.getByTestId("glossary-count")).not.toContainText("25 語");
+  // 関連の「b 接点」へ。以前は絞り込みで隠れていて何も起きなかった
+  await page
+    .getByRole("link", { name: /b 接点/ })
+    .first()
+    .click();
+  await expect(page).toHaveURL(/#contact-b$/);
+  await expect(page.locator("#term-contact-b")).toBeVisible();
+});
